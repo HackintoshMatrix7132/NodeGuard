@@ -1,0 +1,18 @@
+{
+  "name": "nodeguard",
+  "version": "0.2.0",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/api"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace apps/api & npm run dev --workspace apps/web",
+    "dev:api": "npm run dev --workspace apps/api",
+    "dev:web": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspace apps/api && npm run build --workspace apps/web",
+    "typecheck": "npm run typecheck --workspace apps/api && npm run typecheck --workspace apps/web",
+    "lint": "npm run lint --workspace apps/web",
+    "test": "npm run test --workspace apps/api && npm run test --workspace apps/web"
+  }
+}
