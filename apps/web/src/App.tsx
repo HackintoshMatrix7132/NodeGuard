@@ -1,5 +1,5 @@
 import { AlertTriangle, Bell, Boxes, Gauge, Globe2, LogOut, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RefreshCcw, Search, Server, Settings, ShieldCheck, Trash2, X } from "lucide-react";
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 
 import { normalizeBackendUrl } from "./api/client";
 import { normalizeApiError } from "./api/errors";
@@ -1088,6 +1088,8 @@ function Info({ label, value }: { label: string; value: string }) {
 export function App() {
   const [view, setView] = useState<View>("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const logoutTimer = useRef<number | null>(null);
   const backendConfig = useSettingsStore((state) => state.backendConfig);
   const demoMode = useSettingsStore((state) => state.demoMode);
   const load = useSettingsStore((state) => state.load);
@@ -1096,6 +1098,12 @@ export function App() {
 
   useEffect(() => {
     load();
+
+    return () => {
+      if (logoutTimer.current) {
+        window.clearTimeout(logoutTimer.current);
+      }
+    };
   }, [load]);
 
   if (!backendConfig && !demoMode) return <ConnectScreen />;
@@ -1113,12 +1121,17 @@ export function App() {
   const activeLabel = activeNavItem?.[2] ?? "Dashboard";
 
   const logout = () => {
-    disconnect();
-    setDemoMode(false);
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    logoutTimer.current = window.setTimeout(() => {
+      disconnect();
+      setDemoMode(false);
+      setIsLoggingOut(false);
+    }, 260);
   };
 
   return (
-    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${isLoggingOut ? "logging-out" : ""}`}>
       {sidebarCollapsed ? (
         <button className="sidebar-reveal" onClick={() => setSidebarCollapsed(false)} aria-label="Show sidebar">
           <PanelLeftOpen size={18} />
@@ -1132,7 +1145,7 @@ export function App() {
           </button>
         </div>
         <nav>{nav.map(([key, Icon, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key)}><Icon size={18} /> {label}</button>)}</nav>
-        <button className="sidebar-logout" onClick={logout}><LogOut size={18} /> Logout</button>
+        <button className="sidebar-logout" onClick={logout} disabled={isLoggingOut}><LogOut size={18} /> {isLoggingOut ? "Logging out" : "Logout"}</button>
       </aside>
       <main className="workspace">
         <header className="workspace-topbar">

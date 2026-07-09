@@ -1863,6 +1863,17 @@ button:hover {
   animation: ngFadeIn 260ms ease-out both;
 }
 
+.app-shell {
+  transition: opacity 240ms ease, transform 240ms ease, filter 240ms ease;
+}
+
+.app-shell.logging-out {
+  opacity: 0;
+  transform: translateY(8px) scale(0.985);
+  filter: blur(2px);
+  pointer-events: none;
+}
+
 .workspace-topbar {
   animation: ngPageIn 320ms ease-out both;
   transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
@@ -1979,6 +1990,12 @@ button:hover {
 
 .sidebar-reveal {
   animation: ngGlowPulse 4s ease-in-out infinite;
+}
+
+.sidebar-logout:disabled {
+  opacity: 0.72;
+  cursor: wait;
+  transform: none;
 }
 
 .data-row,
