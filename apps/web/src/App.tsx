@@ -25,7 +25,6 @@ import {
   useUpdateServerMonitor,
   useValidateConnection
 } from "./hooks/useNodeGuardQueries";
-import nodeGuardLogo from "./assets/nodeguard-logo.png";
 import { useSettingsStore } from "./store/settingsStore";
 import type { Alert, Container, ContainerMonitorStatus, DomainCheck, HealthStatus, MonitoredServerStatus } from "./types/nodeguard";
 import { formatBytes, formatDateTime, formatPercentage, formatRelativeTime, formatResponseTime, formatUptime } from "./utils/format";
@@ -35,15 +34,42 @@ type View = "dashboard" | "server" | "containers" | "domains" | "alerts" | "sett
 type MetricTone = "blue" | "green" | "orange" | "red" | "purple";
 type BreakdownItem = { label: string; value: string; tone?: MetricTone };
 
-function LogoImage({ className, label }: { className: string; label?: string }) {
+function LogoMark({ className, label }: { className: string; label?: string }) {
   return (
-    <span
+    <svg
       className={className}
       role={label ? "img" : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
-      style={{ backgroundImage: `url(${nodeGuardLogo})` }}
-    />
+      viewBox="0 0 128 128"
+    >
+      <defs>
+        <linearGradient id="nodeguardMarkGradient" x1="25" y1="20" x2="103" y2="111" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#38d9ff" />
+          <stop offset="1" stopColor="#2563eb" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M64 10C48 20.6 33.1 27 19 30.1v33.1c0 27.9 17.8 43.6 45 54.8 27.2-11.2 45-26.9 45-54.8V30.1C94.9 27 80 20.6 64 10Z"
+        fill="none"
+        stroke="url(#nodeguardMarkGradient)"
+        strokeWidth="4.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M41 44v39M41 44l45 45M87 44v39"
+        fill="none"
+        stroke="url(#nodeguardMarkGradient)"
+        strokeWidth="4.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="41" cy="44" r="8.5" fill="#0b1020" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
+      <circle cx="41" cy="83" r="8.5" fill="#0b1020" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
+      <circle cx="64" cy="67" r="8.5" fill="#0b1020" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
+      <circle cx="87" cy="44" r="8.5" fill="#0b1020" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
+      <circle cx="87" cy="83" r="8.5" fill="#0b1020" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
+    </svg>
   );
 }
 
@@ -275,7 +301,7 @@ function ConnectScreen() {
     <main className="login-shell">
       <div className="orbital-bg" />
       <form className="login-card" onSubmit={submit}>
-        <div className="logo-mark"><LogoImage className="logo-mark-img" label="NodeGuard logo" /></div>
+        <div className="logo-mark"><LogoMark className="logo-mark-img" label="NodeGuard logo" /></div>
         <h1>Welcome to NodeGuard</h1>
         <p>Monitor your servers. Protect your stack.</p>
         <ol className="setup-list">
@@ -1149,7 +1175,7 @@ export function App() {
       ) : null}
       <aside className="sidebar">
         <div className="sidebar-top">
-          <div className="brand"><LogoImage className="brand-logo" /><span>NodeGuard</span></div>
+          <div className="brand"><LogoMark className="brand-logo" /><span>NodeGuard</span></div>
           <button className="sidebar-toggle" onClick={() => setSidebarCollapsed(true)} aria-label="Hide sidebar">
             <PanelLeftClose size={18} />
           </button>
