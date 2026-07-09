@@ -303,11 +303,12 @@ function ConnectScreen() {
       <form className="login-card" onSubmit={submit}>
         <div className="logo-mark"><LogoMark className="logo-mark-img" label="NodeGuard logo" /></div>
         <h1>Welcome to NodeGuard</h1>
-        <p>Monitor your servers. Protect your stack.</p>
+        <p>Your infrastructure, at a glance.</p>
+        <p>Monitor server health, Docker services, internal endpoints, domains, and alerts from one secure dashboard.</p>
         <ol className="setup-list">
-          <li>Connect your NodeGuard backend.</li>
-          <li>Add domains and internal services.</li>
-          <li>Mark critical containers and review alerts.</li>
+          <li>Connect your monitoring backend</li>
+          <li>Add servers, services, and domains</li>
+          <li>Track health and respond to alerts</li>
         </ol>
         {error ? <div className="login-error"><strong>Connection failed</strong><span>{error}</span></div> : null}
         <label>
@@ -318,7 +319,7 @@ function ConnectScreen() {
           API key
           <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" placeholder="Paste API key" />
         </label>
-        <button type="submit" disabled={validateConnection.isPending}>{validateConnection.isPending ? "Checking..." : "Connect"}</button>
+        <button type="submit" disabled={validateConnection.isPending}>{validateConnection.isPending ? "Checking..." : "Connect to NodeGuard"}</button>
       </form>
     </main>
   );
