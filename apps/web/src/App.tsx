@@ -57,7 +57,7 @@ function LogoMark({ className, label }: { className: string; label?: string }) {
         strokeLinejoin="round"
       />
       <path
-        d="M41 44v39M41 44l45 45M87 44v39"
+        d="M41 52.5V74.5M47 50L58 61M71 71.9L80 78.1M87 52.5V74.5"
         fill="none"
         stroke="url(#nodeguardMarkGradient)"
         strokeWidth="4.8"

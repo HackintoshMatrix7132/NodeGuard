@@ -2085,13 +2085,13 @@ button:hover {
 }
 
 .logo-mark {
-  width: 104px;
-  height: 104px;
+  width: 112px;
+  height: 112px;
   border-radius: 0;
   color: inherit;
   background: transparent;
   box-shadow: none;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .logo-mark-img {
