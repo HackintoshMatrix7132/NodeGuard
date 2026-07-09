@@ -22,7 +22,8 @@ React Native / Expo is no longer part of the active project.
 - Keep the MVP read-only.
 - Prefer real working monitoring over fake screens.
 - Keep the browser isolated from Docker, SSH, shell access, and the Docker socket.
-- Use API key authentication for `/api/*`.
+- Use username/password session authentication for human dashboard access.
+- Keep API keys only for machine-to-machine access such as future agents or integrations.
 - Use Cloudflare Access, VPN-only access, or another real auth layer before public exposure.
 
 ## Stack
@@ -130,7 +131,7 @@ Legacy JSON monitor files may be imported once if they still exist, but SQLite i
 - Read `README.md`, `AGENTS.md`, and package files before changes.
 - Keep changes small and scoped.
 - Preserve read-only behavior.
-- Handle Docker unavailable, metrics unavailable, domain timeout, invalid API key, and backend unreachable states.
+- Handle Docker unavailable, metrics unavailable, domain timeout, invalid login/session, invalid API key, and backend unreachable states.
 - Keep API errors safe and useful.
 - Update docs when setup, commands, API endpoints, env vars, deployment, or architecture change.
 - Run typecheck/build/test where relevant.

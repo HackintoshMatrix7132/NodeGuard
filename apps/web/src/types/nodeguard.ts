@@ -24,6 +24,18 @@ export type Server = {
   status: HealthStatus;
   os: string | null;
   kernel: string | null;
+  architecture: string | null;
+  platform: string | null;
+  cpuManufacturer: string | null;
+  cpuModel: string | null;
+  cpuCores: number | null;
+  cpuPhysicalCores: number | null;
+  cpuSpeedGhz: number | null;
+  totalMemoryGb: number | null;
+  totalDiskGb: number | null;
+  swapTotalGb: number | null;
+  primaryIp: string | null;
+  ipAddresses: string[];
   uptimeSeconds: number | null;
   lastCheckedAt: string;
   dockerVersion: string | null;
@@ -129,6 +141,22 @@ export type CreateDomainInput = {
   expectedStatusCodes?: number[];
 };
 
+export type AuthUser = {
+  id: string;
+  username: string;
+  role: string;
+};
+
+export type AuthSession = {
+  authenticated: boolean;
+  user: AuthUser | null;
+};
+
+export type LoginInput = {
+  username: string;
+  password: string;
+};
+
 export type Alert = {
   id: string;
   severity: AlertSeverity;
@@ -148,7 +176,6 @@ export type Alert = {
 
 export type BackendConfig = {
   backendUrl: string;
-  apiKey: string;
-  apiKeyPreview: string;
+  user: AuthUser;
   connectedAt: string;
 };

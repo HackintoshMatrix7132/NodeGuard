@@ -16,7 +16,7 @@ The project is designed for a real self-hosted deployment at `nodeguard.muthu.eu
 
 ## Features
 
-- Connect screen for backend URL and API key.
+- Password login screen backed by secure HTTP-only sessions.
 - Modern dark dashboard UI with sidebar navigation, sidebar collapse, subtle professional motion, and screenshot-friendly styling.
 - Dashboard overview with overall status, main issue, active issues, real status breakdowns, recent alerts, and domain reachability.
 - Server page with CPU, RAM, disk, swap, uptime, OS, kernel, Docker availability, and monitored server checks.
@@ -25,7 +25,7 @@ The project is designed for a real self-hosted deployment at `nodeguard.muthu.eu
 - Docker containers page with container status, health, image, uptime, ports, limited log preview, and monitored container checks.
 - Domains / services page for public domains, internal URLs, reverse-proxy routes, paths, expected HTTP status codes, latency, SSL state, edit/delete, and manual checks.
 - Alerts page with active/resolved filters, alert detail, first seen, last seen, occurrence count, failed checks, possible cause, and suggested next steps.
-- Settings page with refresh interval, screenshot privacy, diagnostics export, demo mode, API key management, and logout.
+- Settings page with refresh interval, screenshot privacy, diagnostics export, demo mode, session details, and logout.
 - Demo mode with realistic `muthu.eu` sample data for screenshots.
 - Production Docker image that serves the web UI and API from one container.
 
@@ -57,7 +57,7 @@ Backend:
 ```txt
 Browser
   |
-  | HTTPS + API key
+  | HTTPS + password session
   v
 NodeGuard Web/API container
   |
@@ -87,7 +87,10 @@ Edit `apps/api/.env`:
 ```env
 NODE_ENV=development
 PORT=3000
-NODEGUARD_API_KEY=change_this_local_key
+NODEGUARD_ADMIN_USERNAME=admin
+NODEGUARD_ADMIN_PASSWORD=change_this_local_password
+SESSION_DURATION_DAYS=7
+NODEGUARD_API_KEY=optional_machine_key_for_future_agents
 ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 DATABASE_URL=file:data/nodeguard.sqlite
 MONITORED_DOMAINS=https://bit.muthu.eu,https://cloud.muthu.eu,https://status.muthu.eu
@@ -114,9 +117,11 @@ http://localhost:5173
 Login:
 
 ```txt
-Backend URL: http://localhost:3000
-API key: value of NODEGUARD_API_KEY from apps/api/.env
+Username: value of NODEGUARD_ADMIN_USERNAME from apps/api/.env
+Password: value of NODEGUARD_ADMIN_PASSWORD from apps/api/.env
 ```
+
+If `NODEGUARD_ADMIN_PASSWORD` changes later, restart the backend to rotate the owner password and clear existing sessions for that account.
 
 Demo mode can be enabled later from Settings for portfolio screenshots.
 
@@ -143,7 +148,10 @@ Example production values:
 ```env
 NODE_ENV=production
 PORT=3000
-NODEGUARD_API_KEY=use_a_long_random_secret
+NODEGUARD_ADMIN_USERNAME=admin
+NODEGUARD_ADMIN_PASSWORD=use_a_long_random_password
+SESSION_DURATION_DAYS=7
+NODEGUARD_API_KEY=optional_machine_key_for_future_agents
 ALLOWED_ORIGINS=https://nodeguard.muthu.eu
 DATABASE_URL=file:/data/nodeguard.sqlite
 TRUST_PROXY=true
@@ -174,20 +182,24 @@ The compose setup mounts:
 - `/data` for SQLite persistence.
 - `/var/run/docker.sock:ro` for read-only Docker metadata.
 
-For public access, put NodeGuard behind HTTPS plus Cloudflare Access, VPN-only access, or another real authentication layer. The API key protects `/api/*`, but browser storage is not a complete user-auth system.
+For public access, put NodeGuard behind HTTPS plus Cloudflare Access, VPN-only access, or another real authentication layer. Human users sign in with username/password sessions; API keys are reserved for future agents and integrations.
 
 ## Environment Variables
 
 ```env
 NODE_ENV=development
 PORT=3000
-NODEGUARD_API_KEY=replace_me
+NODEGUARD_ADMIN_USERNAME=admin
+NODEGUARD_ADMIN_PASSWORD=replace_me
+SESSION_DURATION_DAYS=7
+SESSION_COOKIE_NAME=nodeguard_session
+NODEGUARD_API_KEY=optional_machine_key_for_future_agents
 ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 DATABASE_URL=file:data/nodeguard.sqlite
 TRUST_PROXY=false
 REQUEST_JSON_LIMIT=64kb
 RATE_LIMIT_WINDOW_MS=60000
-RATE_LIMIT_MAX=120
+RATE_LIMIT_MAX=1200
 WEB_DIST_DIR=apps/web/dist
 MONITORED_DOMAINS=https://bit.muthu.eu,https://cloud.muthu.eu,https://status.muthu.eu
 SERVER_DISPLAY_NAME=local-nodeguard-host
@@ -211,7 +223,15 @@ Public:
 GET /health
 ```
 
-Protected endpoints require `Authorization: Bearer <api-key>` or `x-api-key: <api-key>`:
+Auth endpoints:
+
+```txt
+GET /api/auth/me
+POST /api/auth/login
+POST /api/auth/logout
+```
+
+Protected endpoints require a signed-in session cookie. `Authorization: Bearer <api-key>` or `x-api-key: <api-key>` is still supported for future machine-to-machine callers:
 
 ```txt
 GET /api/overview
@@ -316,8 +336,9 @@ docker compose down
 ## Security Notes
 
 - NodeGuard is read-only.
-- `/api/*` is protected by API key authentication and rate limiting.
-- Production mode requires `NODEGUARD_API_KEY`.
+- Human users authenticate with username/password and an HTTP-only session cookie.
+- Production first-run setup requires `NODEGUARD_ADMIN_PASSWORD`.
+- `/api/*` is protected by session authentication or optional API-key authentication for future agents/integrations.
 - Raw backend error messages are hidden in production.
 - Docker metadata is read by the backend only.
 - The frontend never receives Docker socket, shell, SSH, or privileged host access.
@@ -331,7 +352,7 @@ docker compose down
 - Push/email notifications are not implemented yet.
 - Server monitors check other NodeGuard backends or plain health URLs; public websites and reverse proxies belong in Domains / Services.
 - Full remote metrics aggregation is a future improvement.
-- Browser-stored API keys are acceptable for this MVP but should be replaced with stronger auth for a public multi-user product.
+- Multi-user roles, password reset, and 2FA are future improvements.
 
 ## Portfolio Demo Flow
 

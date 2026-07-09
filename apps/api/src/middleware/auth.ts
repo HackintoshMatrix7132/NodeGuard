@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 
 import { env } from "../config/env.js";
+import { getSessionUser } from "../services/authService.js";
 
 export function readApiKey(request: Request) {
   const authorization = request.header("authorization");
@@ -32,6 +33,32 @@ export function requireApiKey(request: Request, response: Response, next: NextFu
 
   if (!env.apiKey || !apiKeysMatch(providedKey, env.apiKey)) {
     response.status(403).json({ error: "invalid_api_key", message: "Invalid API key." });
+    return;
+  }
+
+  next();
+}
+
+export function hasValidApiKey(request: Request) {
+  const providedKey = readApiKey(request);
+  return Boolean(providedKey && env.apiKey && apiKeysMatch(providedKey, env.apiKey));
+}
+
+export function requireAuthenticated(request: Request, response: Response, next: NextFunction) {
+  const providedKey = readApiKey(request);
+  if (providedKey) {
+    if (hasValidApiKey(request)) {
+      next();
+      return;
+    }
+
+    response.status(403).json({ error: "invalid_api_key", message: "Invalid API key." });
+    return;
+  }
+
+  const user = getSessionUser(request);
+  if (!user) {
+    response.status(401).json({ error: "not_authenticated", message: "Sign in to NodeGuard." });
     return;
   }
 

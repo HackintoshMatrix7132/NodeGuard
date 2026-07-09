@@ -1,9 +1,20 @@
-import type { Alert, Container, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, DockerSnapshot, DomainCheck, MetricSnapshot, MonitoredServerStatus, Overview, ServerListItem, Server } from "../types/nodeguard";
+import type { Alert, AuthSession, Container, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, DockerSnapshot, DomainCheck, LoginInput, MetricSnapshot, MonitoredServerStatus, Overview, ServerListItem, Server } from "../types/nodeguard";
 import type { ApiConfig } from "./client";
 import { apiFetch } from "./client";
 
-export function validateConnection(config: ApiConfig) {
-  return apiFetch<Overview>(config, "/api/overview");
+export function login(config: ApiConfig, input: LoginInput) {
+  return apiFetch<AuthSession>(config, "/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function getCurrentSession(config: ApiConfig) {
+  return apiFetch<AuthSession>(config, "/api/auth/me");
+}
+
+export function logout(config: ApiConfig) {
+  return apiFetch<{ ok: boolean }>(config, "/api/auth/logout", { method: "POST" });
 }
 
 export function getOverview(config: ApiConfig) {

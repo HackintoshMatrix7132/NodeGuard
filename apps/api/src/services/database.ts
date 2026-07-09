@@ -82,8 +82,29 @@ database.exec(`
     suggested_next_steps TEXT NOT NULL DEFAULT '[]'
   );
 
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'owner',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS user_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE INDEX IF NOT EXISTS idx_alert_history_status ON alert_history(status);
   CREATE INDEX IF NOT EXISTS idx_alert_history_last_seen ON alert_history(last_seen_at);
+  CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(token_hash);
+  CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
 `);
 
 export function getDatabase() {

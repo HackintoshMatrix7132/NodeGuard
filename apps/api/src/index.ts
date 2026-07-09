@@ -7,7 +7,8 @@ import helmet from "helmet";
 
 import { env } from "./config/env.js";
 import { errorHandler } from "./middleware/errorHandler.js";
-import { requireApiKey } from "./middleware/auth.js";
+import { requireAuthenticated } from "./middleware/auth.js";
+import { authRouter } from "./routes/auth.js";
 import { alertsRouter } from "./routes/alerts.js";
 import { checksRouter } from "./routes/checks.js";
 import { containersRouter } from "./routes/containers.js";
@@ -15,13 +16,13 @@ import { domainsRouter } from "./routes/domains.js";
 import { healthRouter } from "./routes/health.js";
 import { overviewRouter } from "./routes/overview.js";
 import { serversRouter } from "./routes/servers.js";
+import { cleanupExpiredSessions, ensureAdminUser } from "./services/authService.js";
 
 const app = express();
 const webDistPath = path.resolve(process.cwd(), env.webDistDir);
 
-if (env.isProduction && !env.apiKey) {
-  throw new Error("NODEGUARD_API_KEY is required when NODE_ENV=production.");
-}
+ensureAdminUser();
+cleanupExpiredSessions();
 
 app.set("trust proxy", env.trustProxy);
 app.use(helmet({
@@ -29,6 +30,7 @@ app.use(helmet({
 }));
 app.use(express.json({ limit: env.requestJsonLimit }));
 app.use(cors({
+  credentials: true,
   origin(origin, callback) {
     if (!origin || env.allowedOrigins.includes(origin) || (!env.isProduction && env.allowedOrigins.length === 0)) {
       callback(null, true);
@@ -46,7 +48,8 @@ app.use("/api", rateLimit({
   standardHeaders: "draft-8",
   legacyHeaders: false
 }));
-app.use("/api", requireApiKey);
+app.use("/api/auth", authRouter);
+app.use("/api", requireAuthenticated);
 app.use("/api/overview", overviewRouter);
 app.use("/api/servers", serversRouter);
 app.use("/api/containers", containersRouter);

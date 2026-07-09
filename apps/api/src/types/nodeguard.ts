@@ -24,6 +24,18 @@ export type Server = {
   status: HealthStatus;
   os: string | null;
   kernel: string | null;
+  architecture: string | null;
+  platform: string | null;
+  cpuManufacturer: string | null;
+  cpuModel: string | null;
+  cpuCores: number | null;
+  cpuPhysicalCores: number | null;
+  cpuSpeedGhz: number | null;
+  totalMemoryGb: number | null;
+  totalDiskGb: number | null;
+  swapTotalGb: number | null;
+  primaryIp: string | null;
+  ipAddresses: string[];
   uptimeSeconds: number | null;
   lastCheckedAt: string;
   dockerVersion: string | null;

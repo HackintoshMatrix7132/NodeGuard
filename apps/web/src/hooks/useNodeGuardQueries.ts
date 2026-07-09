@@ -14,17 +14,17 @@ import {
   getServerMetrics,
   getServerMonitors,
   getServers,
+  login,
   removeServerMonitor,
   removeContainerMonitor,
   removeDomain,
   runChecks,
   updateContainerMonitor,
   updateDomain,
-  updateServerMonitor,
-  validateConnection
+  updateServerMonitor
 } from "../api/endpoints";
 import type { ApiConfig } from "../api/client";
-import type { CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput } from "../types/nodeguard";
+import type { CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, LoginInput } from "../types/nodeguard";
 import { demoAlerts, demoContainers, demoDocker, demoDomains, demoMetrics, demoOverview, demoServer, demoServerMonitors } from "../demoData";
 import { useSettingsStore } from "../store/settingsStore";
 
@@ -48,12 +48,12 @@ function useConfig() {
     throw new Error("NodeGuard is not connected.");
   }
 
-  return config ? { backendUrl: config.backendUrl, apiKey: config.apiKey } : { backendUrl: "demo://nodeguard", apiKey: "demo" };
+  return config ? { backendUrl: config.backendUrl } : { backendUrl: "demo://nodeguard" };
 }
 
 function useLiveQueryOptions(enabled = true) {
   const refreshIntervalSeconds = useSettingsStore((state) => state.refreshIntervalSeconds);
-  const intervalMs = Math.max(5, refreshIntervalSeconds) * 1000;
+  const intervalMs = Math.max(1, refreshIntervalSeconds) * 1000;
   const refetchInterval: number | false = enabled ? intervalMs : false;
 
   return {
@@ -64,9 +64,9 @@ function useLiveQueryOptions(enabled = true) {
   };
 }
 
-export function useValidateConnection() {
+export function useLogin() {
   return useMutation({
-    mutationFn: (config: ApiConfig) => validateConnection(config)
+    mutationFn: ({ config, input }: { config: ApiConfig; input: LoginInput }) => login(config, input)
   });
 }
 

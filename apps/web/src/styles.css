@@ -124,6 +124,61 @@ button {
   box-shadow: 0 0 0 2px rgba(91, 140, 255, 0.25);
 }
 
+.password-field {
+  position: relative;
+  display: block;
+}
+
+.password-field input {
+  padding-right: 48px;
+}
+
+.password-field.is-visible input {
+  border-color: rgba(56, 217, 255, 0.44);
+  background:
+    linear-gradient(90deg, rgba(56, 217, 255, 0.05), transparent 42%),
+    rgba(2, 6, 23, 0.54);
+}
+
+.login-card .password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 34px;
+  min-height: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(56, 217, 255, 0.28);
+  border-radius: 9px;
+  color: #9ee7ff;
+  background: rgba(15, 23, 42, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transform: translateY(-50%);
+  transition: border-color 170ms ease, background 170ms ease, color 170ms ease, transform 170ms ease;
+}
+
+.login-card .password-toggle:hover {
+  border-color: rgba(56, 217, 255, 0.62);
+  color: #f8fafc;
+  background: rgba(56, 217, 255, 0.12);
+  transform: translateY(-50%);
+}
+
+.login-card .password-toggle:focus-visible {
+  outline: none;
+  border-color: rgba(56, 217, 255, 0.78);
+  box-shadow: 0 0 0 3px rgba(56, 217, 255, 0.14);
+}
+
+.password-toggle-icon {
+  display: inline-grid;
+  place-items: center;
+  animation: passwordToggleIn 170ms ease both;
+}
+
 .login-card button,
 .panel button,
 .icon-button,
@@ -638,6 +693,89 @@ button {
   white-space: nowrap;
 }
 
+.resource-cell {
+  min-width: 0;
+}
+
+.resource-title,
+.resource-meta {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.resource-title strong,
+.resource-url,
+.resource-context {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-title strong,
+.resource-url {
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: color 160ms ease, text-decoration-color 160ms ease;
+}
+
+.resource-context {
+  flex: 0 1 auto;
+}
+
+.launch-link {
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(56, 217, 255, 0.18);
+  border-radius: 8px;
+  color: #7dd3fc;
+  background: rgba(15, 23, 42, 0.54);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-6px) scale(0.72);
+  transition: opacity 160ms ease, transform 180ms cubic-bezier(0.2, 0.9, 0.25, 1.25), border-color 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.data-row:hover .launch-link,
+.data-row:focus-within .launch-link {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+}
+
+.data-row:hover .resource-title strong,
+.data-row:hover .resource-url,
+.data-row:focus-within .resource-title strong,
+.data-row:focus-within .resource-url {
+  color: #e0f2fe;
+  text-decoration-color: rgba(125, 211, 252, 0.72);
+}
+
+.launch-link:hover,
+.launch-link:focus-visible {
+  outline: none;
+  border-color: rgba(56, 217, 255, 0.68);
+  color: #f8fafc;
+  background: rgba(56, 217, 255, 0.14);
+  box-shadow: 0 0 0 3px rgba(56, 217, 255, 0.10);
+}
+
+.launch-link svg {
+  transition: transform 160ms ease;
+}
+
+.launch-link:hover svg,
+.launch-link:focus-visible svg {
+  transform: translate(1px, -1px);
+}
+
 .table {
   display: grid;
 }
@@ -809,13 +947,58 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #d4dae6;
+  width: fit-content;
+  color: #dce8f8;
+  cursor: pointer;
+  user-select: none;
 }
 
 .inline-form .checkbox-label input {
-  width: 16px;
-  min-height: 16px;
-  height: 16px;
+  appearance: none;
+  width: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(56, 217, 255, 0.36);
+  border-radius: 6px;
+  background: rgba(2, 6, 23, 0.56);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 0 0, cover;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: border-color 170ms ease, background 170ms ease, box-shadow 170ms ease, transform 170ms ease;
+}
+
+.inline-form .checkbox-label input::before {
+  content: none;
+}
+
+.inline-form .checkbox-label input:hover {
+  border-color: rgba(56, 217, 255, 0.68);
+  background: rgba(56, 217, 255, 0.10);
+}
+
+.inline-form .checkbox-label input:checked {
+  border-color: rgba(56, 217, 255, 0.78);
+  background-image:
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 18 18' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4.25 9.25 7.35 12.2 13.75 5.8' fill='none' stroke='white' stroke-width='2.35' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"),
+    linear-gradient(135deg, rgba(37, 99, 235, 0.96), rgba(124, 58, 237, 0.92));
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 14px 14px, cover;
+  box-shadow: 0 0 0 3px rgba(56, 217, 255, 0.10);
+}
+
+.inline-form .checkbox-label input:checked::before {
+  content: none;
+}
+
+.inline-form .checkbox-label input:focus-visible {
+  outline: none;
+  border-color: rgba(56, 217, 255, 0.88);
+  box-shadow: 0 0 0 3px rgba(56, 217, 255, 0.16);
 }
 
 .inline-form button,
@@ -989,6 +1172,7 @@ button {
   place-items: center;
   padding: 18px;
   background: rgba(3, 6, 10, 0.72);
+  animation: modalBackdropIn 170ms ease both;
 }
 
 .modal {
@@ -997,6 +1181,16 @@ button {
   border-radius: 4px;
   background: #151a21;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  animation: modalPanelIn 210ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: center;
+}
+
+.modal-backdrop.is-closing {
+  animation: modalBackdropOut 180ms ease both;
+}
+
+.modal-backdrop.is-closing .modal {
+  animation: modalPanelOut 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .modal-header {
@@ -1015,12 +1209,55 @@ button {
   font-size: 16px;
 }
 
+.modal-close {
+  width: 34px;
+  min-height: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 10px;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.66);
+  padding: 0;
+  transition: border-color 170ms ease, background 170ms ease, color 170ms ease, transform 170ms ease, box-shadow 170ms ease;
+}
+
+.modal-close:hover,
+.modal-close:focus-visible {
+  outline: none;
+  border-color: rgba(56, 217, 255, 0.52);
+  color: #f8fafc;
+  background: rgba(56, 217, 255, 0.12);
+  box-shadow: 0 0 0 3px rgba(56, 217, 255, 0.09);
+}
+
+.modal-close:hover {
+  transform: translateY(-1px);
+}
+
+.modal-close:active {
+  transform: translateY(0) scale(0.94);
+}
+
 .modal > :not(.modal-header) {
   margin: 14px;
 }
 
 .modal-form {
   grid-template-columns: 1fr;
+}
+
+.inline-form .modal-submit {
+  min-height: 42px;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.inline-form .modal-submit:active {
+  transform: translateY(1px) scale(0.995);
 }
 
 .segmented .active {
@@ -1179,6 +1416,7 @@ button:hover {
 }
 
 .sidebar {
+  min-width: 0;
   margin: 16px 0 16px 16px;
   height: calc(100vh - 32px);
   border: 1px solid var(--ng-border);
@@ -1188,6 +1426,8 @@ button:hover {
     #0b1220;
   box-shadow: var(--ng-shadow);
   padding: 14px;
+  overflow: hidden;
+  transform-origin: left center;
 }
 
 .sidebar-top {
@@ -1841,12 +2081,63 @@ button:hover {
   }
 }
 
+@keyframes modalBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalBackdropOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modalPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modalPanelOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+
 @keyframes ngFadeIn {
   from {
     opacity: 0;
   }
   to {
     opacity: 1;
+  }
+}
+
+@keyframes passwordToggleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.82) rotate(-8deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
   }
 }
 
@@ -2117,6 +2408,38 @@ button:hover {
 .meter-head,
 .breakdown-item {
   font-size: 13px;
+}
+
+.login-card .password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 34px;
+  min-height: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-color: rgba(56, 217, 255, 0.28);
+  border-radius: 9px;
+  color: #9ee7ff;
+  background: rgba(15, 23, 42, 0.72);
+  transform: translateY(-50%);
+}
+
+.login-card .password-toggle:hover {
+  border-color: rgba(56, 217, 255, 0.62);
+  color: #f8fafc;
+  background: rgba(56, 217, 255, 0.12);
+  transform: translateY(-50%);
+}
+
+.password-field.is-visible input {
+  border-color: rgba(56, 217, 255, 0.44);
+  background:
+    linear-gradient(90deg, rgba(56, 217, 255, 0.05), transparent 42%),
+    rgba(2, 6, 23, 0.54);
 }
 
 .logo-mark {

@@ -1,17 +1,9 @@
 import { create } from "zustand";
 
-import type { BackendConfig } from "../types/nodeguard";
+import type { AuthUser, BackendConfig } from "../types/nodeguard";
 
 const storageKey = "nodeguard.backend";
 const preferencesKey = "nodeguard.preferences";
-
-function previewKey(apiKey: string) {
-  if (apiKey.length <= 4) {
-    return "••••";
-  }
-
-  return `••••${apiKey.slice(-4)}`;
-}
 
 function readPreferences() {
   try {
@@ -27,13 +19,27 @@ function writePreference(key: string, value: unknown) {
   localStorage.setItem(preferencesKey, JSON.stringify({ ...readPreferences(), [key]: value }));
 }
 
+function migrateDevBackendUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    if (parsed.port === "5173") {
+      parsed.port = "3000";
+      return parsed.toString().replace(/\/$/, "");
+    }
+  } catch {
+    return value;
+  }
+
+  return value;
+}
+
 type SettingsState = {
   backendConfig: BackendConfig | null;
   refreshIntervalSeconds: number;
   demoMode: boolean;
   hideSensitiveValues: boolean;
   load: () => void;
-  saveConnection: (backendUrl: string, apiKey: string) => void;
+  saveSession: (backendUrl: string, user: AuthUser) => void;
   disconnect: () => void;
   setRefreshIntervalSeconds: (value: number) => void;
   setDemoMode: (value: boolean) => void;
@@ -42,7 +48,7 @@ type SettingsState = {
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   backendConfig: null,
-  refreshIntervalSeconds: 10,
+  refreshIntervalSeconds: 1,
   demoMode: false,
   hideSensitiveValues: true,
   load: () => {
@@ -52,7 +58,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
     if (raw) {
       try {
-        nextState.backendConfig = JSON.parse(raw) as BackendConfig;
+        const parsed = JSON.parse(raw) as Partial<BackendConfig>;
+        if (parsed.backendUrl && parsed.user?.username) {
+          const migrated = { ...parsed, backendUrl: migrateDevBackendUrl(parsed.backendUrl) } as BackendConfig;
+          nextState.backendConfig = migrated;
+          if (migrated.backendUrl !== parsed.backendUrl) {
+            localStorage.setItem(storageKey, JSON.stringify(migrated));
+          }
+        } else {
+          localStorage.removeItem(storageKey);
+        }
       } catch {
         localStorage.removeItem(storageKey);
       }
@@ -63,7 +78,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         const parsed = JSON.parse(preferencesRaw) as Partial<Pick<SettingsState, "demoMode" | "hideSensitiveValues" | "refreshIntervalSeconds">>;
         nextState.demoMode = Boolean(parsed.demoMode);
         nextState.hideSensitiveValues = parsed.hideSensitiveValues ?? true;
-        nextState.refreshIntervalSeconds = parsed.refreshIntervalSeconds ?? 10;
+        nextState.refreshIntervalSeconds = parsed.refreshIntervalSeconds ?? 1;
       } catch {
         localStorage.removeItem(preferencesKey);
       }
@@ -71,11 +86,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
     set(nextState);
   },
-  saveConnection: (backendUrl, apiKey) => {
+  saveSession: (backendUrl, user) => {
     const backendConfig = {
       backendUrl,
-      apiKey,
-      apiKeyPreview: previewKey(apiKey),
+      user,
       connectedAt: new Date().toISOString()
     };
     localStorage.setItem(storageKey, JSON.stringify(backendConfig));

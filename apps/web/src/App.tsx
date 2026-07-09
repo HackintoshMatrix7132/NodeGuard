@@ -1,7 +1,8 @@
-import { AlertTriangle, Bell, Boxes, Gauge, Globe2, LogOut, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RefreshCcw, Search, Server, Settings, Trash2, X } from "lucide-react";
+import { AlertTriangle, Bell, Boxes, ExternalLink, Eye, EyeOff, Gauge, Globe2, LogOut, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RefreshCcw, Search, Server, Settings, Trash2, X } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 
-import { normalizeBackendUrl } from "./api/client";
+import { getDefaultBackendUrl, normalizeBackendUrl } from "./api/client";
+import { getCurrentSession, logout as logoutSession } from "./api/endpoints";
 import { normalizeApiError } from "./api/errors";
 import {
   useAddContainerMonitor,
@@ -23,10 +24,10 @@ import {
   useUpdateContainerMonitor,
   useUpdateDomain,
   useUpdateServerMonitor,
-  useValidateConnection
+  useLogin
 } from "./hooks/useNodeGuardQueries";
 import { useSettingsStore } from "./store/settingsStore";
-import type { Alert, Container, ContainerMonitorStatus, DomainCheck, HealthStatus, MonitoredServerStatus } from "./types/nodeguard";
+import type { Alert, Container, ContainerMonitorStatus, DomainCheck, HealthStatus, MonitoredServerStatus, Server as NodeGuardServer } from "./types/nodeguard";
 import { formatBytes, formatDateTime, formatPercentage, formatRelativeTime, formatResponseTime, formatUptime } from "./utils/format";
 import { getStatusLabel, getStatusTone } from "./utils/status";
 
@@ -185,6 +186,7 @@ function StateBlock({ title, message }: { title: string; message: string }) {
 
 function StaleNotice({ isError, dataUpdatedAt }: { isError: boolean; dataUpdatedAt: number }) {
   if (!isError || !dataUpdatedAt) return null;
+  if (Date.now() - dataUpdatedAt < 15000) return null;
   return <div className="stale-notice">Showing last known status from {formatDateTime(new Date(dataUpdatedAt).toISOString())}. Live refresh failed.</div>;
 }
 
@@ -234,6 +236,15 @@ function fullDomainUrl(domain: DomainCheck) {
   return `${domain.domain}${domain.path === "/" ? "" : domain.path}`;
 }
 
+function launchHref(value: string) {
+  const trimmed = value.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return `http://${trimmed}`;
+}
+
 function parseExpectedStatusCodes(value: string) {
   const codes = [...new Set(
     value
@@ -259,13 +270,13 @@ function maskSensitiveUrl(value: string, hide: boolean) {
   }
 }
 
-function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+function Modal({ title, children, onClose, isClosing = false }: { title: string; children: React.ReactNode; onClose: () => void; isClosing?: boolean }) {
   return (
-    <div className="modal-backdrop" role="presentation">
+    <div className={`modal-backdrop ${isClosing ? "is-closing" : ""}`} role="presentation">
       <section className="modal" role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-header">
           <h2>{title}</h2>
-          <button className="icon-only" onClick={onClose} aria-label="Close dialog"><X size={15} /></button>
+          <button className="modal-close" onClick={onClose} aria-label="Close dialog"><X size={15} /></button>
         </div>
         {children}
       </section>
@@ -274,26 +285,34 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
 }
 
 function ConnectScreen() {
-  const [backendUrl, setBackendUrl] = useState("http://localhost:3000");
-  const [apiKey, setApiKey] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const saveConnection = useSettingsStore((state) => state.saveConnection);
-  const validateConnection = useValidateConnection();
+  const saveSession = useSettingsStore((state) => state.saveSession);
+  const login = useLogin();
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
 
     try {
-      const normalizedUrl = normalizeBackendUrl(backendUrl);
-      if (!apiKey.trim()) {
-        setError("Enter an API key.");
+      const backendUrl = getDefaultBackendUrl();
+      if (!username.trim() || !password) {
+        setError("Enter your username and password.");
         return;
       }
-      await validateConnection.mutateAsync({ backendUrl: normalizedUrl, apiKey: apiKey.trim() });
-      saveConnection(normalizedUrl, apiKey.trim());
+      const session = await login.mutateAsync({ config: { backendUrl }, input: { username: username.trim(), password } });
+      if (!session.authenticated || !session.user) {
+        setError("Invalid username or password.");
+        return;
+      }
+      saveSession(backendUrl, session.user);
     } catch (caught) {
-      setError(normalizeApiError(caught).message);
+      const apiError = normalizeApiError(caught);
+      setError(apiError.code === "missing_api_key"
+        ? "Your backend is still running the old API-key build. Stop the API server and start it again so the new username/password login routes are active."
+        : apiError.message);
     }
   };
 
@@ -302,24 +321,43 @@ function ConnectScreen() {
       <div className="orbital-bg" />
       <form className="login-card" onSubmit={submit}>
         <div className="logo-mark"><LogoMark className="logo-mark-img" label="NodeGuard logo" /></div>
-        <h1>Welcome to NodeGuard</h1>
-        <p>Your infrastructure, at a glance.</p>
-        <p>Monitor server health, Docker services, internal endpoints, domains, and alerts from one secure dashboard.</p>
+        <h1>Welcome back</h1>
+        <p>Monitor everything. Miss nothing.</p>
+        <p>Sign in to access your infrastructure dashboard.</p>
         <ol className="setup-list">
           <li>Connect your monitoring backend</li>
           <li>Add servers, services, and domains</li>
           <li>Track health and respond to alerts</li>
         </ol>
-        {error ? <div className="login-error"><strong>Connection failed</strong><span>{error}</span></div> : null}
+        {error ? <div className="login-error"><strong>Sign in failed</strong><span>{error}</span></div> : null}
         <label>
-          Backend URL
-          <input value={backendUrl} onChange={(event) => setBackendUrl(event.target.value)} placeholder="http://localhost:3000" />
+          Username
+          <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" placeholder="Username" />
         </label>
         <label>
-          API key
-          <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" placeholder="Paste API key" />
+          Password
+          <span className={`password-field ${showPassword ? "is-visible" : ""}`}>
+            <input
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              placeholder="Enter password"
+            />
+            <button
+              type="button"
+              className="password-toggle"
+              onClick={() => setShowPassword((current) => !current)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              title={showPassword ? "Hide password" : "Show password"}
+            >
+              <span key={showPassword ? "hide" : "show"} className="password-toggle-icon">
+                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+              </span>
+            </button>
+          </span>
         </label>
-        <button type="submit" disabled={validateConnection.isPending}>{validateConnection.isPending ? "Checking..." : "Connect to NodeGuard"}</button>
+        <button type="submit" disabled={login.isPending}>{login.isPending ? "Signing in..." : "Sign in to NodeGuard"}</button>
       </form>
     </main>
   );
@@ -454,6 +492,28 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
   );
 }
 
+function formatCpuModel(server: NodeGuardServer) {
+  const model = [server.cpuManufacturer, server.cpuModel].filter(Boolean).join(" ").trim();
+  return model || "Unavailable";
+}
+
+function formatCpuCores(server: NodeGuardServer) {
+  const logical = server.cpuCores === null ? "Unavailable" : `${server.cpuCores} logical`;
+  const physical = server.cpuPhysicalCores === null ? null : `${server.cpuPhysicalCores} physical`;
+  const speed = server.cpuSpeedGhz === null ? null : `${server.cpuSpeedGhz.toFixed(2)} GHz`;
+  return [logical, physical, speed].filter(Boolean).join(" / ");
+}
+
+function formatIpAddresses(server: NodeGuardServer) {
+  if (server.ipAddresses.length === 0) {
+    return server.primaryIp ?? "Unavailable";
+  }
+
+  const visibleAddresses = server.ipAddresses.slice(0, 3);
+  const remainingCount = server.ipAddresses.length - visibleAddresses.length;
+  return `${visibleAddresses.join(", ")}${remainingCount > 0 ? ` +${remainingCount} more` : ""}`;
+}
+
 function ServerPage() {
   const [monitorName, setMonitorName] = useState("");
   const [monitorUrl, setMonitorUrl] = useState("");
@@ -461,6 +521,7 @@ function ServerPage() {
   const [allowInsecureTls, setAllowInsecureTls] = useState(false);
   const [editingMonitor, setEditingMonitor] = useState<MonitoredServerStatus | null>(null);
   const [isMonitorModalOpen, setIsMonitorModalOpen] = useState(false);
+  const [isMonitorModalClosing, setIsMonitorModalClosing] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const server = useServer("local-node");
   const metrics = useServerMetrics("local-node");
@@ -476,7 +537,14 @@ function ServerPage() {
     setAllowInsecureTls(false);
     setEditingMonitor(null);
     setIsMonitorModalOpen(false);
+    setIsMonitorModalClosing(false);
     setFormError(null);
+  };
+
+  const closeMonitorModal = () => {
+    if (isMonitorModalClosing) return;
+    setIsMonitorModalClosing(true);
+    window.setTimeout(resetMonitorForm, 190);
   };
 
   const openAddMonitor = () => {
@@ -485,6 +553,7 @@ function ServerPage() {
     setMonitorApiKey("");
     setAllowInsecureTls(false);
     setEditingMonitor(null);
+    setIsMonitorModalClosing(false);
     setFormError(null);
     setIsMonitorModalOpen(true);
   };
@@ -495,6 +564,7 @@ function ServerPage() {
     setMonitorApiKey("");
     setAllowInsecureTls(monitor.allowInsecureTls);
     setEditingMonitor(monitor);
+    setIsMonitorModalClosing(false);
     setFormError(null);
     setIsMonitorModalOpen(true);
   };
@@ -517,7 +587,7 @@ function ServerPage() {
         await addServerMonitor.mutateAsync(input);
       }
 
-      resetMonitorForm();
+      closeMonitorModal();
     } catch (error) {
       setFormError(normalizeApiError(error).message);
     }
@@ -533,7 +603,15 @@ function ServerPage() {
           <Info label="Hostname" value={server.data.hostname} />
           <Info label="OS" value={server.data.os ?? "Unavailable"} />
           <Info label="Kernel" value={server.data.kernel ?? "Unavailable"} />
+          <Info label="Architecture" value={[server.data.platform, server.data.architecture].filter(Boolean).join(" / ") || "Unavailable"} />
           <Info label="Uptime" value={formatUptime(server.data.uptimeSeconds)} />
+          <Info label="CPU model" value={formatCpuModel(server.data)} />
+          <Info label="CPU cores" value={formatCpuCores(server.data)} />
+          <Info label="RAM installed" value={formatBytes(server.data.totalMemoryGb)} />
+          <Info label="Root disk" value={formatBytes(server.data.totalDiskGb)} />
+          <Info label="Swap" value={server.data.swapTotalGb === null || server.data.swapTotalGb === 0 ? "Not configured" : formatBytes(server.data.swapTotalGb)} />
+          <Info label="Primary IP" value={server.data.primaryIp ?? "Unavailable"} />
+          <Info label="IP addresses" value={formatIpAddresses(server.data)} />
           <Info label="Docker" value={server.data.dockerAvailable ? server.data.dockerVersion ?? "Available" : "Unavailable"} />
           <Info label="Containers" value={server.data.dockerAvailable ? `${server.data.runningContainers} running / ${server.data.stoppedContainers} stopped` : "Not checked"} />
         </div>
@@ -605,7 +683,7 @@ function ServerPage() {
         )}
       </Panel>
       {isMonitorModalOpen ? (
-        <Modal title={editingMonitor ? "Edit monitored server" : "Add monitored server"} onClose={resetMonitorForm}>
+        <Modal title={editingMonitor ? "Edit monitored server" : "Add monitored server"} onClose={closeMonitorModal} isClosing={isMonitorModalClosing}>
           <form className="inline-form modal-form" onSubmit={saveMonitor}>
           <label>
             Display name
@@ -632,8 +710,7 @@ function ServerPage() {
             />
             Allow self-signed HTTPS
           </label>
-          <button type="submit" disabled={addServerMonitor.isPending || updateServerMonitor.isPending}>
-            {editingMonitor ? <Pencil size={16} /> : <Plus size={16} />}
+          <button className="modal-submit" type="submit" disabled={addServerMonitor.isPending || updateServerMonitor.isPending}>
             {editingMonitor ? "Save edits" : "Add server"}
           </button>
         </form>
@@ -880,7 +957,6 @@ function SettingsPage() {
   const hideSensitiveValues = useSettingsStore((state) => state.hideSensitiveValues);
   const setHideSensitiveValues = useSettingsStore((state) => state.setHideSensitiveValues);
   const disconnect = useSettingsStore((state) => state.disconnect);
-  const validateConnection = useValidateConnection();
 
   const testConnection = async () => {
     setConnectionMessage(null);
@@ -890,17 +966,28 @@ function SettingsPage() {
     }
 
     try {
-      await validateConnection.mutateAsync({ backendUrl: backendConfig.backendUrl, apiKey: backendConfig.apiKey });
-      setConnectionMessage(`Connection healthy at ${formatDateTime(new Date().toISOString())}`);
+      const session = await getCurrentSession({ backendUrl: backendConfig.backendUrl });
+      setConnectionMessage(session.authenticated ? `Signed in as ${session.user?.username ?? "NodeGuard user"}.` : "Session expired. Sign in again.");
     } catch (error) {
       setConnectionMessage(normalizeApiError(error).message);
     }
+  };
+
+  const signOut = async () => {
+    if (backendConfig) {
+      await logoutSession({ backendUrl: backendConfig.backendUrl }).catch(() => null);
+    }
+
+    disconnect();
+    setDemoMode(false);
   };
 
   const exportDiagnostics = () => {
     const diagnostics = {
       generatedAt: new Date().toISOString(),
       backendUrl: backendConfig ? maskSensitiveUrl(backendConfig.backendUrl, hideSensitiveValues) : null,
+      username: backendConfig?.user.username ?? null,
+      role: backendConfig?.user.role ?? null,
       connectedAt: backendConfig?.connectedAt ?? null,
       refreshIntervalSeconds,
       demoMode,
@@ -920,14 +1007,15 @@ function SettingsPage() {
       <Panel title="Connection" action={<button onClick={testConnection}><RefreshCcw size={16} /> Test connection</button>}>
         <div className="info-grid">
           <Info label="Backend URL" value={backendConfig ? maskSensitiveUrl(backendConfig.backendUrl, hideSensitiveValues) : demoMode ? "Demo data" : "Not connected"} />
-          <Info label="API key" value={backendConfig?.apiKeyPreview ?? "Not saved"} />
-          <Info label="Connected" value={formatDateTime(backendConfig?.connectedAt ?? null)} />
+          <Info label="Signed in as" value={backendConfig?.user.username ?? "Not signed in"} />
+          <Info label="Role" value={backendConfig?.user.role ?? "Unavailable"} />
+          <Info label="Session started" value={formatDateTime(backendConfig?.connectedAt ?? null)} />
         </div>
         {connectionMessage ? <div className="stale-notice success">{connectionMessage}</div> : null}
       </Panel>
       <Panel title="Live refresh interval">
         <div className="segmented">
-          {[10, 30, 60, 120, 300].map((value) => <button key={value} className={value === refreshIntervalSeconds ? "active" : ""} onClick={() => setRefreshIntervalSeconds(value)}>{value}s</button>)}
+          {[1, 5, 10, 30, 60].map((value) => <button key={value} className={value === refreshIntervalSeconds ? "active" : ""} onClick={() => setRefreshIntervalSeconds(value)}>{value}s</button>)}
         </div>
       </Panel>
       <Panel title="Security">
@@ -937,12 +1025,12 @@ function SettingsPage() {
         </div>
         <div className="button-row">
           <button onClick={exportDiagnostics}>Export diagnostics</button>
-          <button onClick={disconnect}>Change API key</button>
+          <button onClick={signOut}>Sign out</button>
         </div>
       </Panel>
       <Panel title="About NodeGuard">
-        <p className="muted">Web-only, read-only infrastructure monitoring for local homelab hosts, containers, and services. For local MVP testing, the API key is stored in browser storage; production versions should use encrypted session storage or server-side authentication.</p>
-        <button className="danger" onClick={disconnect}><LogOut size={16} /> Disconnect</button>
+        <p className="muted">Web-only, read-only infrastructure monitoring for local homelab hosts, containers, and services. Human users sign in with a password-backed session; API keys remain reserved for future agents and integrations.</p>
+        <button className="danger" onClick={signOut}><LogOut size={16} /> Sign out</button>
       </Panel>
     </div>
   );
@@ -997,14 +1085,33 @@ function DockerUnavailable({ message }: { message: string }) {
   );
 }
 
+function LaunchLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      className="launch-link"
+      href={launchHref(href)}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={label}
+      title={label}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <ExternalLink size={14} />
+    </a>
+  );
+}
+
 function DomainRow({ domain, onCheck, onEdit, onRemove }: { domain: DomainCheck; onCheck?: () => void; onEdit?: () => void; onRemove?: () => void }) {
   const hasActions = Boolean(onCheck || onEdit || onRemove);
   const displayUrl = fullDomainUrl(domain);
 
   return (
     <div className={`data-row ${hasActions ? "domain-action-row" : "domain-summary-row"}`}>
-      <span>
-        <strong>{displayUrl}</strong>
+      <span className="resource-cell">
+        <span className="resource-title">
+          <strong>{displayUrl}</strong>
+          <LaunchLink href={displayUrl} label={`Open ${displayUrl}`} />
+        </span>
         <small>{domain.error ?? `${domain.https ? "HTTPS" : "HTTP"} · Expected ${domain.expectedStatusCodes.join(", ")} · Last checked ${formatRelativeTime(domain.lastCheckedAt)}`}</small>
       </span>
       <span>{domain.statusCode ? `HTTP ${domain.statusCode}` : "No status"}</span>
@@ -1042,9 +1149,13 @@ function AlertRow({ alert }: { alert: Alert }) {
 function ServerMonitorRow({ monitor, onEdit, onRemove }: { monitor: MonitoredServerStatus; onEdit: () => void; onRemove: () => void }) {
   return (
     <div className="data-row monitor-row">
-      <span>
+      <span className="resource-cell">
         <strong>{monitor.name}</strong>
-        <small>{monitor.backendUrl} · {monitor.lastError ?? `checked ${formatRelativeTime(monitor.lastCheckedAt)}`}</small>
+        <small className="resource-meta">
+          <span className="resource-url">{monitor.backendUrl}</span>
+          <span className="resource-context">· {monitor.lastError ?? `checked ${formatRelativeTime(monitor.lastCheckedAt)}`}</span>
+          <LaunchLink href={monitor.backendUrl} label={`Open ${monitor.backendUrl}`} />
+        </small>
       </span>
       <StatusPill status={monitor.status} />
       <button className="icon-only" onClick={onEdit} aria-label={`Edit ${monitor.name}`}>
@@ -1161,6 +1272,9 @@ export function App() {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
     logoutTimer.current = window.setTimeout(() => {
+      if (backendConfig) {
+        void logoutSession({ backendUrl: backendConfig.backendUrl }).catch(() => null);
+      }
       disconnect();
       setDemoMode(false);
       setIsLoggingOut(false);

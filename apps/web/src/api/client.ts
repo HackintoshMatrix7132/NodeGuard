@@ -2,8 +2,23 @@ import { ApiError } from "./errors";
 
 export type ApiConfig = {
   backendUrl: string;
-  apiKey: string;
+  apiKey?: string;
 };
+
+const defaultLocalApiUrl = "http://localhost:3000";
+
+export function getDefaultBackendUrl() {
+  const configuredUrl = import.meta.env.VITE_NODEGUARD_API_URL as string | undefined;
+  if (configuredUrl) {
+    return normalizeBackendUrl(configuredUrl);
+  }
+
+  if (window.location.port === "5173") {
+    return normalizeBackendUrl(`${window.location.protocol}//${window.location.hostname}:3000`);
+  }
+
+  return window.location.origin;
+}
 
 export function normalizeBackendUrl(value: string) {
   const trimmed = value.trim();
@@ -14,6 +29,18 @@ export function normalizeBackendUrl(value: string) {
   }
 
   return parsed.toString().replace(/\/$/, "");
+}
+
+function apiBaseUrl(value: string) {
+  const normalized = normalizeBackendUrl(value);
+  const parsed = new URL(normalized);
+
+  if (parsed.port === "5173") {
+    parsed.port = "3000";
+    return parsed.toString().replace(/\/$/, "");
+  }
+
+  return normalized;
 }
 
 async function parseJson(response: Response) {
@@ -32,17 +59,19 @@ async function parseJson(response: Response) {
 export async function apiFetch<T>(config: ApiConfig, path: string, init: RequestInit = {}): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
+  const headers = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+    ...init.headers
+  };
 
   try {
-    const response = await fetch(`${normalizeBackendUrl(config.backendUrl)}${path}`, {
+    const response = await fetch(`${apiBaseUrl(config.backendUrl)}${path}`, {
       ...init,
       signal: controller.signal,
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
-        ...init.headers
-      }
+      credentials: "include",
+      headers
     });
     const body = await parseJson(response);
 
