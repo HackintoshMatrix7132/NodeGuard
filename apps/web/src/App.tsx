@@ -25,6 +25,7 @@ import {
   useUpdateServerMonitor,
   useValidateConnection
 } from "./hooks/useNodeGuardQueries";
+import nodeGuardLogo from "./assets/nodeguard-logo.png";
 import { useSettingsStore } from "./store/settingsStore";
 import type { Alert, Container, ContainerMonitorStatus, DomainCheck, HealthStatus, MonitoredServerStatus } from "./types/nodeguard";
 import { formatBytes, formatDateTime, formatPercentage, formatRelativeTime, formatResponseTime, formatUptime } from "./utils/format";
@@ -33,39 +34,6 @@ import { getStatusLabel, getStatusTone } from "./utils/status";
 type View = "dashboard" | "server" | "containers" | "domains" | "alerts" | "settings";
 type MetricTone = "blue" | "green" | "orange" | "red" | "purple";
 type BreakdownItem = { label: string; value: string; tone?: MetricTone };
-
-function NodeGuardLogo({ className = "" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 128 128" role="img" aria-label="NodeGuard logo">
-      <defs>
-        <linearGradient id="nodeguardLogoGradient" x1="18" y1="16" x2="108" y2="112" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#38d9ff" />
-          <stop offset="1" stopColor="#2563eb" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M64 10C47.5 21.4 31.4 28.9 17.5 32.2v31.5c0 28.8 19.7 43.5 46.5 54.3 26.8-10.8 46.5-25.5 46.5-54.3V32.2C96.6 28.9 80.5 21.4 64 10Z"
-        fill="none"
-        stroke="url(#nodeguardLogoGradient)"
-        strokeWidth="8"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M42 43v42M42 43l44 44M86 43v44"
-        fill="none"
-        stroke="url(#nodeguardLogoGradient)"
-        strokeWidth="8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="42" cy="43" r="11" fill="#08101f" stroke="url(#nodeguardLogoGradient)" strokeWidth="7" />
-      <circle cx="42" cy="85" r="11" fill="#08101f" stroke="url(#nodeguardLogoGradient)" strokeWidth="7" />
-      <circle cx="64" cy="64" r="11" fill="#08101f" stroke="url(#nodeguardLogoGradient)" strokeWidth="7" />
-      <circle cx="86" cy="43" r="11" fill="#08101f" stroke="url(#nodeguardLogoGradient)" strokeWidth="7" />
-      <circle cx="86" cy="87" r="11" fill="#08101f" stroke="url(#nodeguardLogoGradient)" strokeWidth="7" />
-    </svg>
-  );
-}
 
 function StatusPill({ status }: { status: HealthStatus | Alert["severity"] }) {
   return <span className={`pill ${getStatusTone(status)}`}>{getStatusLabel(status)}</span>;
@@ -295,7 +263,7 @@ function ConnectScreen() {
     <main className="login-shell">
       <div className="orbital-bg" />
       <form className="login-card" onSubmit={submit}>
-        <div className="logo-mark"><NodeGuardLogo className="logo-mark-svg" /></div>
+        <div className="logo-mark"><img className="logo-mark-img" src={nodeGuardLogo} alt="NodeGuard" /></div>
         <h1>Welcome to NodeGuard</h1>
         <p>Monitor your servers. Protect your stack.</p>
         <ol className="setup-list">
@@ -1169,7 +1137,7 @@ export function App() {
       ) : null}
       <aside className="sidebar">
         <div className="sidebar-top">
-          <div className="brand"><NodeGuardLogo className="brand-logo" /><span>NodeGuard</span></div>
+          <div className="brand"><img className="brand-logo" src={nodeGuardLogo} alt="" aria-hidden="true" /><span>NodeGuard</span></div>
           <button className="sidebar-toggle" onClick={() => setSidebarCollapsed(true)} aria-label="Hide sidebar">
             <PanelLeftClose size={18} />
           </button>

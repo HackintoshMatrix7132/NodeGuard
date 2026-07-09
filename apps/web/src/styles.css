@@ -2100,9 +2100,10 @@ button:hover {
   box-shadow: none;
 }
 
-.logo-mark-svg {
+.logo-mark-img {
   width: 86px;
   height: 86px;
+  object-fit: contain;
   display: block;
   filter: drop-shadow(0 0 18px rgba(56, 217, 255, 0.34));
 }
@@ -2110,11 +2111,8 @@ button:hover {
 .brand-logo {
   width: 30px;
   height: 30px;
+  object-fit: contain;
   flex: 0 0 auto;
-}
-
-.brand svg.brand-logo {
-  color: inherit;
   filter: drop-shadow(0 0 10px rgba(56, 217, 255, 0.42));
 }
 
