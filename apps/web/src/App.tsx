@@ -1108,6 +1108,9 @@ export function App() {
     ["alerts", Bell, "Alerts"],
     ["settings", Settings, "Settings"]
   ] as const;
+  const activeNavItem = nav.find(([key]) => key === view);
+  const ActiveIcon = activeNavItem?.[1] ?? Gauge;
+  const activeLabel = activeNavItem?.[2] ?? "Dashboard";
 
   const logout = () => {
     disconnect();
@@ -1132,6 +1135,16 @@ export function App() {
         <button className="sidebar-logout" onClick={logout}><LogOut size={18} /> Logout</button>
       </aside>
       <main className="workspace">
+        <header className="workspace-topbar">
+          <div className="topbar-title">
+            <span><ActiveIcon size={16} /></span>
+            <strong>{activeLabel}</strong>
+          </div>
+          <div className="topbar-status">
+            <span>{demoMode ? "Demo mode" : backendConfig ? "Connected" : "Local"}</span>
+            <kbd>Live</kbd>
+          </div>
+        </header>
         {view === "dashboard" && <Dashboard setView={setView} />}
         {view === "server" && <ServerPage />}
         {view === "containers" && <ContainersPage />}
