@@ -1199,6 +1199,10 @@ button:hover {
   background: rgba(15, 23, 42, 0.86) !important;
 }
 
+.sidebar-toggle {
+  transform: translateY(-4px);
+}
+
 .sidebar-reveal {
   margin-top: 16px;
   border-radius: var(--ng-radius);
