@@ -35,6 +35,18 @@ type View = "dashboard" | "server" | "containers" | "domains" | "alerts" | "sett
 type MetricTone = "blue" | "green" | "orange" | "red" | "purple";
 type BreakdownItem = { label: string; value: string; tone?: MetricTone };
 
+function LogoImage({ className, label }: { className: string; label?: string }) {
+  return (
+    <span
+      className={className}
+      role={label ? "img" : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+      style={{ backgroundImage: `url(${nodeGuardLogo})` }}
+    />
+  );
+}
+
 function StatusPill({ status }: { status: HealthStatus | Alert["severity"] }) {
   return <span className={`pill ${getStatusTone(status)}`}>{getStatusLabel(status)}</span>;
 }
@@ -263,7 +275,7 @@ function ConnectScreen() {
     <main className="login-shell">
       <div className="orbital-bg" />
       <form className="login-card" onSubmit={submit}>
-        <div className="logo-mark"><img className="logo-mark-img" src={nodeGuardLogo} alt="NodeGuard" /></div>
+        <div className="logo-mark"><LogoImage className="logo-mark-img" label="NodeGuard logo" /></div>
         <h1>Welcome to NodeGuard</h1>
         <p>Monitor your servers. Protect your stack.</p>
         <ol className="setup-list">
@@ -1137,7 +1149,7 @@ export function App() {
       ) : null}
       <aside className="sidebar">
         <div className="sidebar-top">
-          <div className="brand"><img className="brand-logo" src={nodeGuardLogo} alt="" aria-hidden="true" /><span>NodeGuard</span></div>
+          <div className="brand"><LogoImage className="brand-logo" /><span>NodeGuard</span></div>
           <button className="sidebar-toggle" onClick={() => setSidebarCollapsed(true)} aria-label="Hide sidebar">
             <PanelLeftClose size={18} />
           </button>
