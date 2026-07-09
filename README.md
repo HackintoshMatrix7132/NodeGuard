@@ -1,29 +1,56 @@
 # NodeGuard
 
-Monitor your servers. Protect your stack.
+**Monitor your servers. Protect your stack.**
 
-NodeGuard is a web-based, read-only infrastructure monitoring dashboard for homelab Linux/Docker services. It has a Vite React frontend and a Node.js TypeScript backend that reads host metrics, Docker container state, domain/reverse-proxy health, SSL expiry, and alert history.
+NodeGuard is a web-only, read-only infrastructure monitoring dashboard for homelab Linux and Docker services. It combines a polished Vite React frontend with a Node.js TypeScript API that checks host metrics, Docker container state, domain and reverse-proxy reachability, SSL expiry, and alert history.
 
-## Status
+The project is designed for a real self-hosted deployment at `nodeguard.muthu.eu`, while still being portfolio-friendly for screenshots and demos.
+
+## Current Status
 
 - Active frontend: `apps/web`
 - Active backend: `apps/api`
-- Deployment target: `nodeguard.muthu.eu`
-- React Native / Expo files have been removed from the active project.
-- Runtime monitor configuration and alert history are stored in SQLite.
+- Runtime data: SQLite
+- Deployment target: one Docker container behind HTTPS at `nodeguard.muthu.eu`
+- React Native / Expo files are no longer part of the active project.
 
 ## Features
 
-- Backend URL + API key connect screen.
-- Dashboard overview with overall health, root-cause summary, active issues, metrics, and recent alerts.
-- Server page with CPU, RAM, disk, swap, uptime, OS, kernel, Docker availability, and monitored backend checks.
-- Monitored server URLs can allow self-signed HTTPS for internal homelab services such as Proxmox.
-- Docker containers page with live container status, health, image, uptime, ports, logs preview, and monitored container checks.
-- Domains / services page for public domains, internal URLs, reverse-proxy routes, paths, expected HTTP status codes, latency, and SSL expiry.
-- Alerts page with active and resolved alert history, occurrence count, first seen, last seen, likely cause, failed checks, and suggested next steps.
-- Settings page with refresh interval, screenshot privacy, diagnostics export, demo mode, and disconnect.
-- Demo mode with realistic `muthu.eu` data for portfolio screenshots.
+- Connect screen for backend URL and API key.
+- Modern dark dashboard UI with sidebar navigation, sidebar collapse, subtle professional motion, and screenshot-friendly styling.
+- Dashboard overview with overall status, main issue, active issues, real status breakdowns, recent alerts, and domain reachability.
+- Server page with CPU, RAM, disk, swap, uptime, OS, kernel, Docker availability, and monitored server checks.
+- Monitored server support for internal NodeGuard backends or health URLs.
+- Per-monitor self-signed HTTPS option for internal services such as Proxmox.
+- Docker containers page with container status, health, image, uptime, ports, limited log preview, and monitored container checks.
+- Domains / services page for public domains, internal URLs, reverse-proxy routes, paths, expected HTTP status codes, latency, SSL state, edit/delete, and manual checks.
+- Alerts page with active/resolved filters, alert detail, first seen, last seen, occurrence count, failed checks, possible cause, and suggested next steps.
+- Settings page with refresh interval, screenshot privacy, diagnostics export, demo mode, API key management, and logout.
+- Demo mode with realistic `muthu.eu` sample data for screenshots.
 - Production Docker image that serves the web UI and API from one container.
+
+## Tech Stack
+
+Frontend:
+
+- React
+- Vite
+- TypeScript
+- TanStack Query
+- Zustand
+- Lucide icons
+- CSS with a custom dark SaaS/cyber visual system
+
+Backend:
+
+- Node.js
+- TypeScript
+- Express
+- SQLite via `better-sqlite3`
+- `systeminformation`
+- `dockerode`
+- `helmet`
+- `express-rate-limit`
 
 ## Architecture
 
@@ -39,7 +66,7 @@ NodeGuard Web/API container
 Linux host + Docker containers + domains/services
 ```
 
-The browser never talks directly to Docker, SSH, the host shell, or the Docker socket.
+The browser never talks directly to Docker, SSH, the host shell, or the Docker socket. The backend performs read-only monitoring and exposes safe API responses.
 
 ## Local Setup
 
@@ -49,7 +76,7 @@ Install dependencies:
 npm install
 ```
 
-Create a backend environment file:
+Create the backend environment file:
 
 ```bash
 cp .env.example apps/api/.env
@@ -63,7 +90,7 @@ PORT=3000
 NODEGUARD_API_KEY=change_this_local_key
 ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 DATABASE_URL=file:data/nodeguard.sqlite
-MONITORED_DOMAINS=https://bit.muthu.eu,https://cloud.muthu.eu
+MONITORED_DOMAINS=https://bit.muthu.eu,https://cloud.muthu.eu,https://status.muthu.eu
 ```
 
 Start the backend:
@@ -72,7 +99,7 @@ Start the backend:
 npm run dev:api
 ```
 
-Start the frontend:
+Start the frontend in another terminal:
 
 ```bash
 npm run dev:web
@@ -84,22 +111,34 @@ Open:
 http://localhost:5173
 ```
 
-Login details:
+Login:
 
 ```txt
 Backend URL: http://localhost:3000
-API key: value of NODEGUARD_API_KEY
+API key: value of NODEGUARD_API_KEY from apps/api/.env
 ```
+
+You can also use **Use demo data** on the connect screen for screenshots without a backend.
+
+## Running Both Dev Servers
+
+The root script starts both workspaces:
+
+```bash
+npm run dev
+```
+
+If port `3000` is already in use, stop the existing API process or change `PORT` in `apps/api/.env`.
 
 ## Production Docker Setup
 
-Create a root `.env` for Docker Compose:
+Create a root `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` for `nodeguard.muthu.eu`:
+Example production values:
 
 ```env
 NODE_ENV=production
@@ -130,12 +169,12 @@ Stop:
 docker compose down
 ```
 
-The compose file mounts:
+The compose setup mounts:
 
 - `/data` for SQLite persistence.
 - `/var/run/docker.sock:ro` for read-only Docker metadata.
 
-Put Cloudflare Access, a VPN, or another real authentication layer in front of `https://nodeguard.muthu.eu`. The API key protects `/api/*`, but browser storage is not a full user-auth system.
+For public access, put NodeGuard behind HTTPS plus Cloudflare Access, VPN-only access, or another real authentication layer. The API key protects `/api/*`, but browser storage is not a complete user-auth system.
 
 ## Environment Variables
 
@@ -162,7 +201,7 @@ DISK_WARNING_PERCENT=80
 DISK_CRITICAL_PERCENT=90
 ```
 
-Do not commit `.env` files, API keys, private IPs, or secrets.
+Never commit `.env` files, API keys, private IPs, passwords, or other secrets.
 
 ## API
 
@@ -201,7 +240,25 @@ GET /api/alerts/:id
 POST /api/checks/run
 ```
 
-## Domain Checks
+## Monitoring Concepts
+
+### Servers
+
+The main local host is monitored through `systeminformation`. Extra monitored servers can be added from the Server page. These are intended for:
+
+- Other NodeGuard backends.
+- Plain health URLs.
+- Internal services where reachability alone is useful.
+
+For internal HTTPS services with self-signed certificates, enable **Allow self-signed HTTPS** on that server monitor instead of disabling TLS verification globally.
+
+### Docker Containers
+
+Docker data is read by the backend using Docker metadata. Container monitors let you mark important containers that should exist and be running, such as `vaultwarden`, `nextcloud`, `postgres`, or `pihole`.
+
+Docker actions are intentionally not implemented. NodeGuard does not restart, stop, delete, exec into, prune, or modify containers.
+
+### Domains / Services
 
 Domains / services can monitor:
 
@@ -210,7 +267,31 @@ Domains / services can monitor:
 - Specific paths such as `/health`, `/login`, or `/api/status`
 - Expected HTTP codes such as `200,301,302,401`
 
-A `404` usually means the service is reachable but NodeGuard checked a path that does not exist. Edit the monitor path or expected codes if that response is normal for the service.
+A `404` usually means the service is reachable but NodeGuard checked a path that does not exist. Edit the monitor path or expected status codes if that response is normal for the service.
+
+### Alerts
+
+Alerts are generated from server, Docker, domain, and monitored-service state. Alert history is persisted with:
+
+- Active/resolved state
+- First seen
+- Last seen
+- Occurrence count
+- Failed checks
+- Possible cause
+- Suggested next steps
+
+## UI Notes
+
+NodeGuard currently uses a polished dark dashboard style inspired by modern SaaS and technical monitoring tools:
+
+- Sidebar navigation with collapse/reveal rail.
+- Larger screenshot-friendly text.
+- Glassy dark panels with blue, purple, and cyan accents.
+- Health colors for healthy, warning, critical, offline, and unknown states.
+- Subtle professional motion for dashboard panels, rows, modals, meters, and interactions.
+- `prefers-reduced-motion` support for accessibility.
+- Login screen remains stable without background/card movement.
 
 ## Scripts
 
@@ -224,34 +305,43 @@ npm run lint
 npm test
 ```
 
+Docker:
+
+```bash
+docker compose up -d --build
+docker compose logs -f nodeguard
+docker compose down
+```
+
 ## Security Notes
 
 - NodeGuard is read-only.
-- No restart, stop, delete, prune, reboot, SSH, shell, Docker exec, or volume actions are implemented.
-- Docker metadata is read only by the backend.
-- `/api/*` is protected by API key auth and rate limiting.
+- `/api/*` is protected by API key authentication and rate limiting.
 - Production mode requires `NODEGUARD_API_KEY`.
 - Raw backend error messages are hidden in production.
-- Use HTTPS and Cloudflare Access, VPN-only access, or another real auth layer for public deployments.
-- SQLite database and runtime monitor data are ignored by git.
+- Docker metadata is read by the backend only.
+- The frontend never receives Docker socket, shell, SSH, or privileged host access.
+- Use HTTPS and Cloudflare Access, VPN-only access, or another real auth layer before public exposure.
+- SQLite database files, `.env` files, logs, and generated output are ignored by git.
 
 ## Known Limits
 
-- SQLite is suitable for a single homelab deployment. Multi-user/cloud deployments would need stronger auth and database planning.
+- SQLite is intended for a single homelab deployment.
 - Per-container CPU usage is not implemented yet.
-- Alerts are persisted, but notification delivery is not implemented yet.
-- Server monitors check other NodeGuard backends or plain health URLs. For internal services with self-signed certificates, enable `Allow self-signed HTTPS` on that monitor. Public websites and reverse-proxy routes belong in Domains / Services.
+- Push/email notifications are not implemented yet.
+- Server monitors check other NodeGuard backends or plain health URLs; public websites and reverse proxies belong in Domains / Services.
+- Full remote metrics aggregation is a future improvement.
+- Browser-stored API keys are acceptable for this MVP but should be replaced with stronger auth for a public multi-user product.
 
-## Portfolio
+## Portfolio Demo Flow
 
-Suggested demo flow:
-
-1. Dashboard overview.
-2. Server metrics.
-3. Docker containers.
-4. Domains / services.
-5. Alerts and alert detail.
-6. Settings and screenshot privacy.
+1. Open NodeGuard.
+2. Show dashboard overview and main issue.
+3. Open server metrics.
+4. Open Docker containers and monitored containers.
+5. Open Domains / Services.
+6. Open Alerts and alert detail.
+7. Show Settings, screenshot privacy, diagnostics, and logout.
 
 Screenshots: TODO  
 Demo video: TODO
