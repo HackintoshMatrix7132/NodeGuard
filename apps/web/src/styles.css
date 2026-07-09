@@ -2091,6 +2091,37 @@ button:hover {
   font-size: 13px;
 }
 
+.logo-mark {
+  width: 88px;
+  height: 88px;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
+}
+
+.logo-mark-svg {
+  width: 86px;
+  height: 86px;
+  display: block;
+  filter: drop-shadow(0 0 18px rgba(56, 217, 255, 0.34));
+}
+
+.brand-logo {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+}
+
+.brand svg.brand-logo {
+  color: inherit;
+  filter: drop-shadow(0 0 10px rgba(56, 217, 255, 0.42));
+}
+
+.login-card:hover .logo-mark {
+  box-shadow: none;
+}
+
 .issue-list .issue-row {
   border-color: transparent !important;
   background: transparent !important;

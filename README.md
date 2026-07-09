@@ -118,7 +118,7 @@ Backend URL: http://localhost:3000
 API key: value of NODEGUARD_API_KEY from apps/api/.env
 ```
 
-You can also use **Use demo data** on the connect screen for screenshots without a backend.
+Demo mode can be enabled later from Settings for portfolio screenshots.
 
 ## Running Both Dev Servers
 
