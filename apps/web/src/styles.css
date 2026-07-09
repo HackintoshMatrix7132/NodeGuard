@@ -2074,6 +2074,17 @@ button:hover {
   font-size: 13px;
 }
 
+.issue-list .issue-row {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.issue-list .issue-row:hover {
+  border-color: transparent !important;
+  background: rgba(91, 140, 255, 0.06) !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
