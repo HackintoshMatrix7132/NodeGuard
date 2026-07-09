@@ -64,11 +64,11 @@ function LogoMark({ className, label }: { className: string; label?: string }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx="41" cy="44" r="8.5" fill="#0b1020" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
-      <circle cx="41" cy="83" r="8.5" fill="#0b1020" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
-      <circle cx="64" cy="67" r="8.5" fill="#0b1020" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
-      <circle cx="87" cy="44" r="8.5" fill="#0b1020" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
-      <circle cx="87" cy="83" r="8.5" fill="#0b1020" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
+      <circle cx="41" cy="44" r="8.5" fill="transparent" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
+      <circle cx="41" cy="83" r="8.5" fill="transparent" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
+      <circle cx="64" cy="67" r="8.5" fill="transparent" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
+      <circle cx="87" cy="44" r="8.5" fill="transparent" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
+      <circle cx="87" cy="83" r="8.5" fill="transparent" stroke="url(#nodeguardMarkGradient)" strokeWidth="4.8" />
     </svg>
   );
 }
