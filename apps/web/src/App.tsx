@@ -313,7 +313,6 @@ function ConnectScreen() {
           <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" placeholder="Paste API key" />
         </label>
         <button type="submit" disabled={validateConnection.isPending}>{validateConnection.isPending ? "Checking..." : "Connect"}</button>
-        <small>For local MVP testing, the API key is stored in browser storage. Production deployments should use stronger authentication.</small>
       </form>
     </main>
   );
