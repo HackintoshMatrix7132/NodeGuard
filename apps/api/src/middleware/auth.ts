@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 
 import { env } from "../config/env.js";
@@ -11,6 +12,16 @@ export function readApiKey(request: Request) {
   return request.header("x-api-key")?.trim() ?? "";
 }
 
+function apiKeysMatch(providedKey: string, expectedKey: string) {
+  const provided = Buffer.from(providedKey);
+  const expected = Buffer.from(expectedKey);
+  if (provided.length !== expected.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(provided, expected);
+}
+
 export function requireApiKey(request: Request, response: Response, next: NextFunction) {
   const providedKey = readApiKey(request);
 
@@ -19,7 +30,7 @@ export function requireApiKey(request: Request, response: Response, next: NextFu
     return;
   }
 
-  if (!env.apiKey || providedKey !== env.apiKey) {
+  if (!env.apiKey || !apiKeysMatch(providedKey, env.apiKey)) {
     response.status(403).json({ error: "invalid_api_key", message: "Invalid API key." });
     return;
   }

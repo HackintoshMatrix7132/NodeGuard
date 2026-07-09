@@ -1,13 +1,21 @@
 import tls from "node:tls";
 
 import { env } from "../config/env.js";
-import type { DomainCheck } from "../types/nodeguard.js";
-import { idForDomain, listStoredDomains, normalizeDomain } from "./domainConfigService.js";
+import type { DomainCheck, HealthStatus } from "../types/nodeguard.js";
+import { listStoredDomains, markStoredDomainResult, type StoredDomain } from "./domainConfigService.js";
 
 type SslInfo = {
   sslExpiresAt: string | null;
   sslExpiresInDays: number | null;
 };
+
+type DomainTarget = StoredDomain & {
+  editable: boolean;
+};
+
+function buildCheckUrl(domain: string, domainPath: string) {
+  return `${domain}${domainPath === "/" ? "" : domainPath}`;
+}
 
 function readSslInfo(domain: string): Promise<SslInfo> {
   const parsed = new URL(domain);
@@ -43,49 +51,75 @@ function readSslInfo(domain: string): Promise<SslInfo> {
   });
 }
 
-async function checkDomain(domain: string, editable: boolean): Promise<DomainCheck> {
+function statusForHttpResponse(statusCode: number, expectedStatusCodes: number[]): HealthStatus {
+  if (expectedStatusCodes.includes(statusCode)) {
+    return "healthy";
+  }
+
+  return statusCode >= 500 ? "critical" : "warning";
+}
+
+async function checkDomain(target: DomainTarget): Promise<DomainCheck> {
   const controller = new AbortController();
   const startedAt = performance.now();
   const timeout = setTimeout(() => controller.abort(), env.domainCheckTimeoutMs);
   const now = new Date().toISOString();
+  const checkUrl = buildCheckUrl(target.domain, target.path);
 
   try {
     const [response, sslInfo] = await Promise.all([
-      fetch(domain, {
-      method: "GET",
-      redirect: "follow",
-      signal: controller.signal
+      fetch(checkUrl, {
+        method: "GET",
+        redirect: "follow",
+        signal: controller.signal
       }),
-      readSslInfo(domain)
+      readSslInfo(target.domain)
     ]);
     const responseTimeMs = Math.round(performance.now() - startedAt);
-    const isServerError = [500, 502, 503].includes(response.status);
+    const status = statusForHttpResponse(response.status, target.expectedStatusCodes);
+    const healthy = status === "healthy";
+
+    if (target.editable) {
+      markStoredDomainResult(target.id, healthy, now);
+    }
 
     return {
-      id: idForDomain(domain),
-      domain,
-      editable,
-      status: isServerError ? "critical" : response.ok ? "healthy" : "warning",
+      id: target.id,
+      domain: target.domain,
+      path: target.path,
+      expectedStatusCodes: target.expectedStatusCodes,
+      editable: target.editable,
+      status,
       statusCode: response.status,
       responseTimeMs,
-      https: domain.startsWith("https://"),
+      https: target.domain.startsWith("https://"),
       sslExpiresAt: sslInfo.sslExpiresAt,
       sslExpiresInDays: sslInfo.sslExpiresInDays,
       lastCheckedAt: now,
-      error: null
+      lastSuccessfulAt: healthy ? now : target.lastSuccessfulAt,
+      lastFailedAt: healthy ? target.lastFailedAt : now,
+      error: healthy ? null : `Expected HTTP ${target.expectedStatusCodes.join(", ")} but received HTTP ${response.status}.`
     };
   } catch (error) {
+    if (target.editable) {
+      markStoredDomainResult(target.id, false, now);
+    }
+
     return {
-      id: idForDomain(domain),
-      domain,
-      editable,
+      id: target.id,
+      domain: target.domain,
+      path: target.path,
+      expectedStatusCodes: target.expectedStatusCodes,
+      editable: target.editable,
       status: "offline",
       statusCode: null,
       responseTimeMs: null,
-      https: domain.startsWith("https://"),
+      https: target.domain.startsWith("https://"),
       sslExpiresAt: null,
       sslExpiresInDays: null,
       lastCheckedAt: now,
+      lastSuccessfulAt: target.lastSuccessfulAt,
+      lastFailedAt: now,
       error: error instanceof Error && error.name === "AbortError" ? "Domain check timed out." : "Domain is unreachable."
     };
   } finally {
@@ -94,10 +128,6 @@ async function checkDomain(domain: string, editable: boolean): Promise<DomainChe
 }
 
 export async function getDomainChecks(): Promise<DomainCheck[]> {
-  const envDomains = env.monitoredDomains.map((domain) => ({ domain: normalizeDomain(domain), editable: false }));
-  const storedDomains = (await listStoredDomains()).map((domain) => ({ domain: domain.domain, editable: true }));
-  const domains = [...envDomains, ...storedDomains].filter(
-    (domain, index, all) => all.findIndex((item) => item.domain === domain.domain) === index
-  );
-  return Promise.all(domains.map((domain) => checkDomain(domain.domain, domain.editable)));
+  const domains: DomainTarget[] = (await listStoredDomains()).map((domain) => ({ ...domain, editable: true }));
+  return Promise.all(domains.map((domain) => checkDomain(domain)));
 }

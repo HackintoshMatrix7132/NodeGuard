@@ -50,11 +50,11 @@ export const demoDocker: DockerSnapshot = {
 };
 
 export const demoDomains: DomainCheck[] = [
-  { id: "bit-muthu-eu", domain: "https://bit.muthu.eu", editable: true, status: "healthy", statusCode: 200, responseTimeMs: 157, https: true, sslExpiresAt: "2026-09-12T12:00:00.000Z", sslExpiresInDays: 66, lastCheckedAt: now(), error: null },
-  { id: "cloud-muthu-eu", domain: "https://cloud.muthu.eu", editable: true, status: "healthy", statusCode: 200, responseTimeMs: 231, https: true, sslExpiresAt: "2026-10-02T12:00:00.000Z", sslExpiresInDays: 86, lastCheckedAt: now(), error: null },
-  { id: "photos-muthu-eu", domain: "https://photos.muthu.eu", editable: true, status: "critical", statusCode: 502, responseTimeMs: 91, https: true, sslExpiresAt: "2026-08-28T12:00:00.000Z", sslExpiresInDays: 51, lastCheckedAt: now(), error: null },
-  { id: "status-muthu-eu", domain: "https://status.muthu.eu", editable: true, status: "healthy", statusCode: 200, responseTimeMs: 86, https: true, sslExpiresAt: "2026-11-08T12:00:00.000Z", sslExpiresInDays: 123, lastCheckedAt: now(), error: null },
-  { id: "nas-muthu-eu", domain: "https://nas.muthu.eu", editable: true, status: "healthy", statusCode: 200, responseTimeMs: 22, https: true, sslExpiresAt: "2026-12-18T12:00:00.000Z", sslExpiresInDays: 163, lastCheckedAt: now(), error: null }
+  { id: "bit-muthu-eu", domain: "https://bit.muthu.eu", path: "/", expectedStatusCodes: [200, 301, 302, 401], editable: true, status: "healthy", statusCode: 200, responseTimeMs: 157, https: true, sslExpiresAt: "2026-09-12T12:00:00.000Z", sslExpiresInDays: 66, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: null, error: null },
+  { id: "cloud-muthu-eu", domain: "https://cloud.muthu.eu", path: "/", expectedStatusCodes: [200, 301, 302, 401], editable: true, status: "healthy", statusCode: 200, responseTimeMs: 231, https: true, sslExpiresAt: "2026-10-02T12:00:00.000Z", sslExpiresInDays: 86, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: null, error: null },
+  { id: "photos-muthu-eu", domain: "https://photos.muthu.eu", path: "/", expectedStatusCodes: [200, 301, 302, 401], editable: true, status: "critical", statusCode: 502, responseTimeMs: 91, https: true, sslExpiresAt: "2026-08-28T12:00:00.000Z", sslExpiresInDays: 51, lastCheckedAt: now(), lastSuccessfulAt: null, lastFailedAt: now(), error: "Expected HTTP 200, 301, 302, 401 but received HTTP 502." },
+  { id: "status-muthu-eu", domain: "https://status.muthu.eu", path: "/", expectedStatusCodes: [200, 301, 302, 401], editable: true, status: "healthy", statusCode: 200, responseTimeMs: 86, https: true, sslExpiresAt: "2026-11-08T12:00:00.000Z", sslExpiresInDays: 123, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: null, error: null },
+  { id: "nas-muthu-eu", domain: "https://nas.muthu.eu", path: "/", expectedStatusCodes: [200, 301, 302, 401], editable: true, status: "healthy", statusCode: 200, responseTimeMs: 22, https: true, sslExpiresAt: "2026-12-18T12:00:00.000Z", sslExpiresInDays: 163, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: null, error: null }
 ];
 
 export const demoAlerts: Alert[] = [
@@ -66,6 +66,9 @@ export const demoAlerts: Alert[] = [
     affectedResource: "photos.muthu.eu",
     status: "active",
     createdAt: now(),
+    firstSeenAt: now(),
+    lastSeenAt: now(),
+    occurrenceCount: 3,
     resolvedAt: null,
     failedChecks: ["HTTP 502", "reverse proxy route failed"],
     possibleCause: "The reverse proxy cannot reach the upstream photo service container.",
@@ -79,6 +82,9 @@ export const demoAlerts: Alert[] = [
     affectedResource: "ente-server",
     status: "active",
     createdAt: now(),
+    firstSeenAt: now(),
+    lastSeenAt: now(),
+    occurrenceCount: 2,
     resolvedAt: null,
     failedChecks: ["container status: exited"],
     possibleCause: "The service crashed or was stopped outside NodeGuard.",
@@ -87,7 +93,7 @@ export const demoAlerts: Alert[] = [
 ];
 
 export const demoServerMonitors: MonitoredServerStatus[] = [
-  { id: "nas", name: "NAS", backendUrl: "https://node.muthu.eu", apiKeyPreview: "••••demo", status: "healthy", lastCheckedAt: now(), lastError: null }
+  { id: "nas", name: "NAS", backendUrl: "https://node.muthu.eu", apiKeyPreview: "••••demo", allowInsecureTls: false, status: "healthy", lastCheckedAt: now(), lastError: null }
 ];
 
 export const demoOverview: Overview = {

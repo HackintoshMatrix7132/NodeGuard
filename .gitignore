@@ -32,6 +32,15 @@ apps/api/data/*.sqlite
 apps/api/data/*.sqlite3
 apps/api/data/*.db
 apps/api/data/*.db-journal
+apps/api/data/*.sqlite-wal
+apps/api/data/*.sqlite-shm
+data/*.json
+data/*.sqlite
+data/*.sqlite3
+data/*.db
+data/*.db-journal
+data/*.sqlite-wal
+data/*.sqlite-shm
 
 ###############################################################################
 # Build output and generated files

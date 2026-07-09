@@ -1,5 +1,5 @@
-import { AlertTriangle, Bell, Boxes, Gauge, Globe2, LogOut, Pencil, Plus, RefreshCcw, Search, Server, Settings, ShieldCheck, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Bell, Boxes, Gauge, Globe2, LogOut, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RefreshCcw, Search, Server, Settings, ShieldCheck, Trash2, X } from "lucide-react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { normalizeBackendUrl } from "./api/client";
 import { normalizeApiError } from "./api/errors";
@@ -31,6 +31,8 @@ import { formatBytes, formatDateTime, formatPercentage, formatRelativeTime, form
 import { getStatusLabel, getStatusTone } from "./utils/status";
 
 type View = "dashboard" | "server" | "containers" | "domains" | "alerts" | "settings";
+type MetricTone = "blue" | "green" | "orange" | "red" | "purple";
+type BreakdownItem = { label: string; value: string; tone?: MetricTone };
 
 function StatusPill({ status }: { status: HealthStatus | Alert["severity"] }) {
   return <span className={`pill ${getStatusTone(status)}`}>{getStatusLabel(status)}</span>;
@@ -48,12 +50,28 @@ function Panel({ title, children, action }: { title: string; children: React.Rea
   );
 }
 
-function MetricCard({ label, value, detail, tone = "blue", onClick, subdued = false }: { label: string; value: string; detail: string; tone?: string; onClick?: () => void; subdued?: boolean }) {
+function MetricCard({
+  label,
+  value,
+  detail,
+  tone = "blue",
+  onClick,
+  subdued = false,
+  indicator
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone?: MetricTone;
+  onClick?: () => void;
+  subdued?: boolean;
+  indicator?: React.ReactNode;
+}) {
   const content = (
     <>
       <div className="metric-label">{label}</div>
       <div className={`metric-value ${subdued ? "subdued-value" : ""}`}>{value}</div>
-      <SparkBars tone={tone} />
+      {indicator}
       <div className="metric-detail">{detail}</div>
     </>
   );
@@ -69,12 +87,49 @@ function MetricCard({ label, value, detail, tone = "blue", onClick, subdued = fa
   );
 }
 
-function SparkBars({ tone = "blue" }: { tone?: string }) {
+function clampPercent(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function percentage(part: number, total: number) {
+  if (total <= 0) return 0;
+  return clampPercent((part / total) * 100);
+}
+
+function MetricMeter({ value, tone = "blue", label, rows = [] }: { value: number; tone?: MetricTone; label: string; rows?: BreakdownItem[] }) {
+  const width = clampPercent(value);
   return (
-    <div className="spark-bars">
-      {[32, 58, 42, 72, 64, 84, 50, 76, 42, 63, 88, 60].map((height, index) => (
-        <span key={index} className={tone} style={{ height }} />
+    <div className="metric-indicator">
+      <div className="meter-head">
+        <span>{label}</span>
+        <strong>{width}%</strong>
+      </div>
+      <div className="meter-track" aria-hidden="true">
+        <span className={`meter-fill ${tone}`} style={{ "--meter-width": `${width}%` } as CSSProperties} />
+      </div>
+      {rows.length ? <MetricBreakdown rows={rows} /> : null}
+    </div>
+  );
+}
+
+function MetricBreakdown({ rows }: { rows: BreakdownItem[] }) {
+  return (
+    <div className="metric-breakdown">
+      {rows.map((item) => (
+        <div className="breakdown-item" key={item.label}>
+          <span>{item.label}</span>
+          <strong className={item.tone ?? ""}>{item.value}</strong>
+        </div>
       ))}
+    </div>
+  );
+}
+
+function MetricDiagnostic({ rows }: { rows: BreakdownItem[] }) {
+  return (
+    <div className="metric-indicator diagnostic">
+      <MetricBreakdown rows={rows} />
     </div>
   );
 }
@@ -134,6 +189,25 @@ function sslLabel(domain: DomainCheck) {
   if (domain.sslExpiresInDays === null) return "SSL unknown";
   if (domain.sslExpiresInDays < 0) return "SSL expired";
   return `SSL expires in ${domain.sslExpiresInDays}d`;
+}
+
+function fullDomainUrl(domain: DomainCheck) {
+  return `${domain.domain}${domain.path === "/" ? "" : domain.path}`;
+}
+
+function parseExpectedStatusCodes(value: string) {
+  const codes = [...new Set(
+    value
+      .split(",")
+      .map((item) => Number(item.trim()))
+      .filter((item) => Number.isInteger(item) && item >= 100 && item <= 599)
+  )].sort((a, b) => a - b);
+
+  if (codes.length === 0) {
+    throw new Error("Enter at least one valid HTTP status code.");
+  }
+
+  return codes;
 }
 
 function maskSensitiveUrl(value: string, hide: boolean) {
@@ -226,6 +300,17 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
   const activeAlerts = alerts.data?.slice(0, 4) ?? [];
   const allAlerts = alerts.data ?? [];
   const dockerUnavailable = containers.data && !containers.data.dockerAvailable;
+  const domainItems = domains.data ?? [];
+  const healthyDomains = domainItems.filter((domain) => domain.status === "healthy").length;
+  const offlineDomains = domainItems.filter((domain) => domain.status === "offline" || domain.status === "critical").length;
+  const warningDomains = Math.max(domainItems.length - healthyDomains - offlineDomains, 0);
+  const containersRunning = overview.data?.containersRunning ?? 0;
+  const containersTotal = overview.data?.containersTotal ?? 0;
+  const containersStopped = Math.max(containersTotal - containersRunning, 0);
+  const activeCriticalAlerts = allAlerts.filter((alert) => alert.status === "active" && alert.severity === "critical").length;
+  const activeWarningAlerts = allAlerts.filter((alert) => alert.status === "active" && alert.severity === "warning").length;
+  const domainTone: MetricTone = offlineDomains > 0 ? "red" : warningDomains > 0 ? "orange" : "green";
+  const alertTone: MetricTone = overview.data?.criticalAlerts ? "red" : overview.data?.warnings ? "orange" : "green";
 
   const refresh = async () => {
     setRefreshMessage(null);
@@ -248,7 +333,7 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
           <span className="eyebrow">NodeGuard</span>
           <h1>{getStatusLabel(overview.data.status)}</h1>
           <p>{summarizeIssues(allAlerts)}</p>
-          <small>Last checked {formatDateTime(overview.data.lastCheckedAt)} · Auto-refresh every {refreshIntervalSeconds}s</small>
+          <small>Last checked {formatDateTime(overview.data.lastCheckedAt)} · Live refresh every {refreshIntervalSeconds}s</small>
         </div>
         <button className="icon-button" onClick={refresh} disabled={runChecks.isPending}><RefreshCcw size={17} /> {runChecks.isPending ? "Refreshing..." : "Refresh"}</button>
       </section>
@@ -265,10 +350,60 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
         )}
       </Panel>
       <div className="metric-grid">
-        <MetricCard label="Servers online" value={`${overview.data.serversOnline}/${overview.data.serversTotal}`} detail={`${server.data?.hostname ?? "local-node"} · ${statusTrend(server.data?.status ?? "unknown")}`} tone="green" onClick={() => setView("server")} />
-        <MetricCard label="Docker" value={dockerUnavailable ? "Unavailable" : `${overview.data.containersRunning}/${overview.data.containersTotal}`} detail={dockerUnavailable ? "Container checks could not be loaded." : "Containers running · Last 12 checks"} tone={dockerUnavailable ? "red" : "blue"} onClick={() => setView("containers")} subdued={Boolean(dockerUnavailable)} />
-        <MetricCard label="Domains online" value={`${overview.data.domainsOnline}/${overview.data.domainsTotal}`} detail={`${domains.data?.length ?? 0} services configured · SSL checked`} tone="orange" onClick={() => setView("domains")} />
-        <MetricCard label="Critical alerts" value={`${overview.data.criticalAlerts}`} detail={`${overview.data.warnings} warnings · ${statusTrend(overview.data.status)}`} tone={overview.data.criticalAlerts > 0 ? "red" : "green"} onClick={() => setView("alerts")} />
+        <MetricCard
+          label="Servers online"
+          value={`${overview.data.serversOnline}/${overview.data.serversTotal}`}
+          detail={`${server.data?.hostname ?? "local-node"} · ${statusTrend(server.data?.status ?? "unknown")}`}
+          tone="green"
+          onClick={() => setView("server")}
+          indicator={<MetricMeter value={percentage(overview.data.serversOnline, overview.data.serversTotal)} tone="green" label="Reachability" rows={[
+            { label: "Online", value: String(overview.data.serversOnline), tone: "green" },
+            { label: "Needs attention", value: String(Math.max(overview.data.serversTotal - overview.data.serversOnline, 0)), tone: overview.data.serversOnline === overview.data.serversTotal ? "green" : "red" }
+          ]} />}
+        />
+        <MetricCard
+          label="Docker"
+          value={dockerUnavailable ? "Unavailable" : `${overview.data.containersRunning}/${overview.data.containersTotal}`}
+          detail={dockerUnavailable ? "Backend could not read Docker state." : `${containersStopped} stopped or exited`}
+          tone={dockerUnavailable ? "red" : "blue"}
+          onClick={() => setView("containers")}
+          subdued={Boolean(dockerUnavailable)}
+          indicator={dockerUnavailable ? (
+            <MetricDiagnostic rows={[
+              { label: "Docker API", value: "Unavailable", tone: "red" },
+              { label: "Container checks", value: "Paused", tone: "orange" }
+            ]} />
+          ) : (
+            <MetricMeter value={percentage(overview.data.containersRunning, overview.data.containersTotal)} tone="blue" label="Running containers" rows={[
+              { label: "Running", value: String(overview.data.containersRunning), tone: "green" },
+              { label: "Stopped", value: String(containersStopped), tone: containersStopped > 0 ? "red" : "green" }
+            ]} />
+          )}
+        />
+        <MetricCard
+          label="Domains online"
+          value={`${overview.data.domainsOnline}/${overview.data.domainsTotal}`}
+          detail={`${domainItems.length} services configured · SSL checked`}
+          tone={domainTone}
+          onClick={() => setView("domains")}
+          indicator={<MetricMeter value={percentage(overview.data.domainsOnline, overview.data.domainsTotal)} tone={domainTone} label="Reachable services" rows={[
+            { label: "Healthy", value: String(healthyDomains), tone: "green" },
+            { label: "Warnings", value: String(warningDomains), tone: warningDomains > 0 ? "orange" : "green" },
+            { label: "Offline", value: String(offlineDomains), tone: offlineDomains > 0 ? "red" : "green" }
+          ]} />}
+        />
+        <MetricCard
+          label="Critical alerts"
+          value={`${overview.data.criticalAlerts}`}
+          detail={`${overview.data.warnings} warnings · ${statusTrend(overview.data.status)}`}
+          tone={alertTone}
+          onClick={() => setView("alerts")}
+          indicator={<MetricDiagnostic rows={[
+            { label: "Critical", value: String(activeCriticalAlerts), tone: activeCriticalAlerts > 0 ? "red" : "green" },
+            { label: "Warning", value: String(activeWarningAlerts), tone: activeWarningAlerts > 0 ? "orange" : "green" },
+            { label: "Active total", value: String(allAlerts.length), tone: allAlerts.length > 0 ? "red" : "green" }
+          ]} />}
+        />
       </div>
       <div className="two-col">
         <Panel title="Recent alerts" action={<button onClick={() => setView("alerts")}>View all</button>}>
@@ -286,6 +421,7 @@ function ServerPage() {
   const [monitorName, setMonitorName] = useState("");
   const [monitorUrl, setMonitorUrl] = useState("");
   const [monitorApiKey, setMonitorApiKey] = useState("");
+  const [allowInsecureTls, setAllowInsecureTls] = useState(false);
   const [editingMonitor, setEditingMonitor] = useState<MonitoredServerStatus | null>(null);
   const [isMonitorModalOpen, setIsMonitorModalOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -300,6 +436,7 @@ function ServerPage() {
     setMonitorName("");
     setMonitorUrl("");
     setMonitorApiKey("");
+    setAllowInsecureTls(false);
     setEditingMonitor(null);
     setIsMonitorModalOpen(false);
     setFormError(null);
@@ -309,6 +446,7 @@ function ServerPage() {
     setMonitorName("");
     setMonitorUrl("");
     setMonitorApiKey("");
+    setAllowInsecureTls(false);
     setEditingMonitor(null);
     setFormError(null);
     setIsMonitorModalOpen(true);
@@ -318,6 +456,7 @@ function ServerPage() {
     setMonitorName(monitor.name);
     setMonitorUrl(monitor.backendUrl);
     setMonitorApiKey("");
+    setAllowInsecureTls(monitor.allowInsecureTls);
     setEditingMonitor(monitor);
     setFormError(null);
     setIsMonitorModalOpen(true);
@@ -331,7 +470,8 @@ function ServerPage() {
       const input = {
         name: monitorName,
         backendUrl: monitorUrl,
-        apiKey: monitorApiKey || undefined
+        apiKey: monitorApiKey || undefined,
+        allowInsecureTls
       };
 
       if (editingMonitor) {
@@ -362,10 +502,53 @@ function ServerPage() {
         </div>
       </Panel>
       <div className="metric-grid">
-        <MetricCard label="CPU" value={formatPercentage(metrics.data.cpu.usagePercent)} detail={`Normal · Load ${metrics.data.cpu.loadAverage ?? "Unavailable"} · Last 10 min stable`} tone="blue" />
-        <MetricCard label="RAM" value={formatPercentage(metrics.data.memory.usagePercent)} detail={`${formatBytes(metrics.data.memory.usedGb)} / ${formatBytes(metrics.data.memory.totalGb)} used · Healthy`} tone="green" />
-        <MetricCard label="Disk" value={formatPercentage(metrics.data.disk.usagePercent)} detail={`${formatBytes(metrics.data.disk.usedGb)} / ${formatBytes(metrics.data.disk.totalGb)} used · Healthy`} tone="orange" />
-        <MetricCard label="Swap" value={metrics.data.swap.usagePercent === null ? "Not available" : formatPercentage(metrics.data.swap.usagePercent)} detail={metrics.data.swap.usagePercent === null ? "Not available on this host" : `${formatBytes(metrics.data.swap.usedGb)} / ${formatBytes(metrics.data.swap.totalGb)} used`} tone="purple" subdued={metrics.data.swap.usagePercent === null} />
+        <MetricCard
+          label="CPU"
+          value={formatPercentage(metrics.data.cpu.usagePercent)}
+          detail={`Load ${metrics.data.cpu.loadAverage ?? "Unavailable"} · Last checked ${formatDateTime(metrics.data.createdAt)}`}
+          tone="blue"
+          indicator={<MetricMeter value={metrics.data.cpu.usagePercent ?? 0} tone="blue" label="Current usage" rows={[
+            { label: "Load average", value: String(metrics.data.cpu.loadAverage ?? "Unavailable"), tone: "blue" }
+          ]} />}
+        />
+        <MetricCard
+          label="RAM"
+          value={formatPercentage(metrics.data.memory.usagePercent)}
+          detail={`${formatBytes(metrics.data.memory.usedGb)} / ${formatBytes(metrics.data.memory.totalGb)} used`}
+          tone="green"
+          indicator={<MetricMeter value={metrics.data.memory.usagePercent ?? 0} tone="green" label="Memory used" rows={[
+            { label: "Used", value: formatBytes(metrics.data.memory.usedGb), tone: "green" },
+            { label: "Total", value: formatBytes(metrics.data.memory.totalGb) }
+          ]} />}
+        />
+        <MetricCard
+          label="Disk"
+          value={formatPercentage(metrics.data.disk.usagePercent)}
+          detail={`${formatBytes(metrics.data.disk.usedGb)} / ${formatBytes(metrics.data.disk.totalGb)} used`}
+          tone="orange"
+          indicator={<MetricMeter value={metrics.data.disk.usagePercent ?? 0} tone="orange" label="Disk used" rows={[
+            { label: "Used", value: formatBytes(metrics.data.disk.usedGb), tone: "orange" },
+            { label: "Total", value: formatBytes(metrics.data.disk.totalGb) }
+          ]} />}
+        />
+        <MetricCard
+          label="Swap"
+          value={metrics.data.swap.usagePercent === null ? "Not available" : formatPercentage(metrics.data.swap.usagePercent)}
+          detail={metrics.data.swap.usagePercent === null ? "Not available on this host" : `${formatBytes(metrics.data.swap.usedGb)} / ${formatBytes(metrics.data.swap.totalGb)} used`}
+          tone="purple"
+          subdued={metrics.data.swap.usagePercent === null}
+          indicator={metrics.data.swap.usagePercent === null ? (
+            <MetricDiagnostic rows={[
+              { label: "Swap", value: "Not configured", tone: "purple" },
+              { label: "Host report", value: "No usage data" }
+            ]} />
+          ) : (
+            <MetricMeter value={metrics.data.swap.usagePercent} tone="purple" label="Swap used" rows={[
+              { label: "Used", value: formatBytes(metrics.data.swap.usedGb), tone: "purple" },
+              { label: "Total", value: formatBytes(metrics.data.swap.totalGb) }
+            ]} />
+          )}
+        />
       </div>
       <Panel title="Monitored servers" action={<button onClick={openAddMonitor}><Plus size={16} /> Add server</button>}>
         {serverMonitors.isLoading ? <StateBlock title="Loading monitors" message="Checking configured server monitors." /> : null}
@@ -403,6 +586,14 @@ function ServerPage() {
               type="password"
               placeholder={editingMonitor ? "Leave blank to keep current key" : "Optional for /health only"}
             />
+          </label>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={allowInsecureTls}
+              onChange={(event) => setAllowInsecureTls(event.target.checked)}
+            />
+            Allow self-signed HTTPS
           </label>
           <button type="submit" disabled={addServerMonitor.isPending || updateServerMonitor.isPending}>
             {editingMonitor ? <Pencil size={16} /> : <Plus size={16} />}
@@ -517,6 +708,8 @@ function ContainersPage() {
 
 function DomainsPage() {
   const [domainValue, setDomainValue] = useState("");
+  const [domainPath, setDomainPath] = useState("/");
+  const [expectedStatusCodes, setExpectedStatusCodes] = useState("200,301,302,401");
   const [editingDomain, setEditingDomain] = useState<DomainCheck | null>(null);
   const [isDomainModalOpen, setIsDomainModalOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -527,6 +720,8 @@ function DomainsPage() {
 
   const resetDomainForm = () => {
     setDomainValue("");
+    setDomainPath("/");
+    setExpectedStatusCodes("200,301,302,401");
     setEditingDomain(null);
     setIsDomainModalOpen(false);
     setFormError(null);
@@ -534,6 +729,8 @@ function DomainsPage() {
 
   const openAddDomain = () => {
     setDomainValue("");
+    setDomainPath("/");
+    setExpectedStatusCodes("200,301,302,401");
     setEditingDomain(null);
     setFormError(null);
     setIsDomainModalOpen(true);
@@ -541,6 +738,8 @@ function DomainsPage() {
 
   const editDomain = (domain: DomainCheck) => {
     setDomainValue(domain.domain);
+    setDomainPath(domain.path);
+    setExpectedStatusCodes(domain.expectedStatusCodes.join(","));
     setEditingDomain(domain);
     setFormError(null);
     setIsDomainModalOpen(true);
@@ -549,9 +748,14 @@ function DomainsPage() {
   const saveDomain = async (event: React.FormEvent) => {
     event.preventDefault();
     setFormError(null);
-    const input = { domain: domainValue };
 
     try {
+      const input = {
+        domain: domainValue,
+        path: domainPath,
+        expectedStatusCodes: parseExpectedStatusCodes(expectedStatusCodes)
+      };
+
       if (editingDomain) {
         await updateDomain.mutateAsync({ id: editingDomain.id, input });
       } else {
@@ -589,6 +793,14 @@ function DomainsPage() {
               Domain URL
               <input value={domainValue} onChange={(event) => setDomainValue(event.target.value)} placeholder="https://bit.muthu.eu" />
             </label>
+            <label>
+              Path
+              <input value={domainPath} onChange={(event) => setDomainPath(event.target.value)} placeholder="/" />
+            </label>
+            <label>
+              Expected HTTP codes
+              <input value={expectedStatusCodes} onChange={(event) => setExpectedStatusCodes(event.target.value)} placeholder="200,301,302,401" />
+            </label>
             <button type="submit" disabled={addDomain.isPending || updateDomain.isPending}>
               {editingDomain ? <Pencil size={16} /> : <Plus size={16} />}
               {editingDomain ? "Save edits" : "Add domain"}
@@ -604,11 +816,11 @@ function DomainsPage() {
 function AlertsPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | Alert["severity"]>("all");
-  const alerts = useAlerts();
+  const alerts = useAlerts("all");
   const alert = useAlert(selected);
   if (alerts.isLoading) return <StateBlock title="Loading alerts" message="Generating current alerts." />;
   if (!alerts.data) return <StateBlock title="Alerts unavailable" message={normalizeApiError(alerts.error).message} />;
-  const filteredAlerts = filter === "all" ? alerts.data : alerts.data.filter((item) => item.severity === filter);
+  const filteredAlerts = filter === "all" ? alerts.data : filter === "resolved" ? alerts.data.filter((item) => item.status === "resolved") : alerts.data.filter((item) => item.severity === filter && item.status === "active");
   return (
     <div className="two-col">
       <Panel title="Alerts" action={<div className="segmented compact-tabs">{(["all", "critical", "warning", "resolved"] as const).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value}</button>)}</div>}>
@@ -676,9 +888,9 @@ function SettingsPage() {
         </div>
         {connectionMessage ? <div className="stale-notice success">{connectionMessage}</div> : null}
       </Panel>
-      <Panel title="Refresh interval">
+      <Panel title="Live refresh interval">
         <div className="segmented">
-          {[30, 60, 120, 300].map((value) => <button key={value} className={value === refreshIntervalSeconds ? "active" : ""} onClick={() => setRefreshIntervalSeconds(value)}>{value}s</button>)}
+          {[10, 30, 60, 120, 300].map((value) => <button key={value} className={value === refreshIntervalSeconds ? "active" : ""} onClick={() => setRefreshIntervalSeconds(value)}>{value}s</button>)}
         </div>
       </Panel>
       <Panel title="Security">
@@ -750,12 +962,13 @@ function DockerUnavailable({ message }: { message: string }) {
 
 function DomainRow({ domain, onCheck, onEdit, onRemove }: { domain: DomainCheck; onCheck?: () => void; onEdit?: () => void; onRemove?: () => void }) {
   const hasActions = Boolean(onCheck || onEdit || onRemove);
+  const displayUrl = fullDomainUrl(domain);
 
   return (
     <div className={`data-row ${hasActions ? "domain-action-row" : "domain-summary-row"}`}>
       <span>
-        <strong>{domain.domain}</strong>
-        <small>{domain.error ?? `${domain.https ? "HTTPS" : "HTTP"} · Last checked ${formatRelativeTime(domain.lastCheckedAt)}`}</small>
+        <strong>{displayUrl}</strong>
+        <small>{domain.error ?? `${domain.https ? "HTTPS" : "HTTP"} · Expected ${domain.expectedStatusCodes.join(", ")} · Last checked ${formatRelativeTime(domain.lastCheckedAt)}`}</small>
       </span>
       <span>{domain.statusCode ? `HTTP ${domain.statusCode}` : "No status"}</span>
       <span>{formatResponseTime(domain.responseTimeMs)}</span>
@@ -783,8 +996,8 @@ function DomainRow({ domain, onCheck, onEdit, onRemove }: { domain: DomainCheck;
 function AlertRow({ alert }: { alert: Alert }) {
   return (
     <div className="data-row alert-row">
-      <span><strong>{alert.title}</strong><small>{alert.affectedResource} · {formatRelativeTime(alert.createdAt)}</small></span>
-      <StatusPill status={alert.severity} />
+      <span><strong>{alert.title}</strong><small>{alert.affectedResource} · Last seen {formatRelativeTime(alert.lastSeenAt)}</small></span>
+      <StatusPill status={alert.status === "resolved" ? "resolved" : alert.severity} />
     </div>
   );
 }
@@ -842,8 +1055,11 @@ function AlertDetail({ alert }: { alert: Alert }) {
       </div>
       <div className="info-grid">
         <Info label="Affected service" value={alert.affectedResource} />
-        <Info label="Detected" value={formatDateTime(alert.createdAt)} />
+        <Info label="First seen" value={formatDateTime(alert.firstSeenAt)} />
+        <Info label="Last seen" value={formatDateTime(alert.lastSeenAt)} />
+        <Info label="Occurrences" value={String(alert.occurrenceCount)} />
         <Info label="Status" value={alert.status} />
+        <Info label="Resolved" value={formatDateTime(alert.resolvedAt)} />
       </div>
       <section>
         <h3>What happened</h3>
@@ -871,9 +1087,12 @@ function Info({ label, value }: { label: string; value: string }) {
 
 export function App() {
   const [view, setView] = useState<View>("dashboard");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const backendConfig = useSettingsStore((state) => state.backendConfig);
   const demoMode = useSettingsStore((state) => state.demoMode);
   const load = useSettingsStore((state) => state.load);
+  const disconnect = useSettingsStore((state) => state.disconnect);
+  const setDemoMode = useSettingsStore((state) => state.setDemoMode);
 
   useEffect(() => {
     load();
@@ -890,11 +1109,27 @@ export function App() {
     ["settings", Settings, "Settings"]
   ] as const;
 
+  const logout = () => {
+    disconnect();
+    setDemoMode(false);
+  };
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      {sidebarCollapsed ? (
+        <button className="sidebar-reveal" onClick={() => setSidebarCollapsed(false)} aria-label="Show sidebar">
+          <PanelLeftOpen size={18} />
+        </button>
+      ) : null}
       <aside className="sidebar">
-        <div className="brand"><ShieldCheck size={24} /><span>NodeGuard</span></div>
+        <div className="sidebar-top">
+          <div className="brand"><ShieldCheck size={24} /><span>NodeGuard</span></div>
+          <button className="sidebar-toggle" onClick={() => setSidebarCollapsed(true)} aria-label="Hide sidebar">
+            <PanelLeftClose size={18} />
+          </button>
+        </div>
         <nav>{nav.map(([key, Icon, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key)}><Icon size={18} /> {label}</button>)}</nav>
+        <button className="sidebar-logout" onClick={logout}><LogOut size={18} /> Logout</button>
       </aside>
       <main className="workspace">
         {view === "dashboard" && <Dashboard setView={setView} />}

@@ -1,5 +1,6 @@
 import type { HealthStatus, MonitoringSnapshot } from "../types/nodeguard.js";
-import { generateAlerts } from "./alertService.js";
+import { createAlert, generateAlerts } from "./alertService.js";
+import { recordAlertSnapshot } from "./alertHistoryService.js";
 import { listContainerMonitorStatuses } from "./containerMonitorService.js";
 import { getDockerSnapshot } from "./dockerService.js";
 import { getDomainChecks } from "./domainCheckService.js";
@@ -33,42 +34,39 @@ export async function getMonitoringSnapshot(): Promise<MonitoringSnapshot> {
   const alerts = generateAlerts(system.metrics, docker, domains, system.metricsAvailable);
   for (const server of serverMonitors) {
     if (server.status !== "healthy") {
-      alerts.push({
-        id: `server-monitor-${server.id}`,
-        severity: server.status === "offline" ? "critical" : "warning",
-        title: `${server.name} is ${server.status}`,
-        message: server.lastError ?? "The monitored server did not pass its latest health check.",
-        affectedResource: server.name,
-        status: "active",
-        createdAt: server.lastCheckedAt,
-        resolvedAt: null,
-        failedChecks: [`server monitor status: ${server.status}`],
-        possibleCause: "The remote NodeGuard backend may be down, unreachable, or using a different API key.",
-        suggestedNextSteps: ["Check the server URL.", "Verify the remote backend is running.", "Verify the API key if this monitor uses protected checks."]
-      });
+      alerts.push(createAlert(
+        `server-monitor-${server.id}`,
+        server.status === "offline" ? "critical" : "warning",
+        `${server.name} is ${server.status}`,
+        server.lastError ?? "The monitored server did not pass its latest health check.",
+        server.name,
+        [`server monitor status: ${server.status}`],
+        "The remote NodeGuard backend may be down, unreachable, or using a different API key.",
+        ["Check the server URL.", "Verify the remote backend is running.", "Verify the API key if this monitor uses protected checks."],
+        server.lastCheckedAt
+      ));
     }
   }
   for (const monitor of docker.containerMonitors) {
     if (monitor.status !== "healthy") {
-      alerts.push({
-        id: `container-monitor-${monitor.id}`,
-        severity: monitor.status === "offline" ? "critical" : "warning",
-        title: `${monitor.name} is ${monitor.status}`,
-        message: monitor.lastError ?? "The monitored container did not pass its latest check.",
-        affectedResource: monitor.name,
-        status: "active",
-        createdAt: monitor.lastCheckedAt,
-        resolvedAt: null,
-        failedChecks: [`container monitor status: ${monitor.status}`],
-        possibleCause: "The container may be stopped, missing, unhealthy, or Docker may be unavailable.",
-        suggestedNextSteps: ["Check Docker availability.", "Confirm the container name or ID is correct.", "Inspect the container health and logs on the host."]
-      });
+      alerts.push(createAlert(
+        `container-monitor-${monitor.id}`,
+        monitor.status === "offline" ? "critical" : "warning",
+        `${monitor.name} is ${monitor.status}`,
+        monitor.lastError ?? "The monitored container did not pass its latest check.",
+        monitor.name,
+        [`container monitor status: ${monitor.status}`],
+        "The container may be stopped, missing, unhealthy, or Docker may be unavailable.",
+        ["Check Docker availability.", "Confirm the container name or ID is correct.", "Inspect the container health and logs on the host."],
+        monitor.lastCheckedAt
+      ));
     }
   }
+  const recordedAlerts = recordAlertSnapshot(alerts);
   const runningContainers = docker.containers.filter((container) => container.status === "running").length;
   const stoppedContainers = docker.containers.length - runningContainers;
-  const criticalAlerts = alerts.filter((item) => item.severity === "critical").length;
-  const warnings = alerts.filter((item) => item.severity === "warning").length;
+  const criticalAlerts = recordedAlerts.filter((item) => item.severity === "critical").length;
+  const warnings = recordedAlerts.filter((item) => item.severity === "warning").length;
   const localServerStatus = worstStatus([
     system.metricsAvailable ? "healthy" : "warning",
     docker.dockerAvailable ? "healthy" : "warning"
@@ -77,7 +75,7 @@ export async function getMonitoringSnapshot(): Promise<MonitoringSnapshot> {
     localServerStatus,
     ...serverMonitors.map((server) => server.status),
     ...domains.map((domain) => domain.status),
-    ...alerts.map((item) => item.severity === "critical" ? "critical" : item.severity === "warning" ? "warning" : "healthy")
+    ...recordedAlerts.map((item) => item.severity === "critical" ? "critical" : item.severity === "warning" ? "warning" : "healthy")
   ]);
 
   return {
@@ -105,6 +103,6 @@ export async function getMonitoringSnapshot(): Promise<MonitoringSnapshot> {
     metrics: system.metrics,
     docker,
     domains,
-    alerts
+    alerts: recordedAlerts
   };
 }

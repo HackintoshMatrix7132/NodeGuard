@@ -187,16 +187,35 @@ button {
   background: #0b0d12;
 }
 
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 58px 1fr;
+}
+
 .sidebar {
+  grid-column: 1;
+  grid-row: 1;
   position: sticky;
   top: 0;
   height: 100vh;
+  display: flex;
+  flex-direction: column;
   border-right: 1px solid #232832;
   background: #11161d;
   padding: 16px;
 }
 
+.sidebar-collapsed .sidebar {
+  display: none;
+}
+
+.sidebar-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .brand {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -204,6 +223,42 @@ button {
   color: #ff8f32;
   font-size: 18px;
   font-weight: 900;
+}
+
+.sidebar-toggle,
+.sidebar-reveal {
+  width: 42px;
+  justify-content: center;
+  padding: 0 !important;
+}
+
+.sidebar-reveal {
+  grid-column: 1;
+  grid-row: 1;
+  position: sticky;
+  top: 16px;
+  z-index: 5;
+  align-self: start;
+  justify-self: center;
+  margin-top: 16px;
+  min-height: 42px;
+  border: 1px solid #2a3038;
+  border-radius: 3px;
+  display: grid;
+  place-items: center;
+  color: #f0f2f8;
+  background: #151a21;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+}
+
+.sidebar-reveal:hover {
+  border-color: #4f5867;
+  background: #1b2028;
+}
+
+.workspace {
+  grid-column: 2;
+  grid-row: 1;
 }
 
 .sidebar nav {
@@ -229,6 +284,17 @@ button {
   border-color: #2a3038;
   color: #f0f2f8;
   background: #1b2028;
+}
+
+.sidebar-logout {
+  margin-top: auto;
+  border-color: rgba(255, 79, 74, 0.42) !important;
+  color: #ff7773 !important;
+}
+
+.sidebar-logout:hover {
+  border-color: #ff4f4a !important;
+  background: rgba(255, 79, 74, 0.12) !important;
 }
 
 .workspace {
@@ -370,39 +436,107 @@ button {
   font-size: 13px;
 }
 
-.spark-bars {
-  height: 84px;
-  display: flex;
-  align-items: end;
-  gap: 4px;
-  padding: 8px;
+.metric-indicator {
+  min-height: 84px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 10px;
   border: 1px solid #2b313b;
   background: #11161d;
   overflow: hidden;
 }
 
-.spark-bars span {
-  flex: 1;
-  min-width: 4px;
-  border-radius: 2px 2px 0 0;
-  background: #5b8cff;
-  opacity: 0.76;
+.metric-indicator.diagnostic {
+  align-content: center;
 }
 
-.spark-bars .green {
+.meter-head,
+.breakdown-item {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.meter-head {
+  color: #b5bac7;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.meter-head span,
+.breakdown-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meter-track {
+  height: 12px;
+  border: 1px solid #2b313b;
+  background: #090c11;
+  overflow: hidden;
+}
+
+.meter-fill {
+  display: block;
+  width: var(--meter-width);
+  height: 100%;
+  background: #5b8cff;
+}
+
+.meter-fill.green,
+.breakdown-item strong.green {
+  color: #73bf69;
   background: #73bf69;
 }
 
-.spark-bars .orange {
+.meter-fill.orange,
+.breakdown-item strong.orange {
+  color: #ff8f32;
   background: #ff8f32;
 }
 
-.spark-bars .red {
+.meter-fill.red,
+.breakdown-item strong.red {
+  color: #ff4f4a;
   background: #ff4f4a;
 }
 
-.spark-bars .purple {
+.meter-fill.purple,
+.breakdown-item strong.purple {
+  color: #b956f5;
   background: #b956f5;
+}
+
+.meter-fill.blue,
+.breakdown-item strong.blue {
+  color: #5b8cff;
+  background: #5b8cff;
+}
+
+.metric-breakdown {
+  display: grid;
+  gap: 6px;
+}
+
+.breakdown-item {
+  color: #8f98aa;
+  font-size: 12px;
+}
+
+.breakdown-item strong {
+  flex: 0 0 auto;
+  min-width: 28px;
+  max-width: 55%;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: transparent !important;
 }
 
 .two-col {
@@ -670,6 +804,19 @@ button {
   outline: none;
 }
 
+.inline-form .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #d4dae6;
+}
+
+.inline-form .checkbox-label input {
+  width: 16px;
+  min-height: 16px;
+  height: 16px;
+}
+
 .inline-form button,
 .icon-only {
   display: inline-flex;
@@ -863,6 +1010,10 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: 58px minmax(0, 1fr);
+  }
+
   .sidebar {
     position: static;
     height: auto;
@@ -870,8 +1021,28 @@ button {
     border-bottom: 1px solid #232832;
   }
 
+  .workspace {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .app-shell.sidebar-collapsed .workspace {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .app-shell.sidebar-collapsed .sidebar-reveal {
+    grid-column: 1;
+    grid-row: 1;
+    margin-top: 10px;
+  }
+
   .sidebar nav {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  .sidebar-logout {
+    margin-top: 10px;
   }
 
   .metric-grid,

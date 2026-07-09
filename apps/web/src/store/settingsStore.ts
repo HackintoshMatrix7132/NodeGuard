@@ -42,7 +42,7 @@ type SettingsState = {
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   backendConfig: null,
-  refreshIntervalSeconds: 60,
+  refreshIntervalSeconds: 10,
   demoMode: false,
   hideSensitiveValues: true,
   load: () => {
@@ -63,7 +63,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         const parsed = JSON.parse(preferencesRaw) as Partial<Pick<SettingsState, "demoMode" | "hideSensitiveValues" | "refreshIntervalSeconds">>;
         nextState.demoMode = Boolean(parsed.demoMode);
         nextState.hideSensitiveValues = parsed.hideSensitiveValues ?? true;
-        nextState.refreshIntervalSeconds = parsed.refreshIntervalSeconds ?? 60;
+        nextState.refreshIntervalSeconds = parsed.refreshIntervalSeconds ?? 10;
       } catch {
         localStorage.removeItem(preferencesKey);
       }

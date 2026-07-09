@@ -1,0 +1,100 @@
+import Database from "better-sqlite3";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { env } from "../config/env.js";
+
+function resolveDatabasePath(value: string) {
+  if (value === ":memory:") {
+    return value;
+  }
+
+  if (value.startsWith("file://")) {
+    return fileURLToPath(value);
+  }
+
+  if (value.startsWith("file:")) {
+    const filePath = value.slice("file:".length);
+    return path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
+  }
+
+  return path.isAbsolute(value) ? value : path.resolve(process.cwd(), value);
+}
+
+const databasePath = resolveDatabasePath(env.databaseUrl);
+
+if (databasePath !== ":memory:") {
+  mkdirSync(path.dirname(databasePath), { recursive: true });
+}
+
+const database = new Database(databasePath);
+
+database.pragma("journal_mode = WAL");
+database.pragma("foreign_keys = ON");
+
+database.exec(`
+  CREATE TABLE IF NOT EXISTS server_monitors (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    backend_url TEXT NOT NULL,
+    api_key TEXT,
+    allow_insecure_tls INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS container_monitors (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    container_ref TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS domain_monitors (
+    id TEXT PRIMARY KEY,
+    domain TEXT NOT NULL,
+    path TEXT NOT NULL DEFAULT '/',
+    expected_status_codes TEXT NOT NULL DEFAULT '[200,301,302,401]',
+    created_at TEXT NOT NULL,
+    last_successful_at TEXT,
+    last_failed_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS configured_domain_deletions (
+    id TEXT PRIMARY KEY,
+    deleted_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS alert_history (
+    id TEXT PRIMARY KEY,
+    severity TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    affected_resource TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    resolved_at TEXT,
+    occurrence_count INTEGER NOT NULL DEFAULT 1,
+    failed_checks TEXT NOT NULL DEFAULT '[]',
+    possible_cause TEXT,
+    suggested_next_steps TEXT NOT NULL DEFAULT '[]'
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_alert_history_status ON alert_history(status);
+  CREATE INDEX IF NOT EXISTS idx_alert_history_last_seen ON alert_history(last_seen_at);
+`);
+
+export function getDatabase() {
+  return database;
+}
+
+function hasColumn(tableName: string, columnName: string) {
+  const columns = database.prepare(`PRAGMA table_info(${tableName})`).all() as { name: string }[];
+  return columns.some((column) => column.name === columnName);
+}
+
+if (!hasColumn("server_monitors", "allow_insecure_tls")) {
+  database.prepare("ALTER TABLE server_monitors ADD COLUMN allow_insecure_tls INTEGER NOT NULL DEFAULT 0").run();
+}

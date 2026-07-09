@@ -37,6 +37,7 @@ export type MonitoredServer = {
   name: string;
   backendUrl: string;
   apiKey?: string;
+  allowInsecureTls: boolean;
   createdAt: string;
 };
 
@@ -45,6 +46,7 @@ export type MonitoredServerStatus = {
   name: string;
   backendUrl: string;
   apiKeyPreview: string | null;
+  allowInsecureTls: boolean;
   status: HealthStatus;
   lastCheckedAt: string;
   lastError: string | null;
@@ -54,6 +56,7 @@ export type CreateMonitoredServerInput = {
   name: string;
   backendUrl: string;
   apiKey?: string;
+  allowInsecureTls?: boolean;
 };
 
 export type MetricSnapshot = {
@@ -137,6 +140,8 @@ export type DockerSnapshot = {
 export type DomainCheck = {
   id: string;
   domain: string;
+  path: string;
+  expectedStatusCodes: number[];
   editable: boolean;
   status: HealthStatus;
   statusCode: number | null;
@@ -145,11 +150,15 @@ export type DomainCheck = {
   sslExpiresAt: string | null;
   sslExpiresInDays: number | null;
   lastCheckedAt: string;
+  lastSuccessfulAt: string | null;
+  lastFailedAt: string | null;
   error: string | null;
 };
 
 export type CreateDomainInput = {
   domain: string;
+  path?: string;
+  expectedStatusCodes?: number[];
 };
 
 export type Alert = {
@@ -160,6 +169,9 @@ export type Alert = {
   affectedResource: string;
   status: AlertStatus;
   createdAt: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  occurrenceCount: number;
   resolvedAt: string | null;
   failedChecks: string[];
   possibleCause: string | null;

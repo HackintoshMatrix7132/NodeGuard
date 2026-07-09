@@ -92,8 +92,9 @@ export function removeDomain(config: ApiConfig, id: string) {
   return apiFetch<{ removed: boolean }>(config, `/api/domains/${id}`, { method: "DELETE" });
 }
 
-export function getAlerts(config: ApiConfig) {
-  return apiFetch<Alert[]>(config, "/api/alerts");
+export function getAlerts(config: ApiConfig, status: "active" | "resolved" | "all" = "active") {
+  const query = status === "active" ? "" : `?status=${status}`;
+  return apiFetch<Alert[]>(config, `/api/alerts${query}`);
 }
 
 export function getAlert(config: ApiConfig, id: string) {

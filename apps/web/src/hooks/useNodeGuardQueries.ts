@@ -37,7 +37,7 @@ export const queryKeys = {
   containers: ["containers"] as const,
   container: (id: string) => ["container", id] as const,
   domains: ["domains"] as const,
-  alerts: ["alerts"] as const,
+  alerts: (status: "active" | "resolved" | "all" = "active") => ["alerts", status] as const,
   alert: (id: string) => ["alert", id] as const
 };
 
@@ -51,6 +51,19 @@ function useConfig() {
   return config ? { backendUrl: config.backendUrl, apiKey: config.apiKey } : { backendUrl: "demo://nodeguard", apiKey: "demo" };
 }
 
+function useLiveQueryOptions(enabled = true) {
+  const refreshIntervalSeconds = useSettingsStore((state) => state.refreshIntervalSeconds);
+  const intervalMs = Math.max(5, refreshIntervalSeconds) * 1000;
+  const refetchInterval: number | false = enabled ? intervalMs : false;
+
+  return {
+    refetchInterval,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    staleTime: Math.min(intervalMs, 10000)
+  };
+}
+
 export function useValidateConnection() {
   return useMutation({
     mutationFn: (config: ApiConfig) => validateConnection(config)
@@ -60,24 +73,26 @@ export function useValidateConnection() {
 export function useOverview() {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
-  const refreshIntervalSeconds = useSettingsStore((state) => state.refreshIntervalSeconds);
+  const liveOptions = useLiveQueryOptions();
   return useQuery({
     queryKey: [...queryKeys.overview, demoMode],
     queryFn: () => demoMode ? Promise.resolve({ ...demoOverview, lastCheckedAt: new Date().toISOString() }) : getOverview(config),
-    refetchInterval: refreshIntervalSeconds * 1000
+    ...liveOptions
   });
 }
 
 export function useServers() {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
-  return useQuery({ queryKey: [...queryKeys.servers, demoMode], queryFn: () => demoMode ? Promise.resolve([demoServer, ...demoServerMonitors]) : getServers(config) });
+  const liveOptions = useLiveQueryOptions();
+  return useQuery({ queryKey: [...queryKeys.servers, demoMode], queryFn: () => demoMode ? Promise.resolve([demoServer, ...demoServerMonitors]) : getServers(config), ...liveOptions });
 }
 
 export function useServerMonitors() {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
-  return useQuery({ queryKey: [...queryKeys.serverMonitors, demoMode], queryFn: () => demoMode ? Promise.resolve(demoServerMonitors) : getServerMonitors(config) });
+  const liveOptions = useLiveQueryOptions();
+  return useQuery({ queryKey: [...queryKeys.serverMonitors, demoMode], queryFn: () => demoMode ? Promise.resolve(demoServerMonitors) : getServerMonitors(config), ...liveOptions });
 }
 
 export function useAddServerMonitor() {
@@ -90,7 +105,7 @@ export function useAddServerMonitor() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.servers });
       void queryClient.invalidateQueries({ queryKey: queryKeys.serverMonitors });
       void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
+      void queryClient.invalidateQueries({ queryKey: ["alerts"] });
     }
   });
 }
@@ -105,7 +120,7 @@ export function useRemoveServerMonitor() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.servers });
       void queryClient.invalidateQueries({ queryKey: queryKeys.serverMonitors });
       void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
+      void queryClient.invalidateQueries({ queryKey: ["alerts"] });
     }
   });
 }
@@ -120,7 +135,7 @@ export function useUpdateServerMonitor() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.servers });
       void queryClient.invalidateQueries({ queryKey: queryKeys.serverMonitors });
       void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
+      void queryClient.invalidateQueries({ queryKey: ["alerts"] });
     }
   });
 }
@@ -128,25 +143,28 @@ export function useUpdateServerMonitor() {
 export function useServer(id: string) {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
-  return useQuery({ queryKey: [...queryKeys.server(id), demoMode], queryFn: () => demoMode ? Promise.resolve({ ...demoServer, lastCheckedAt: new Date().toISOString() }) : getServer(config, id) });
+  const liveOptions = useLiveQueryOptions();
+  return useQuery({ queryKey: [...queryKeys.server(id), demoMode], queryFn: () => demoMode ? Promise.resolve({ ...demoServer, lastCheckedAt: new Date().toISOString() }) : getServer(config, id), ...liveOptions });
 }
 
 export function useServerMetrics(id: string) {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
-  return useQuery({ queryKey: [...queryKeys.metrics(id), demoMode], queryFn: () => demoMode ? Promise.resolve({ ...demoMetrics, createdAt: new Date().toISOString() }) : getServerMetrics(config, id) });
+  const liveOptions = useLiveQueryOptions();
+  return useQuery({ queryKey: [...queryKeys.metrics(id), demoMode], queryFn: () => demoMode ? Promise.resolve({ ...demoMetrics, createdAt: new Date().toISOString() }) : getServerMetrics(config, id), ...liveOptions });
 }
 
 export function useContainers() {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
-  return useQuery({ queryKey: [...queryKeys.containers, demoMode], queryFn: () => demoMode ? Promise.resolve(demoDocker) : getContainers(config) });
+  const liveOptions = useLiveQueryOptions();
+  return useQuery({ queryKey: [...queryKeys.containers, demoMode], queryFn: () => demoMode ? Promise.resolve(demoDocker) : getContainers(config), ...liveOptions });
 }
 
 function invalidateContainerMonitorQueries(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.containers });
   void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
+  void queryClient.invalidateQueries({ queryKey: ["alerts"] });
 }
 
 export function useAddContainerMonitor() {
@@ -182,23 +200,26 @@ export function useRemoveContainerMonitor() {
 export function useContainer(id: string | null) {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
+  const liveOptions = useLiveQueryOptions(Boolean(id));
   return useQuery({
     queryKey: [...queryKeys.container(id ?? ""), demoMode],
     queryFn: () => demoMode ? Promise.resolve(demoContainers.find((container) => container.id === id) ?? demoContainers[0]) : getContainer(config, id ?? ""),
-    enabled: Boolean(id)
+    enabled: Boolean(id),
+    ...liveOptions
   });
 }
 
 export function useDomains() {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
-  return useQuery({ queryKey: [...queryKeys.domains, demoMode], queryFn: () => demoMode ? Promise.resolve(demoDomains) : getDomains(config) });
+  const liveOptions = useLiveQueryOptions();
+  return useQuery({ queryKey: [...queryKeys.domains, demoMode], queryFn: () => demoMode ? Promise.resolve(demoDomains) : getDomains(config), ...liveOptions });
 }
 
 function invalidateDomainQueries(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.domains });
   void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
+  void queryClient.invalidateQueries({ queryKey: ["alerts"] });
 }
 
 export function useAddDomain() {
@@ -231,19 +252,22 @@ export function useRemoveDomain() {
   });
 }
 
-export function useAlerts() {
+export function useAlerts(status: "active" | "resolved" | "all" = "active") {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
-  return useQuery({ queryKey: [...queryKeys.alerts, demoMode], queryFn: () => demoMode ? Promise.resolve(demoAlerts) : getAlerts(config) });
+  const liveOptions = useLiveQueryOptions();
+  return useQuery({ queryKey: [...queryKeys.alerts(status), demoMode], queryFn: () => demoMode ? Promise.resolve(demoAlerts) : getAlerts(config, status), ...liveOptions });
 }
 
 export function useAlert(id: string | null) {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
+  const liveOptions = useLiveQueryOptions(Boolean(id));
   return useQuery({
     queryKey: [...queryKeys.alert(id ?? ""), demoMode],
     queryFn: () => demoMode ? Promise.resolve(demoAlerts.find((alert) => alert.id === id) ?? demoAlerts[0]) : getAlert(config, id ?? ""),
-    enabled: Boolean(id)
+    enabled: Boolean(id),
+    ...liveOptions
   });
 }
 

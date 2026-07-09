@@ -1,28 +1,71 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import type { Container, ContainerMonitor, ContainerMonitorStatus, CreateContainerMonitorInput, DockerSnapshot } from "../types/nodeguard.js";
+import { getDatabase } from "./database.js";
 
-const dataDir = path.resolve(process.cwd(), "data");
-const dataFile = path.join(dataDir, "container-monitors.json");
+type ContainerMonitorRow = {
+  id: string;
+  name: string;
+  container_ref: string;
+  created_at: string;
+};
+
+const database = getDatabase();
+const legacyDataFile = path.resolve(process.cwd(), "data", "container-monitors.json");
+let legacyImported = false;
 
 function createId(name: string) {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   return `${slug || "container"}-${Date.now().toString(36)}`;
 }
 
-async function readStoredMonitors(): Promise<ContainerMonitor[]> {
+function rowToMonitor(row: ContainerMonitorRow): ContainerMonitor {
+  return {
+    id: row.id,
+    name: row.name,
+    containerRef: row.container_ref,
+    createdAt: row.created_at
+  };
+}
+
+function ensureLegacyImport() {
+  if (legacyImported) {
+    return;
+  }
+
+  legacyImported = true;
+  const count = database.prepare("SELECT COUNT(*) AS count FROM container_monitors").get() as { count: number };
+  if (count.count > 0 || !existsSync(legacyDataFile)) {
+    return;
+  }
+
   try {
-    const raw = await readFile(dataFile, "utf8");
-    return JSON.parse(raw) as ContainerMonitor[];
+    const monitors = JSON.parse(readFileSync(legacyDataFile, "utf8")) as ContainerMonitor[];
+    const insert = database.prepare(`
+      INSERT OR IGNORE INTO container_monitors (id, name, container_ref, created_at)
+      VALUES (@id, @name, @containerRef, @createdAt)
+    `);
+    const importMonitors = database.transaction((items: ContainerMonitor[]) => {
+      for (const monitor of items) {
+        insert.run({
+          id: monitor.id,
+          name: monitor.name,
+          containerRef: monitor.containerRef,
+          createdAt: monitor.createdAt ?? new Date().toISOString()
+        });
+      }
+    });
+    importMonitors(monitors);
   } catch {
-    return [];
+    // Ignore unreadable legacy files; the SQLite database is authoritative.
   }
 }
 
-async function writeStoredMonitors(monitors: ContainerMonitor[]) {
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(dataFile, `${JSON.stringify(monitors, null, 2)}\n`, "utf8");
+function readStoredMonitors(): ContainerMonitor[] {
+  ensureLegacyImport();
+  const rows = database.prepare("SELECT * FROM container_monitors ORDER BY created_at ASC").all() as ContainerMonitorRow[];
+  return rows.map(rowToMonitor);
 }
 
 function validateInput(input: CreateContainerMonitorInput) {
@@ -52,7 +95,7 @@ export async function listContainerMonitors() {
 }
 
 export async function listContainerMonitorStatuses(docker: Pick<DockerSnapshot, "dockerAvailable" | "containers" | "message">): Promise<ContainerMonitorStatus[]> {
-  const monitors = await readStoredMonitors();
+  const monitors = readStoredMonitors();
   const now = new Date().toISOString();
 
   return monitors.map((monitor) => {
@@ -98,32 +141,47 @@ export async function listContainerMonitorStatuses(docker: Pick<DockerSnapshot, 
 
 export async function addContainerMonitor(input: CreateContainerMonitorInput) {
   const values = validateInput(input);
-  const monitors = await readStoredMonitors();
   const monitor: ContainerMonitor = {
     id: createId(values.name),
     ...values,
     createdAt: new Date().toISOString()
   };
-  await writeStoredMonitors([...monitors, monitor]);
+  ensureLegacyImport();
+  database.prepare(`
+    INSERT INTO container_monitors (id, name, container_ref, created_at)
+    VALUES (@id, @name, @containerRef, @createdAt)
+  `).run({
+    id: monitor.id,
+    name: monitor.name,
+    containerRef: monitor.containerRef,
+    createdAt: monitor.createdAt
+  });
   return monitor;
 }
 
 export async function updateContainerMonitor(id: string, input: CreateContainerMonitorInput) {
   const values = validateInput(input);
-  const monitors = await readStoredMonitors();
-  const existingMonitor = monitors.find((monitor) => monitor.id === id);
+  ensureLegacyImport();
+  const existingMonitor = database.prepare("SELECT * FROM container_monitors WHERE id = ?").get(id) as ContainerMonitorRow | undefined;
   if (!existingMonitor) {
     return null;
   }
 
-  const updatedMonitor: ContainerMonitor = { ...existingMonitor, ...values };
-  await writeStoredMonitors(monitors.map((monitor) => (monitor.id === id ? updatedMonitor : monitor)));
+  const updatedMonitor: ContainerMonitor = { ...rowToMonitor(existingMonitor), ...values };
+  database.prepare(`
+    UPDATE container_monitors
+    SET name = @name, container_ref = @containerRef
+    WHERE id = @id
+  `).run({
+    id,
+    name: updatedMonitor.name,
+    containerRef: updatedMonitor.containerRef
+  });
   return updatedMonitor;
 }
 
 export async function removeContainerMonitor(id: string) {
-  const monitors = await readStoredMonitors();
-  const nextMonitors = monitors.filter((monitor) => monitor.id !== id);
-  await writeStoredMonitors(nextMonitors);
-  return { removed: nextMonitors.length !== monitors.length };
+  ensureLegacyImport();
+  const result = database.prepare("DELETE FROM container_monitors WHERE id = ?").run(id);
+  return { removed: result.changes > 0 };
 }

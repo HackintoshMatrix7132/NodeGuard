@@ -27,6 +27,8 @@ const domains: DomainCheck[] = [
   {
     id: "example",
     domain: "https://example.com",
+    path: "/",
+    expectedStatusCodes: [200, 301, 302, 401],
     editable: false,
     status: "offline",
     statusCode: null,
@@ -35,6 +37,8 @@ const domains: DomainCheck[] = [
     sslExpiresAt: null,
     sslExpiresInDays: null,
     lastCheckedAt: new Date().toISOString(),
+    lastSuccessfulAt: null,
+    lastFailedAt: new Date().toISOString(),
     error: "Domain is unreachable."
   }
 ];
