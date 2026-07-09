@@ -2085,6 +2085,18 @@ button:hover {
   background: rgba(91, 140, 255, 0.06) !important;
 }
 
+.row-button.selected .alert-row {
+  border-left: 3px solid rgba(56, 217, 255, 0.70);
+  background: transparent;
+  box-shadow: none;
+}
+
+.row-button.selected:hover .alert-row,
+.row-button:hover .alert-row {
+  background: rgba(148, 163, 184, 0.05);
+  box-shadow: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
