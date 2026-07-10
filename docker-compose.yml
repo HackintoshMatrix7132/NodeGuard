@@ -11,6 +11,9 @@ services:
       DATABASE_URL: file:/data/nodeguard.sqlite
       WEB_DIST_DIR: apps/web/dist
       TRUST_PROXY: "true"
+      NODEGUARD_ADMIN_USERNAME: ${NODEGUARD_ADMIN_USERNAME:-admin}
+      NODEGUARD_ADMIN_PASSWORD: ${NODEGUARD_ADMIN_PASSWORD:?Set NODEGUARD_ADMIN_PASSWORD in the root .env file}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-auto}
     ports:
       - "3000:3000"
     volumes:

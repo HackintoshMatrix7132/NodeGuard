@@ -28,6 +28,13 @@ function listEnv(name: string) {
     .filter(Boolean);
 }
 
+function cookieSecureEnv(): boolean | "auto" {
+  const value = (process.env.SESSION_COOKIE_SECURE ?? "auto").trim().toLowerCase();
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return "auto";
+}
+
 const nodeEnv = process.env.NODE_ENV ?? "development";
 
 export const env = {
@@ -38,6 +45,7 @@ export const env = {
   adminUsername: process.env.NODEGUARD_ADMIN_USERNAME ?? "admin",
   adminPassword: process.env.NODEGUARD_ADMIN_PASSWORD ?? "",
   sessionCookieName: process.env.SESSION_COOKIE_NAME ?? "nodeguard_session",
+  sessionCookieSecure: cookieSecureEnv(),
   sessionDurationDays: numberEnv("SESSION_DURATION_DAYS", 7),
   allowedOrigins: listEnv("ALLOWED_ORIGINS"),
   monitoredDomains: listEnv("MONITORED_DOMAINS"),

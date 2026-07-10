@@ -6,6 +6,7 @@ import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 
 import { env } from "./config/env.js";
+import { isRequestOriginAllowed } from "./config/cors.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { requireAuthenticated } from "./middleware/auth.js";
 import { authRouter } from "./routes/auth.js";
@@ -31,16 +32,22 @@ app.use(helmet({
   contentSecurityPolicy: false
 }));
 app.use(express.json({ limit: env.requestJsonLimit }));
-app.use(cors({
-  credentials: true,
-  origin(origin, callback) {
-    if (!origin || env.allowedOrigins.includes(origin) || (!env.isProduction && env.allowedOrigins.length === 0)) {
-      callback(null, true);
-      return;
-    }
+app.use(cors((request, callback) => {
+  const origin = request.header("origin");
+  const allowed = isRequestOriginAllowed(origin, request.protocol, request.get("host"), env.allowedOrigins)
+    || (!env.isProduction && env.allowedOrigins.length === 0);
 
-    callback(new Error("Origin is not allowed by NodeGuard CORS policy."));
+  if (allowed) {
+    callback(null, { credentials: true, origin: true });
+    return;
   }
+
+  const error = Object.assign(new Error("Origin is not allowed by NodeGuard CORS policy."), {
+    status: 403,
+    code: "origin_not_allowed",
+    expose: true
+  });
+  callback(error, { origin: false });
 }));
 
 app.use("/health", healthRouter);

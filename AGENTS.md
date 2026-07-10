@@ -23,6 +23,7 @@ React Native / Expo is no longer part of the active project.
 - Prefer real working monitoring over fake screens.
 - Keep the browser isolated from Docker, SSH, shell access, and the Docker socket.
 - Use username/password session authentication for human dashboard access.
+- Require an explicit owner password in production; `SESSION_COOKIE_SECURE=auto` follows Express request security so direct LAN HTTP and reverse-proxied HTTPS both work correctly.
 - Keep API keys only for machine-to-machine access such as future agents or integrations.
 - Use Cloudflare Access, VPN-only access, or another real auth layer before public exposure.
 

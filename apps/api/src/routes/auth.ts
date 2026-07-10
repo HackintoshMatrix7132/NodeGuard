@@ -27,7 +27,7 @@ authRouter.post("/login", (request, response) => {
     return;
   }
 
-  createSession(response, user.id);
+  createSession(request, response, user.id);
   response.json({
     authenticated: true,
     user

@@ -30,6 +30,7 @@ import {
 } from "./hooks/useNodeGuardQueries";
 import { useSettingsStore } from "./store/settingsStore";
 import type { Alert, Container, ContainerMonitorStatus, DomainCheck, HealthStatus, MetricHistory, MetricHistoryPoint, MetricHistoryRange, MetricHistorySummary, MonitoredServerStatus, Server as NodeGuardServer } from "./types/nodeguard";
+import { getContainerImageRepositoryUrl } from "./utils/containerImage";
 import { formatBytes, formatDateTime, formatPercentage, formatRelativeTime, formatResponseTime, formatUptime } from "./utils/format";
 import { getStatusLabel, getStatusTone } from "./utils/status";
 
@@ -1870,6 +1871,29 @@ function ContainerHealthBadge({ health }: { health: Container["health"] }) {
   return <span className={`container-badge health-${health}`}>{label}</span>;
 }
 
+function ContainerImageLink({ image }: { image: string }) {
+  const repositoryUrl = getContainerImageRepositoryUrl(image);
+  if (!repositoryUrl) {
+    return <span className="container-truncate" title={image}>{image}</span>;
+  }
+
+  return (
+    <a
+      className="container-image-link"
+      href={repositoryUrl}
+      target="_blank"
+      rel="noreferrer"
+      title="Open image repository"
+      aria-label={`Open image repository for ${image}`}
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      <span>{image}</span>
+      <ExternalLink size={13} aria-hidden="true" />
+    </a>
+  );
+}
+
 function ContainerTableRow({ container, selected, onSelect }: { container: Container; selected: boolean; onSelect: () => void }) {
   return (
     <div
@@ -1890,7 +1914,7 @@ function ContainerTableRow({ container, selected, onSelect }: { container: Conta
       <span role="cell"><ContainerStateBadge container={container} /></span>
       <span role="cell"><ContainerHealthBadge health={container.health} /></span>
       <span className="container-truncate" role="cell" title={container.stack ?? "Standalone"}>{container.stack ?? "Standalone"}</span>
-      <span className="container-truncate" role="cell" title={container.image}>{container.image}</span>
+      <span className="container-image-cell" role="cell"><ContainerImageLink image={container.image} /></span>
       <span className="container-mono" role="cell">{container.ipAddress ?? "Unavailable"}</span>
       <span className="container-truncate container-mono" role="cell" title={container.publishedPorts.join(", ") || "None"}>{container.publishedPorts.join(", ") || "None"}</span>
       <span role="cell">{container.uptime}</span>
@@ -1922,7 +1946,7 @@ function ContainerMobileCard({ container, selected, onSelect }: { container: Con
       <div className="container-mobile-head">
         <div>
           <strong>{container.name}</strong>
-          <small>{container.image}</small>
+          <small><ContainerImageLink image={container.image} /></small>
         </div>
         <button className="icon-only" onClick={(event) => { event.stopPropagation(); onSelect(); }} aria-label={`${selected ? "Hide" : "View"} details for ${container.name}`}>
           {selected ? <EyeOff size={15} /> : <Eye size={15} />}

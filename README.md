@@ -90,6 +90,7 @@ PORT=3000
 NODEGUARD_ADMIN_USERNAME=admin
 NODEGUARD_ADMIN_PASSWORD=change_this_local_password
 SESSION_DURATION_DAYS=7
+SESSION_COOKIE_SECURE=auto
 NODEGUARD_API_KEY=optional_machine_key_for_future_agents
 ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 DATABASE_URL=file:data/nodeguard.sqlite
@@ -123,6 +124,10 @@ Password: value of NODEGUARD_ADMIN_PASSWORD from apps/api/.env
 
 If `NODEGUARD_ADMIN_PASSWORD` changes later, restart the backend to rotate the owner password and clear existing sessions for that account.
 
+`SESSION_COOKIE_SECURE=auto` follows the request protocol: direct HTTP access on a private LAN receives a non-Secure development cookie, while HTTPS requests through a trusted reverse proxy receive a Secure cookie. Set it explicitly to `true` only when NodeGuard is always accessed over HTTPS.
+
+The API always permits requests from its own origin, so direct access such as `http://NODEGUARD_VM_IP:3000` works even when `ALLOWED_ORIGINS` contains only the production HTTPS domain. `ALLOWED_ORIGINS` remains the allowlist for separate cross-origin frontends.
+
 Demo mode can be enabled later from Settings for portfolio screenshots.
 
 ## Running Both Dev Servers
@@ -151,6 +156,7 @@ PORT=3000
 NODEGUARD_ADMIN_USERNAME=admin
 NODEGUARD_ADMIN_PASSWORD=use_a_long_random_password
 SESSION_DURATION_DAYS=7
+SESSION_COOKIE_SECURE=auto
 NODEGUARD_API_KEY=optional_machine_key_for_future_agents
 ALLOWED_ORIGINS=https://nodeguard.muthu.eu
 DATABASE_URL=file:/data/nodeguard.sqlite
@@ -163,6 +169,12 @@ Build and run:
 
 ```bash
 docker compose up -d --build
+```
+
+Compose now refuses to start a production deployment without `NODEGUARD_ADMIN_PASSWORD`. On an existing deployment, changing that value and recreating the container rotates the owner password while preserving monitoring data:
+
+```bash
+docker compose up -d --build --force-recreate
 ```
 
 View logs:
@@ -193,6 +205,7 @@ NODEGUARD_ADMIN_USERNAME=admin
 NODEGUARD_ADMIN_PASSWORD=replace_me
 SESSION_DURATION_DAYS=7
 SESSION_COOKIE_NAME=nodeguard_session
+SESSION_COOKIE_SECURE=auto
 NODEGUARD_API_KEY=optional_machine_key_for_future_agents
 ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 DATABASE_URL=file:data/nodeguard.sqlite

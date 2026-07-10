@@ -81,7 +81,7 @@ function readCookies(request: Request) {
   }).filter(([name]) => Boolean(name)));
 }
 
-function serializeCookie(name: string, value: string, maxAgeSeconds: number) {
+function serializeCookie(name: string, value: string, maxAgeSeconds: number, secure: boolean) {
   const parts = [
     `${name}=${encodeURIComponent(value)}`,
     "Path=/",
@@ -90,7 +90,7 @@ function serializeCookie(name: string, value: string, maxAgeSeconds: number) {
     `Max-Age=${maxAgeSeconds}`
   ];
 
-  if (env.isProduction) {
+  if (secure) {
     parts.push("Secure");
   }
 
@@ -100,6 +100,11 @@ function serializeCookie(name: string, value: string, maxAgeSeconds: number) {
 export function ensureAdminUser() {
   const database = getDatabase();
   const username = env.adminUsername.trim() || "admin";
+
+  if (env.isProduction && !env.adminPassword) {
+    throw new Error("NODEGUARD_ADMIN_PASSWORD is required when NODE_ENV=production.");
+  }
+
   const existingAdmin = database.prepare("SELECT * FROM users WHERE lower(username) = lower(?)").get(username) as UserRow | undefined;
 
   if (existingAdmin) {
@@ -116,10 +121,6 @@ export function ensureAdminUser() {
   }
 
   const password = env.adminPassword || developmentPassword;
-
-  if (env.isProduction && !env.adminPassword) {
-    throw new Error("NODEGUARD_ADMIN_PASSWORD is required when NODE_ENV=production.");
-  }
 
   if (!env.isProduction && !env.adminPassword) {
     console.warn("NodeGuard development login created with username 'admin' and password 'nodeguard'. Set NODEGUARD_ADMIN_PASSWORD to override it.");
@@ -148,7 +149,11 @@ export function authenticateUser(username: string, password: string) {
   return publicUser(user);
 }
 
-export function createSession(response: Response, userId: string) {
+function useSecureCookie(request: Request) {
+  return env.sessionCookieSecure === "auto" ? request.secure : env.sessionCookieSecure;
+}
+
+export function createSession(request: Request, response: Response, userId: string) {
   const database = getDatabase();
   const token = crypto.randomBytes(32).toString("base64url");
   const tokenHash = sha256(token);
@@ -167,7 +172,7 @@ export function createSession(response: Response, userId: string) {
     lastSeenAt: timestamp
   });
 
-  response.setHeader("Set-Cookie", serializeCookie(env.sessionCookieName, token, env.sessionDurationDays * 24 * 60 * 60));
+  response.setHeader("Set-Cookie", serializeCookie(env.sessionCookieName, token, env.sessionDurationDays * 24 * 60 * 60, useSecureCookie(request)));
 }
 
 export function getSessionUser(request: Request) {
@@ -204,7 +209,7 @@ export function destroySession(request: Request, response: Response) {
     getDatabase().prepare("DELETE FROM user_sessions WHERE token_hash = ?").run(sha256(token));
   }
 
-  response.setHeader("Set-Cookie", serializeCookie(env.sessionCookieName, "", 0));
+  response.setHeader("Set-Cookie", serializeCookie(env.sessionCookieName, "", 0, useSecureCookie(request)));
 }
 
 export function cleanupExpiredSessions() {
