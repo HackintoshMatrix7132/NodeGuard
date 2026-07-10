@@ -23,8 +23,8 @@ The project is designed for a real self-hosted deployment at `nodeguard.muthu.eu
 - Monitored server support for internal NodeGuard backends or health URLs.
 - Per-monitor self-signed HTTPS option for internal services such as Proxmox.
 - Docker containers page with container status, health, image, uptime, ports, limited log preview, and monitored container checks.
-- Domains / services page for public domains, internal URLs, reverse-proxy routes, paths, expected HTTP status codes, latency, SSL state, edit/delete, and manual checks.
-- Alerts page with active/resolved filters, alert detail, first seen, last seen, occurrence count, failed checks, possible cause, and suggested next steps.
+- Domains / services page for public domains, internal URLs, reverse-proxy routes, paths, expected HTTP status codes, latency trends, rolling 30-day uptime, SSL state, expanded diagnostics, edit/delete/duplicate, and manual checks.
+- Alerts page with active/resolved/all views, search, pagination, dense operational columns, toggleable alert detail, persisted history, and alert deletion/dismissal.
 - Settings page with refresh interval, screenshot privacy, diagnostics export, demo mode, session details, and logout.
 - Demo mode with realistic `muthu.eu` sample data for screenshots.
 - Production Docker image that serves the web UI and API from one container.
@@ -257,6 +257,7 @@ GET /api/alerts
 GET /api/alerts?status=all
 GET /api/alerts?status=resolved
 GET /api/alerts/:id
+DELETE /api/alerts/:id
 POST /api/checks/run
 ```
 
@@ -300,6 +301,10 @@ Alerts are generated from server, Docker, domain, and monitored-service state. A
 - Failed checks
 - Possible cause
 - Suggested next steps
+
+Resolved alerts can be permanently removed from history. Deleting an active alert dismisses that occurrence while its underlying condition remains active; the dismissal expires after recovery so a future recurrence can alert again.
+
+Domain checks retain one history sample per minute for a rolling 30-day window. This powers observed uptime and latency comparisons without allowing one-second UI refreshes to create excessive database growth.
 
 ## UI Notes
 

@@ -55,7 +55,19 @@ function getAlertById(id: string) {
 
 export function recordAlertSnapshot(activeAlerts: Alert[]): Alert[] {
   const now = new Date().toISOString();
-  const activeIds = activeAlerts.map((alert) => alert.id);
+  const generatedIds = activeAlerts.map((alert) => alert.id);
+  if (generatedIds.length === 0) {
+    database.prepare("DELETE FROM alert_deletions").run();
+  } else {
+    const generatedPlaceholders = generatedIds.map(() => "?").join(", ");
+    database.prepare(`DELETE FROM alert_deletions WHERE id NOT IN (${generatedPlaceholders})`).run(...generatedIds);
+  }
+
+  const deletedIds = new Set(
+    (database.prepare("SELECT id FROM alert_deletions").all() as { id: string }[]).map((row) => row.id)
+  );
+  const visibleAlerts = activeAlerts.filter((alert) => !deletedIds.has(alert.id));
+  const activeIds = visibleAlerts.map((alert) => alert.id);
   const select = database.prepare("SELECT * FROM alert_history WHERE id = ?");
   const insert = database.prepare(`
     INSERT INTO alert_history (
@@ -127,8 +139,8 @@ export function recordAlertSnapshot(activeAlerts: Alert[]): Alert[] {
     `).run(now, ...activeIds);
   });
 
-  upsertAlerts(activeAlerts);
-  return activeAlerts.map((alert) => getAlertById(alert.id) ?? alert);
+  upsertAlerts(visibleAlerts);
+  return visibleAlerts.map((alert) => getAlertById(alert.id) ?? alert);
 }
 
 export function listAlertHistory(status: "active" | "resolved" | "all" = "active") {
@@ -148,4 +160,25 @@ export function listAlertHistory(status: "active" | "resolved" | "all" = "active
 
 export function getAlertHistory(id: string) {
   return getAlertById(id);
+}
+
+export function deleteAlertHistory(id: string) {
+  const alert = getAlertById(id);
+  if (!alert) {
+    return { removed: false };
+  }
+
+  const removeAlert = database.transaction(() => {
+    if (alert.status === "active") {
+      database.prepare(`
+        INSERT INTO alert_deletions (id, deleted_at)
+        VALUES (?, ?)
+        ON CONFLICT(id) DO UPDATE SET deleted_at = excluded.deleted_at
+      `).run(id, new Date().toISOString());
+    }
+    database.prepare("DELETE FROM alert_history WHERE id = ?").run(id);
+  });
+
+  removeAlert();
+  return { removed: true };
 }

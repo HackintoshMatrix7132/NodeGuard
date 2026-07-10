@@ -65,6 +65,18 @@ database.exec(`
     deleted_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS domain_check_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain_id TEXT NOT NULL,
+    sample_minute INTEGER NOT NULL,
+    healthy INTEGER NOT NULL,
+    status_code INTEGER,
+    response_time_ms INTEGER,
+    checked_at TEXT NOT NULL,
+    FOREIGN KEY(domain_id) REFERENCES domain_monitors(id) ON DELETE CASCADE,
+    UNIQUE(domain_id, sample_minute)
+  );
+
   CREATE TABLE IF NOT EXISTS alert_history (
     id TEXT PRIMARY KEY,
     severity TEXT NOT NULL,
@@ -80,6 +92,11 @@ database.exec(`
     failed_checks TEXT NOT NULL DEFAULT '[]',
     possible_cause TEXT,
     suggested_next_steps TEXT NOT NULL DEFAULT '[]'
+  );
+
+  CREATE TABLE IF NOT EXISTS alert_deletions (
+    id TEXT PRIMARY KEY,
+    deleted_at TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS users (
@@ -103,6 +120,7 @@ database.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_alert_history_status ON alert_history(status);
   CREATE INDEX IF NOT EXISTS idx_alert_history_last_seen ON alert_history(last_seen_at);
+  CREATE INDEX IF NOT EXISTS idx_domain_check_history_domain_time ON domain_check_history(domain_id, checked_at DESC);
   CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(token_hash);
   CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
 `);

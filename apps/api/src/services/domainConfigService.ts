@@ -17,6 +17,13 @@ export type StoredDomain = {
   lastFailedAt: string | null;
 };
 
+export type DomainCheckStats = {
+  uptimePercent: number | null;
+  checkSamples: number;
+  previousResponseTimeMs: number | null;
+  latencyTrendPercent: number | null;
+};
+
 type DomainMonitorRow = {
   id: string;
   domain: string;
@@ -283,4 +290,62 @@ export function markStoredDomainResult(id: string, healthy: boolean, checkedAt: 
     healthy: healthy ? 1 : 0,
     checkedAt
   });
+}
+
+export function recordStoredDomainCheck(
+  id: string,
+  result: { healthy: boolean; statusCode: number | null; responseTimeMs: number | null; checkedAt: string }
+): DomainCheckStats {
+  ensureLegacyImport();
+  seedConfiguredDomains();
+
+  const checkedAtMs = Date.parse(result.checkedAt);
+  const sampleMinute = Math.floor(checkedAtMs / 60000);
+  const cutoff = new Date(checkedAtMs - 30 * 86400000).toISOString();
+
+  database.prepare(`
+    INSERT INTO domain_check_history (domain_id, sample_minute, healthy, status_code, response_time_ms, checked_at)
+    VALUES (@domainId, @sampleMinute, @healthy, @statusCode, @responseTimeMs, @checkedAt)
+    ON CONFLICT(domain_id, sample_minute) DO UPDATE SET
+      healthy = excluded.healthy,
+      status_code = excluded.status_code,
+      response_time_ms = excluded.response_time_ms,
+      checked_at = excluded.checked_at
+  `).run({
+    domainId: id,
+    sampleMinute,
+    healthy: result.healthy ? 1 : 0,
+    statusCode: result.statusCode,
+    responseTimeMs: result.responseTimeMs,
+    checkedAt: result.checkedAt
+  });
+
+  database.prepare("DELETE FROM domain_check_history WHERE domain_id = ? AND checked_at < ?").run(id, cutoff);
+
+  const summary = database.prepare(`
+    SELECT COUNT(*) AS count,
+           COALESCE(SUM(healthy), 0) AS healthy_count
+    FROM domain_check_history
+    WHERE domain_id = ? AND checked_at >= ?
+  `).get(id, cutoff) as { count: number; healthy_count: number };
+
+  const previous = database.prepare(`
+    SELECT response_time_ms
+    FROM domain_check_history
+    WHERE domain_id = ? AND checked_at >= ? AND response_time_ms IS NOT NULL
+    ORDER BY sample_minute DESC
+    LIMIT 1 OFFSET 1
+  `).get(id, cutoff) as { response_time_ms: number } | undefined;
+
+  const previousResponseTimeMs = previous?.response_time_ms ?? null;
+  const latencyTrendPercent = result.responseTimeMs !== null && previousResponseTimeMs && previousResponseTimeMs > 0
+    ? Math.round((((result.responseTimeMs - previousResponseTimeMs) / previousResponseTimeMs) * 100) * 10) / 10
+    : null;
+
+  return {
+    uptimePercent: summary.count > 0 ? Math.round(((summary.healthy_count / summary.count) * 100) * 100) / 100 : null,
+    checkSamples: summary.count,
+    previousResponseTimeMs,
+    latencyTrendPercent
+  };
 }

@@ -2,7 +2,7 @@ import tls from "node:tls";
 
 import { env } from "../config/env.js";
 import type { DomainCheck, HealthStatus } from "../types/nodeguard.js";
-import { listStoredDomains, markStoredDomainResult, type StoredDomain } from "./domainConfigService.js";
+import { listStoredDomains, markStoredDomainResult, recordStoredDomainCheck, type DomainCheckStats, type StoredDomain } from "./domainConfigService.js";
 
 type SslInfo = {
   sslExpiresAt: string | null;
@@ -12,6 +12,15 @@ type SslInfo = {
 type DomainTarget = StoredDomain & {
   editable: boolean;
 };
+
+function currentOnlyStats(healthy: boolean): DomainCheckStats {
+  return {
+    uptimePercent: healthy ? 100 : 0,
+    checkSamples: 1,
+    previousResponseTimeMs: null,
+    latencyTrendPercent: null
+  };
+}
 
 function buildCheckUrl(domain: string, domainPath: string) {
   return `${domain}${domainPath === "/" ? "" : domainPath}`;
@@ -82,6 +91,9 @@ async function checkDomain(target: DomainTarget): Promise<DomainCheck> {
     if (target.editable) {
       markStoredDomainResult(target.id, healthy, now);
     }
+    const stats = target.editable
+      ? recordStoredDomainCheck(target.id, { healthy, statusCode: response.status, responseTimeMs, checkedAt: now })
+      : currentOnlyStats(healthy);
 
     return {
       id: target.id,
@@ -92,6 +104,7 @@ async function checkDomain(target: DomainTarget): Promise<DomainCheck> {
       status,
       statusCode: response.status,
       responseTimeMs,
+      ...stats,
       https: target.domain.startsWith("https://"),
       sslExpiresAt: sslInfo.sslExpiresAt,
       sslExpiresInDays: sslInfo.sslExpiresInDays,
@@ -104,6 +117,9 @@ async function checkDomain(target: DomainTarget): Promise<DomainCheck> {
     if (target.editable) {
       markStoredDomainResult(target.id, false, now);
     }
+    const stats = target.editable
+      ? recordStoredDomainCheck(target.id, { healthy: false, statusCode: null, responseTimeMs: null, checkedAt: now })
+      : currentOnlyStats(false);
 
     return {
       id: target.id,
@@ -114,6 +130,7 @@ async function checkDomain(target: DomainTarget): Promise<DomainCheck> {
       status: "offline",
       statusCode: null,
       responseTimeMs: null,
+      ...stats,
       https: target.domain.startsWith("https://"),
       sslExpiresAt: null,
       sslExpiresInDays: null,

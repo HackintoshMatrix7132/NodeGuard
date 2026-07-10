@@ -1,6 +1,6 @@
 import { Router } from "express";
 
-import { getAlertHistory, listAlertHistory } from "../services/alertHistoryService.js";
+import { deleteAlertHistory, getAlertHistory, listAlertHistory } from "../services/alertHistoryService.js";
 import { getMonitoringSnapshot } from "../services/snapshotService.js";
 
 export const alertsRouter = Router();
@@ -30,6 +30,20 @@ alertsRouter.get("/:id", async (request, response, next) => {
     }
 
     response.json(alert);
+  } catch (error) {
+    next(error);
+  }
+});
+
+alertsRouter.delete("/:id", (request, response, next) => {
+  try {
+    const result = deleteAlertHistory(request.params.id);
+    if (!result.removed) {
+      response.status(404).json({ error: "not_found", message: "Alert not found." });
+      return;
+    }
+
+    response.json(result);
   } catch (error) {
     next(error);
   }

@@ -15,6 +15,7 @@ import {
   getServerMonitors,
   getServers,
   login,
+  removeAlert,
   removeServerMonitor,
   removeContainerMonitor,
   removeDomain,
@@ -27,6 +28,8 @@ import type { ApiConfig } from "../api/client";
 import type { CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, LoginInput } from "../types/nodeguard";
 import { demoAlerts, demoContainers, demoDocker, demoDomains, demoMetrics, demoOverview, demoServer, demoServerMonitors } from "../demoData";
 import { useSettingsStore } from "../store/settingsStore";
+
+const dismissedDemoAlertIds = new Set<string>();
 
 export const queryKeys = {
   overview: ["overview"] as const,
@@ -256,7 +259,7 @@ export function useAlerts(status: "active" | "resolved" | "all" = "active") {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
   const liveOptions = useLiveQueryOptions();
-  return useQuery({ queryKey: [...queryKeys.alerts(status), demoMode], queryFn: () => demoMode ? Promise.resolve(demoAlerts) : getAlerts(config, status), ...liveOptions });
+  return useQuery({ queryKey: [...queryKeys.alerts(status), demoMode], queryFn: () => demoMode ? Promise.resolve(demoAlerts.filter((alert) => !dismissedDemoAlertIds.has(alert.id))) : getAlerts(config, status), ...liveOptions });
 }
 
 export function useAlert(id: string | null) {
@@ -268,6 +271,26 @@ export function useAlert(id: string | null) {
     queryFn: () => demoMode ? Promise.resolve(demoAlerts.find((alert) => alert.id === id) ?? demoAlerts[0]) : getAlert(config, id ?? ""),
     enabled: Boolean(id),
     ...liveOptions
+  });
+}
+
+export function useRemoveAlert() {
+  const config = useConfig();
+  const demoMode = useSettingsStore((state) => state.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => {
+      if (demoMode) {
+        dismissedDemoAlertIds.add(id);
+        return Promise.resolve({ removed: Boolean(id) });
+      }
+      return removeAlert(config, id);
+    },
+    onSuccess: (_result, id) => {
+      queryClient.removeQueries({ queryKey: queryKeys.alert(id) });
+      void queryClient.invalidateQueries({ queryKey: ["alerts"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
+    }
   });
 }
 

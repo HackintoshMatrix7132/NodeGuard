@@ -126,6 +126,10 @@ export type DomainCheck = {
   status: HealthStatus;
   statusCode: number | null;
   responseTimeMs: number | null;
+  previousResponseTimeMs: number | null;
+  latencyTrendPercent: number | null;
+  uptimePercent: number | null;
+  checkSamples: number;
   https: boolean;
   sslExpiresAt: string | null;
   sslExpiresInDays: number | null;

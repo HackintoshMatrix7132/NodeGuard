@@ -100,6 +100,7 @@ GET /api/alerts
 GET /api/alerts?status=all
 GET /api/alerts?status=resolved
 GET /api/alerts/:id
+DELETE /api/alerts/:id
 POST /api/checks/run
 ```
 
@@ -111,8 +112,8 @@ SQLite stores:
 
 - Server monitors.
 - Container monitors.
-- Domain monitors with path, expected status codes, and last success/failure.
-- Alert history with first seen, last seen, occurrence count, active/resolved status, and troubleshooting detail.
+- Domain monitors with path, expected status codes, last success/failure, and minute-sampled 30-day check history.
+- Alert history with first seen, last seen, occurrence count, active/resolved status, troubleshooting detail, and persistent active-alert dismissal.
 
 Legacy JSON monitor files may be imported once if they still exist, but SQLite is authoritative.
 
@@ -121,9 +122,9 @@ Legacy JSON monitor files may be imported once if they still exist, but SQLite i
 - Keep the dark Grafana-inspired visual direction: compact bordered panels, dense metrics, square corners, bright status accents, and dark controls.
 - Do not copy Grafana branding.
 - Preserve realistic `muthu.eu` demo data for portfolio screenshots.
-- Domain/service rows should show URL/path, HTTP status, latency, SSL state, expected status codes, and health.
+- Domain/service rows should show URL/path, HTTP status, latency trend, rolling uptime, SSL state, expected status codes, health, and expandable diagnostics.
 - Server monitors may allow self-signed HTTPS per monitor for internal homelab tools such as Proxmox; do not disable TLS verification globally.
-- Alert detail should explain what happened, first/last seen, occurrence count, likely cause, failed checks, and suggested next steps.
+- Alerts should use the dense searchable table, support persisted deletion/dismissal, and provide toggleable detail explaining what happened, first/last seen, occurrence count, likely cause, failed checks, and suggested next steps.
 - Keep UI elements aligned and prevent status pills/actions from overflowing panel boundaries.
 
 ## Do

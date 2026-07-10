@@ -1,4 +1,4 @@
-import { AlertTriangle, Bell, Boxes, ExternalLink, Eye, EyeOff, Gauge, Globe2, LogOut, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RefreshCcw, Search, Server, Settings, Trash2, X } from "lucide-react";
+import { AlertTriangle, Bell, Boxes, ChevronDown, ChevronLeft, ChevronRight, Copy, ExternalLink, Eye, EyeOff, Gauge, Globe2, LogOut, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RefreshCcw, Search, Server, Settings, Trash2, X } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 
 import { getDefaultBackendUrl, normalizeBackendUrl } from "./api/client";
@@ -14,6 +14,7 @@ import {
   useContainers,
   useDomains,
   useOverview,
+  useRemoveAlert,
   useRemoveContainerMonitor,
   useRemoveDomain,
   useRemoveServerMonitor,
@@ -190,6 +191,25 @@ function StaleNotice({ isError, dataUpdatedAt }: { isError: boolean; dataUpdated
   return <div className="stale-notice">Showing last known status from {formatDateTime(new Date(dataUpdatedAt).toISOString())}. Live refresh failed.</div>;
 }
 
+function SuccessNotice({ message, onDismiss }: { message: string; onDismiss: (value: null) => void }) {
+  const [isClosing, setIsClosing] = useState(false);
+
+  useEffect(() => {
+    const closeTimer = window.setTimeout(() => setIsClosing(true), 3900);
+    const dismissTimer = window.setTimeout(() => onDismiss(null), 4140);
+    return () => {
+      window.clearTimeout(closeTimer);
+      window.clearTimeout(dismissTimer);
+    };
+  }, [message, onDismiss]);
+
+  return (
+    <div className={`stale-notice success operation-success-message ${isClosing ? "is-closing" : ""}`} role="status">
+      {message}
+    </div>
+  );
+}
+
 function countLabel(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
@@ -232,6 +252,29 @@ function sslLabel(domain: DomainCheck) {
   return `SSL expires in ${domain.sslExpiresInDays}d`;
 }
 
+function compactSslLabel(domain: DomainCheck) {
+  if (!domain.https) return "No SSL";
+  if (domain.sslExpiresInDays === null) return "SSL unknown";
+  if (domain.sslExpiresInDays < 0) return "SSL expired";
+  return `SSL ${domain.sslExpiresInDays}d`;
+}
+
+function compactUptimeLabel(domain: DomainCheck) {
+  return domain.uptimePercent === null ? "Uptime pending" : `${domain.uptimePercent.toFixed(2)}% uptime`;
+}
+
+function latencyTrend(domain: DomainCheck) {
+  if (domain.latencyTrendPercent === null || Math.abs(domain.latencyTrendPercent) < 2) {
+    return { symbol: "→", label: "Latency is stable", tone: "stable" };
+  }
+
+  if (domain.latencyTrendPercent > 0) {
+    return { symbol: "↑", label: `Latency increased by ${domain.latencyTrendPercent.toFixed(1)}%`, tone: "slower" };
+  }
+
+  return { symbol: "↓", label: `Latency decreased by ${Math.abs(domain.latencyTrendPercent).toFixed(1)}%`, tone: "faster" };
+}
+
 function fullDomainUrl(domain: DomainCheck) {
   return `${domain.domain}${domain.path === "/" ? "" : domain.path}`;
 }
@@ -258,6 +301,17 @@ function parseExpectedStatusCodes(value: string) {
   }
 
   return codes;
+}
+
+function duplicateName(name: string) {
+  return `${name.trim() || "Monitor"} copy`;
+}
+
+function domainTargetKey(domain: string, path: string) {
+  const value = domain.trim();
+  const parsed = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+  const normalizedPath = path.trim() || "/";
+  return `${parsed.origin}${normalizedPath.startsWith("/") ? normalizedPath : `/${normalizedPath}`}`;
 }
 
 function maskSensitiveUrl(value: string, hide: boolean) {
@@ -520,9 +574,12 @@ function ServerPage() {
   const [monitorApiKey, setMonitorApiKey] = useState("");
   const [allowInsecureTls, setAllowInsecureTls] = useState(false);
   const [editingMonitor, setEditingMonitor] = useState<MonitoredServerStatus | null>(null);
+  const [duplicatingMonitor, setDuplicatingMonitor] = useState<MonitoredServerStatus | null>(null);
   const [isMonitorModalOpen, setIsMonitorModalOpen] = useState(false);
   const [isMonitorModalClosing, setIsMonitorModalClosing] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const server = useServer("local-node");
   const metrics = useServerMetrics("local-node");
   const serverMonitors = useServerMonitors();
@@ -536,6 +593,7 @@ function ServerPage() {
     setMonitorApiKey("");
     setAllowInsecureTls(false);
     setEditingMonitor(null);
+    setDuplicatingMonitor(null);
     setIsMonitorModalOpen(false);
     setIsMonitorModalClosing(false);
     setFormError(null);
@@ -553,6 +611,7 @@ function ServerPage() {
     setMonitorApiKey("");
     setAllowInsecureTls(false);
     setEditingMonitor(null);
+    setDuplicatingMonitor(null);
     setIsMonitorModalClosing(false);
     setFormError(null);
     setIsMonitorModalOpen(true);
@@ -564,6 +623,19 @@ function ServerPage() {
     setMonitorApiKey("");
     setAllowInsecureTls(monitor.allowInsecureTls);
     setEditingMonitor(monitor);
+    setDuplicatingMonitor(null);
+    setIsMonitorModalClosing(false);
+    setFormError(null);
+    setIsMonitorModalOpen(true);
+  };
+
+  const duplicateMonitor = (monitor: MonitoredServerStatus) => {
+    setMonitorName(duplicateName(monitor.name));
+    setMonitorUrl(monitor.backendUrl);
+    setMonitorApiKey("");
+    setAllowInsecureTls(monitor.allowInsecureTls);
+    setEditingMonitor(null);
+    setDuplicatingMonitor(monitor);
     setIsMonitorModalClosing(false);
     setFormError(null);
     setIsMonitorModalOpen(true);
@@ -572,6 +644,8 @@ function ServerPage() {
   const saveMonitor = async (event: React.FormEvent) => {
     event.preventDefault();
     setFormError(null);
+    setActionError(null);
+    setSuccessMessage(null);
 
     try {
       const input = {
@@ -583,13 +657,27 @@ function ServerPage() {
 
       if (editingMonitor) {
         await updateServerMonitor.mutateAsync({ id: editingMonitor.id, input });
+        setSuccessMessage(`${monitorName.trim() || "Server"} was successfully updated.`);
       } else {
         await addServerMonitor.mutateAsync(input);
+        setSuccessMessage(`${monitorName.trim() || "Server"} was successfully ${duplicatingMonitor ? "duplicated" : "added"}.`);
       }
 
       closeMonitorModal();
     } catch (error) {
       setFormError(normalizeApiError(error).message);
+    }
+  };
+
+  const removeMonitor = async (monitor: MonitoredServerStatus) => {
+    setActionError(null);
+    setSuccessMessage(null);
+
+    try {
+      await removeServerMonitor.mutateAsync(monitor.id);
+      setSuccessMessage(`${monitor.name} was successfully deleted.`);
+    } catch (error) {
+      setActionError(normalizeApiError(error).message);
     }
   };
 
@@ -666,6 +754,8 @@ function ServerPage() {
         />
       </div>
       <Panel title="Monitored servers" action={<button onClick={openAddMonitor}><Plus size={16} /> Add server</button>}>
+        {actionError ? <div className="form-error">{actionError}</div> : null}
+        {successMessage ? <SuccessNotice key={successMessage} message={successMessage} onDismiss={setSuccessMessage} /> : null}
         {serverMonitors.isLoading ? <StateBlock title="Loading monitors" message="Checking configured server monitors." /> : null}
         {(serverMonitors.data ?? []).length === 0 ? (
           <StateBlock title="No extra servers" message="Add another NodeGuard backend to monitor host-level health from this dashboard." />
@@ -675,15 +765,16 @@ function ServerPage() {
               <ServerMonitorRow
                 key={monitor.id}
                 monitor={monitor}
+                onDuplicate={() => duplicateMonitor(monitor)}
                 onEdit={() => editMonitor(monitor)}
-                onRemove={() => removeServerMonitor.mutate(monitor.id)}
+                onRemove={() => void removeMonitor(monitor)}
               />
             ))}
           </div>
         )}
       </Panel>
       {isMonitorModalOpen ? (
-        <Modal title={editingMonitor ? "Edit monitored server" : "Add monitored server"} onClose={closeMonitorModal} isClosing={isMonitorModalClosing}>
+        <Modal title={editingMonitor ? "Edit monitored server" : duplicatingMonitor ? "Duplicate monitored server" : "Add monitored server"} onClose={closeMonitorModal} isClosing={isMonitorModalClosing}>
           <form className="inline-form modal-form" onSubmit={saveMonitor}>
           <label>
             Display name
@@ -699,7 +790,7 @@ function ServerPage() {
               value={monitorApiKey}
               onChange={(event) => setMonitorApiKey(event.target.value)}
               type="password"
-              placeholder={editingMonitor ? "Leave blank to keep current key" : "Optional for /health only"}
+              placeholder={editingMonitor ? "Leave blank to keep current key" : duplicatingMonitor?.apiKeyPreview ? "Re-enter key for this copy" : "Optional for /health only"}
             />
           </label>
           <label className="checkbox-label">
@@ -711,7 +802,7 @@ function ServerPage() {
             Allow self-signed HTTPS
           </label>
           <button className="modal-submit" type="submit" disabled={addServerMonitor.isPending || updateServerMonitor.isPending}>
-            {editingMonitor ? "Save edits" : "Add server"}
+            {editingMonitor ? "Save edits" : duplicatingMonitor ? "Create duplicate" : "Add server"}
           </button>
         </form>
         {formError ? <div className="form-error">{formError}</div> : null}
@@ -727,7 +818,14 @@ function ContainersPage() {
   const [monitorName, setMonitorName] = useState("");
   const [containerRef, setContainerRef] = useState("");
   const [editingMonitor, setEditingMonitor] = useState<ContainerMonitorStatus | null>(null);
+  const [duplicatingMonitor, setDuplicatingMonitor] = useState<ContainerMonitorStatus | null>(null);
+  const [editMonitorName, setEditMonitorName] = useState("");
+  const [editContainerRef, setEditContainerRef] = useState("");
+  const [isMonitorModalOpen, setIsMonitorModalOpen] = useState(false);
+  const [isMonitorModalClosing, setIsMonitorModalClosing] = useState(false);
+  const [editFormError, setEditFormError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const containers = useContainers();
   const container = useContainer(selected);
   const addContainerMonitor = useAddContainerMonitor();
@@ -735,32 +833,91 @@ function ContainersPage() {
   const removeContainerMonitor = useRemoveContainerMonitor();
   const filtered = useMemo(() => (containers.data?.containers ?? []).filter((item) => [item.name, item.image, item.status, item.health].join(" ").toLowerCase().includes(query.toLowerCase())), [containers.data, query]);
 
-  const resetMonitorForm = () => {
+  const resetAddForm = () => {
     setMonitorName("");
     setContainerRef("");
-    setEditingMonitor(null);
     setFormError(null);
   };
 
+  const resetEditModal = () => {
+    setEditingMonitor(null);
+    setDuplicatingMonitor(null);
+    setEditMonitorName("");
+    setEditContainerRef("");
+    setIsMonitorModalOpen(false);
+    setIsMonitorModalClosing(false);
+    setEditFormError(null);
+  };
+
+  const closeEditModal = () => {
+    if (isMonitorModalClosing) return;
+    setIsMonitorModalClosing(true);
+    window.setTimeout(resetEditModal, 190);
+  };
+
   const editMonitor = (monitor: ContainerMonitorStatus) => {
-    setMonitorName(monitor.name);
-    setContainerRef(monitor.containerRef);
     setEditingMonitor(monitor);
-    setFormError(null);
+    setDuplicatingMonitor(null);
+    setEditMonitorName(monitor.name);
+    setEditContainerRef(monitor.containerRef);
+    setIsMonitorModalClosing(false);
+    setEditFormError(null);
+    setIsMonitorModalOpen(true);
+  };
+
+  const duplicateMonitor = (monitor: ContainerMonitorStatus) => {
+    setEditingMonitor(null);
+    setDuplicatingMonitor(monitor);
+    setEditMonitorName(duplicateName(monitor.name));
+    setEditContainerRef(monitor.containerRef);
+    setIsMonitorModalClosing(false);
+    setEditFormError(null);
+    setIsMonitorModalOpen(true);
   };
 
   const saveMonitor = async (event: React.FormEvent) => {
     event.preventDefault();
     setFormError(null);
+    setSuccessMessage(null);
     const input = { name: monitorName, containerRef };
 
     try {
+      await addContainerMonitor.mutateAsync(input);
+      setSuccessMessage(`${monitorName.trim() || "Container"} was successfully added.`);
+      resetAddForm();
+    } catch (error) {
+      setFormError(normalizeApiError(error).message);
+    }
+  };
+
+  const saveMonitorEdits = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingMonitor && !duplicatingMonitor) return;
+    setEditFormError(null);
+    setSuccessMessage(null);
+
+    try {
+      const input = { name: editMonitorName, containerRef: editContainerRef };
       if (editingMonitor) {
         await updateContainerMonitor.mutateAsync({ id: editingMonitor.id, input });
+        setSuccessMessage(`${editMonitorName.trim() || "Container"} was successfully updated.`);
       } else {
         await addContainerMonitor.mutateAsync(input);
+        setSuccessMessage(`${editMonitorName.trim() || "Container"} was successfully duplicated.`);
       }
-      resetMonitorForm();
+      closeEditModal();
+    } catch (error) {
+      setEditFormError(normalizeApiError(error).message);
+    }
+  };
+
+  const removeMonitor = async (monitor: ContainerMonitorStatus) => {
+    setFormError(null);
+    setSuccessMessage(null);
+
+    try {
+      await removeContainerMonitor.mutateAsync(monitor.id);
+      setSuccessMessage(`${monitor.name} was successfully deleted.`);
     } catch (error) {
       setFormError(normalizeApiError(error).message);
     }
@@ -789,13 +946,13 @@ function ContainersPage() {
             Container name or ID
             <input value={containerRef} onChange={(event) => setContainerRef(event.target.value)} placeholder="vaultwarden" />
           </label>
-          <button type="submit" disabled={addContainerMonitor.isPending || updateContainerMonitor.isPending}>
-            {editingMonitor ? <Pencil size={16} /> : <Plus size={16} />}
-            {editingMonitor ? "Save edits" : "Add container"}
+          <button type="submit" disabled={addContainerMonitor.isPending}>
+            <Plus size={16} />
+            Add container
           </button>
         </form>
-        {editingMonitor ? <button className="secondary-action" onClick={resetMonitorForm}><X size={15} /> Cancel editing {editingMonitor.name}</button> : null}
         {formError ? <div className="form-error">{formError}</div> : null}
+        {successMessage ? <SuccessNotice key={successMessage} message={successMessage} onDismiss={setSuccessMessage} /> : null}
         {(containers.data.containerMonitors ?? []).length === 0 ? (
           <StateBlock title="No monitored containers" message="Add container names or IDs that should be present and running." />
         ) : (
@@ -804,8 +961,9 @@ function ContainersPage() {
               <ContainerMonitorRow
                 key={monitor.id}
                 monitor={monitor}
+                onDuplicate={() => duplicateMonitor(monitor)}
                 onEdit={() => editMonitor(monitor)}
-                onRemove={() => removeContainerMonitor.mutate(monitor.id)}
+                onRemove={() => void removeMonitor(monitor)}
               />
             ))}
           </div>
@@ -816,6 +974,24 @@ function ContainersPage() {
           {!container.data ? <StateBlock title="Loading detail" message="Reading container detail." /> : <ContainerDetail container={container.data} />}
         </Panel>
       ) : null}
+      {isMonitorModalOpen && (editingMonitor || duplicatingMonitor) ? (
+        <Modal title={editingMonitor ? "Edit monitored container" : "Duplicate monitored container"} onClose={closeEditModal} isClosing={isMonitorModalClosing}>
+          <form className="inline-form modal-form" onSubmit={saveMonitorEdits}>
+            <label>
+              Display name
+              <input value={editMonitorName} onChange={(event) => setEditMonitorName(event.target.value)} placeholder="Vaultwarden" />
+            </label>
+            <label>
+              Container name or ID
+              <input value={editContainerRef} onChange={(event) => setEditContainerRef(event.target.value)} placeholder="vaultwarden" />
+            </label>
+            <button className="modal-submit" type="submit" disabled={updateContainerMonitor.isPending || addContainerMonitor.isPending}>
+              {editingMonitor ? "Save edits" : "Create duplicate"}
+            </button>
+          </form>
+          {editFormError ? <div className="form-error">{editFormError}</div> : null}
+        </Modal>
+      ) : null}
     </div>
   );
 }
@@ -825,8 +1001,12 @@ function DomainsPage() {
   const [domainPath, setDomainPath] = useState("/");
   const [expectedStatusCodes, setExpectedStatusCodes] = useState("200,301,302,401");
   const [editingDomain, setEditingDomain] = useState<DomainCheck | null>(null);
+  const [duplicatingDomain, setDuplicatingDomain] = useState<DomainCheck | null>(null);
   const [isDomainModalOpen, setIsDomainModalOpen] = useState(false);
+  const [isDomainModalClosing, setIsDomainModalClosing] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const domains = useDomains();
   const addDomain = useAddDomain();
   const updateDomain = useUpdateDomain();
@@ -837,8 +1017,16 @@ function DomainsPage() {
     setDomainPath("/");
     setExpectedStatusCodes("200,301,302,401");
     setEditingDomain(null);
+    setDuplicatingDomain(null);
     setIsDomainModalOpen(false);
+    setIsDomainModalClosing(false);
     setFormError(null);
+  };
+
+  const closeDomainModal = () => {
+    if (isDomainModalClosing) return;
+    setIsDomainModalClosing(true);
+    window.setTimeout(resetDomainForm, 190);
   };
 
   const openAddDomain = () => {
@@ -846,6 +1034,8 @@ function DomainsPage() {
     setDomainPath("/");
     setExpectedStatusCodes("200,301,302,401");
     setEditingDomain(null);
+    setDuplicatingDomain(null);
+    setIsDomainModalClosing(false);
     setFormError(null);
     setIsDomainModalOpen(true);
   };
@@ -855,6 +1045,19 @@ function DomainsPage() {
     setDomainPath(domain.path);
     setExpectedStatusCodes(domain.expectedStatusCodes.join(","));
     setEditingDomain(domain);
+    setDuplicatingDomain(null);
+    setIsDomainModalClosing(false);
+    setFormError(null);
+    setIsDomainModalOpen(true);
+  };
+
+  const duplicateDomain = (domain: DomainCheck) => {
+    setDomainValue(domain.domain);
+    setDomainPath(domain.path);
+    setExpectedStatusCodes(domain.expectedStatusCodes.join(","));
+    setEditingDomain(null);
+    setDuplicatingDomain(domain);
+    setIsDomainModalClosing(false);
     setFormError(null);
     setIsDomainModalOpen(true);
   };
@@ -862,6 +1065,8 @@ function DomainsPage() {
   const saveDomain = async (event: React.FormEvent) => {
     event.preventDefault();
     setFormError(null);
+    setActionError(null);
+    setSuccessMessage(null);
 
     try {
       const input = {
@@ -870,14 +1075,34 @@ function DomainsPage() {
         expectedStatusCodes: parseExpectedStatusCodes(expectedStatusCodes)
       };
 
+      if (duplicatingDomain && domainTargetKey(input.domain, input.path) === domainTargetKey(duplicatingDomain.domain, duplicatingDomain.path)) {
+        throw new Error("Change the domain URL or path before creating the duplicate.");
+      }
+
       if (editingDomain) {
         await updateDomain.mutateAsync({ id: editingDomain.id, input });
+        setSuccessMessage(`${fullDomainUrl({ ...editingDomain, domain: input.domain, path: input.path })} was successfully updated.`);
       } else {
         await addDomain.mutateAsync(input);
+        if (duplicatingDomain) {
+          setSuccessMessage(`${fullDomainUrl({ ...duplicatingDomain, domain: input.domain, path: input.path })} was successfully duplicated.`);
+        }
       }
-      resetDomainForm();
+      closeDomainModal();
     } catch (error) {
       setFormError(normalizeApiError(error).message);
+    }
+  };
+
+  const removeStoredDomain = async (domain: DomainCheck) => {
+    setActionError(null);
+    setSuccessMessage(null);
+
+    try {
+      await removeDomain.mutateAsync(domain.id);
+      setSuccessMessage(`${fullDomainUrl(domain)} was successfully deleted.`);
+    } catch (error) {
+      setActionError(normalizeApiError(error).message);
     }
   };
 
@@ -886,22 +1111,27 @@ function DomainsPage() {
   return (
     <div className="page-stack">
       <Panel title="Domains / services" action={<div className="button-row"><button onClick={() => domains.refetch()}><RefreshCcw size={16} /> Check now</button><button onClick={openAddDomain}><Plus size={16} /> Add domain</button></div>}>
+        {actionError ? <div className="form-error">{actionError}</div> : null}
+        {successMessage ? <SuccessNotice key={successMessage} message={successMessage} onDismiss={setSuccessMessage} /> : null}
         {domains.data.length === 0 ? (
           <StateBlock title="No services configured" message="Add a public domain, internal URL, or set MONITORED_DOMAINS in the backend environment." />
         ) : (
-          domains.data.map((domain) => (
-            <DomainRow
-              key={domain.id}
-              domain={domain}
-              onCheck={() => domains.refetch()}
-              onEdit={domain.editable ? () => editDomain(domain) : undefined}
-              onRemove={domain.editable ? () => removeDomain.mutate(domain.id) : undefined}
-            />
-          ))
+          <div className="domain-list">
+            {domains.data.map((domain) => (
+              <DomainRow
+                key={domain.id}
+                domain={domain}
+                onCheck={() => domains.refetch()}
+                onDuplicate={domain.editable ? () => duplicateDomain(domain) : undefined}
+                onEdit={domain.editable ? () => editDomain(domain) : undefined}
+                onRemove={domain.editable ? () => void removeStoredDomain(domain) : undefined}
+              />
+            ))}
+          </div>
         )}
       </Panel>
       {isDomainModalOpen ? (
-        <Modal title={editingDomain ? "Edit domain / service" : "Add domain / service"} onClose={resetDomainForm}>
+        <Modal title={editingDomain ? "Edit domain / service" : duplicatingDomain ? "Duplicate domain / service" : "Add domain / service"} onClose={closeDomainModal} isClosing={isDomainModalClosing}>
           <form className="inline-form modal-form" onSubmit={saveDomain}>
             <label>
               Domain URL
@@ -915,9 +1145,9 @@ function DomainsPage() {
               Expected HTTP codes
               <input value={expectedStatusCodes} onChange={(event) => setExpectedStatusCodes(event.target.value)} placeholder="200,301,302,401" />
             </label>
-            <button type="submit" disabled={addDomain.isPending || updateDomain.isPending}>
-              {editingDomain ? <Pencil size={16} /> : <Plus size={16} />}
-              {editingDomain ? "Save edits" : "Add domain"}
+            <button className="modal-submit" type="submit" disabled={addDomain.isPending || updateDomain.isPending}>
+              {editingDomain ? null : duplicatingDomain ? <Copy size={16} /> : <Plus size={16} />}
+              {editingDomain ? "Save edits" : duplicatingDomain ? "Create duplicate" : "Add domain"}
             </button>
           </form>
           {formError ? <div className="form-error">{formError}</div> : null}
@@ -927,22 +1157,223 @@ function DomainsPage() {
   );
 }
 
+type AlertView = "active" | "resolved" | "all";
+
+function alertSource(alert: Alert) {
+  const resource = alert.affectedResource.toLowerCase();
+  if (resource === "docker" || resource.includes("container")) return "Docker";
+  if (resource.startsWith("http://") || resource.startsWith("https://")) return "Domain";
+  if (resource.includes("server") || resource.includes("node") || resource.includes("host")) return "Server";
+  return "NodeGuard";
+}
+
 function AlertsPage() {
   const [selected, setSelected] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"all" | Alert["severity"]>("all");
+  const [isDetailClosing, setIsDetailClosing] = useState(false);
+  const [view, setView] = useState<AlertView>("active");
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const detailCloseTimer = useRef<number | null>(null);
   const alerts = useAlerts("all");
   const alert = useAlert(selected);
+  const removeAlert = useRemoveAlert();
+  const allAlerts = alerts.data ?? [];
+  const activeCount = allAlerts.filter((item) => item.status === "active").length;
+  const resolvedCount = allAlerts.filter((item) => item.status === "resolved").length;
+  const viewAlerts = allAlerts.filter((item) => view === "all" || item.status === view);
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredAlerts = viewAlerts
+    .filter((item) => !normalizedQuery || [item.title, item.message, item.affectedResource, item.severity, item.status, alertSource(item)].join(" ").toLowerCase().includes(normalizedQuery))
+    .sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime());
+  const totalPages = Math.max(1, Math.ceil(filteredAlerts.length / pageSize));
+  const visiblePage = Math.min(page, totalPages);
+  const pageStart = (visiblePage - 1) * pageSize;
+  const pagedAlerts = filteredAlerts.slice(pageStart, pageStart + pageSize);
+
+  useEffect(() => setPage(1), [view, query, pageSize]);
+
+  useEffect(() => () => {
+    if (detailCloseTimer.current !== null) {
+      window.clearTimeout(detailCloseTimer.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selected && !filteredAlerts.some((item) => item.id === selected)) {
+      setSelected(null);
+      setIsDetailClosing(false);
+    }
+  }, [filteredAlerts, selected]);
+
+  const closeAlertDetail = () => {
+    if (!selected || isDetailClosing) return;
+    setIsDetailClosing(true);
+    detailCloseTimer.current = window.setTimeout(() => {
+      setSelected(null);
+      setIsDetailClosing(false);
+      detailCloseTimer.current = null;
+    }, 250);
+  };
+
+  const toggleAlertDetail = (id: string) => {
+    if (selected === id) {
+      closeAlertDetail();
+      return;
+    }
+
+    if (detailCloseTimer.current !== null) {
+      window.clearTimeout(detailCloseTimer.current);
+      detailCloseTimer.current = null;
+    }
+    setIsDetailClosing(false);
+    setSelected(id);
+  };
+
+  const deleteAlert = async (item: Alert) => {
+    setActionError(null);
+    setSuccessMessage(null);
+
+    try {
+      await removeAlert.mutateAsync(item.id);
+      if (selected === item.id) {
+        if (detailCloseTimer.current !== null) {
+          window.clearTimeout(detailCloseTimer.current);
+          detailCloseTimer.current = null;
+        }
+        setSelected(null);
+        setIsDetailClosing(false);
+      }
+      setSuccessMessage(`${item.title} was successfully deleted.`);
+    } catch (error) {
+      setActionError(normalizeApiError(error).message);
+    }
+  };
+
   if (alerts.isLoading) return <StateBlock title="Loading alerts" message="Generating current alerts." />;
   if (!alerts.data) return <StateBlock title="Alerts unavailable" message={normalizeApiError(alerts.error).message} />;
-  const filteredAlerts = filter === "all" ? alerts.data : filter === "resolved" ? alerts.data.filter((item) => item.status === "resolved") : alerts.data.filter((item) => item.severity === filter && item.status === "active");
+
+  const tabItems: { id: AlertView; label: string; count: number }[] = [
+    { id: "active", label: "Active alerts", count: activeCount },
+    { id: "resolved", label: "Resolved alerts", count: resolvedCount },
+    { id: "all", label: "All alerts", count: allAlerts.length }
+  ];
+  const panelTitle = tabItems.find((item) => item.id === view)?.label ?? "Alerts";
+
   return (
-    <div className="two-col">
-      <Panel title="Alerts" action={<div className="segmented compact-tabs">{(["all", "critical", "warning", "resolved"] as const).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value}</button>)}</div>}>
-        {filteredAlerts.length === 0 ? <StateBlock title="No alerts" message="No alerts match the current filter." /> : filteredAlerts.map((item) => <button className={`row-button ${selected === item.id ? "selected" : ""}`} key={item.id} onClick={() => setSelected(item.id)}><AlertRow alert={item} /></button>)}
+    <div className="page-stack alerts-page">
+      <div className="alert-view-tabs" role="tablist" aria-label="Alert views">
+        {tabItems.map((item) => (
+          <button
+            key={item.id}
+            role="tab"
+            aria-selected={view === item.id}
+            className={view === item.id ? "active" : ""}
+            onClick={() => setView(item.id)}
+          >
+            {item.label}
+            <span className={`alert-count ${item.id === "active" && item.count > 0 ? "has-active" : ""}`}>{item.count}</span>
+          </button>
+        ))}
+      </div>
+
+      <Panel
+        title={panelTitle}
+        action={(
+          <div className="alert-table-tools">
+            <div className="search alert-search">
+              <Search size={16} />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search alerts" aria-label="Search alerts" />
+            </div>
+            <button className="icon-only" onClick={() => alerts.refetch()} aria-label="Refresh alerts" title="Refresh alerts">
+              <RefreshCcw size={15} />
+            </button>
+          </div>
+        )}
+      >
+        {actionError ? <div className="form-error">{actionError}</div> : null}
+        {successMessage ? <SuccessNotice key={successMessage} message={successMessage} onDismiss={setSuccessMessage} /> : null}
+        {filteredAlerts.length === 0 ? (
+          <StateBlock title="No alerts" message={query ? "No alerts match the current search." : `No ${view === "all" ? "" : `${view} `}alerts are available.`} />
+        ) : (
+          <div className="alert-table-scroll">
+            <div className="alert-table" role="table" aria-label={panelTitle}>
+              <div className="alert-table-header" role="row">
+                <span role="columnheader">Alert name</span>
+                <span role="columnheader">State</span>
+                <span role="columnheader">Severity</span>
+                <span role="columnheader">Message</span>
+                <span role="columnheader">Source</span>
+                <span role="columnheader">Instance</span>
+                <span role="columnheader">Started</span>
+                <span role="columnheader">Last updated</span>
+                <span role="columnheader">Actions</span>
+              </div>
+              {pagedAlerts.map((item) => (
+                <div
+                  className={`alert-table-row ${selected === item.id ? "selected" : ""}`}
+                  key={item.id}
+                  role="row"
+                >
+                  <strong role="cell">{item.title}</strong>
+                  <span role="cell"><span className={`alert-state ${item.status}`}>{item.status === "active" ? "Active" : "Resolved"}</span></span>
+                  <span role="cell"><StatusPill status={item.severity} /></span>
+                  <span className="alert-message-cell" role="cell" title={item.message}>{item.message}</span>
+                  <span role="cell">{alertSource(item)}</span>
+                  <span className="alert-instance-cell" role="cell" title={item.affectedResource}>{item.affectedResource}</span>
+                  <time role="cell" dateTime={item.firstSeenAt}>{formatDateTime(item.firstSeenAt)}</time>
+                  <time role="cell" dateTime={item.lastSeenAt}>{formatRelativeTime(item.lastSeenAt)}</time>
+                  <div className="alert-row-actions" role="cell">
+                    <button
+                      className={`icon-only alert-detail-toggle ${selected === item.id ? "is-open" : ""}`}
+                      onClick={() => toggleAlertDetail(item.id)}
+                      aria-expanded={selected === item.id && !isDetailClosing}
+                      aria-label={`${selected === item.id && !isDetailClosing ? "Hide" : "View"} details for ${item.title}`}
+                      title={selected === item.id && !isDetailClosing ? "Hide details" : "View details"}
+                    >
+                      <ChevronRight size={15} />
+                    </button>
+                    <button className="icon-only danger-soft" onClick={() => void deleteAlert(item)} disabled={removeAlert.isPending} aria-label={`Delete ${item.title}`} title="Delete alert">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="alert-table-footer">
+          <span>
+            {filteredAlerts.length === 0 ? "0" : `${pageStart + 1}-${Math.min(pageStart + pageSize, filteredAlerts.length)}`} of {filteredAlerts.length}
+          </span>
+          <label>
+            Rows
+            <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
+              {[10, 25, 50].map((value) => <option value={value} key={value}>{value}</option>)}
+            </select>
+          </label>
+          <div className="alert-pagination">
+            <button className="icon-only" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={visiblePage === 1} aria-label="Previous alert page">
+              <ChevronLeft size={15} />
+            </button>
+            <span>{visiblePage} / {totalPages}</span>
+            <button className="icon-only" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={visiblePage === totalPages} aria-label="Next alert page">
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        </div>
       </Panel>
-      <Panel title="Alert detail">
-        {!selected ? <StateBlock title="Select an alert" message="Choose an alert to inspect failed checks, likely causes, and next steps." /> : !alert.data ? <StateBlock title="Loading alert" message="Reading alert detail." /> : <AlertDetail alert={alert.data} />}
-      </Panel>
+
+      {selected ? (
+        <div className={`alert-detail-collapse ${isDetailClosing ? "is-closing" : ""}`}>
+          <Panel title="Alert detail">
+            {!alert.data ? <StateBlock title="Loading alert" message="Reading alert detail." /> : <AlertDetail alert={alert.data} />}
+          </Panel>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1101,37 +1532,115 @@ function LaunchLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-function DomainRow({ domain, onCheck, onEdit, onRemove }: { domain: DomainCheck; onCheck?: () => void; onEdit?: () => void; onRemove?: () => void }) {
-  const hasActions = Boolean(onCheck || onEdit || onRemove);
+function DomainRow({ domain, onCheck, onDuplicate, onEdit, onRemove }: { domain: DomainCheck; onCheck?: () => void; onDuplicate?: () => void; onEdit?: () => void; onRemove?: () => void }) {
+  const hasActions = Boolean(onCheck || onDuplicate || onEdit || onRemove);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isDetailsClosing, setIsDetailsClosing] = useState(false);
   const displayUrl = fullDomainUrl(domain);
+  const trend = latencyTrend(domain);
+
+  const toggleDetails = () => {
+    if (isDetailsClosing) return;
+    if (!isExpanded) {
+      setIsExpanded(true);
+      return;
+    }
+
+    setIsDetailsClosing(true);
+    window.setTimeout(() => {
+      setIsExpanded(false);
+      setIsDetailsClosing(false);
+    }, 210);
+  };
+
+  if (!hasActions) {
+    return (
+      <div className="data-row domain-summary-row">
+        <span className="resource-cell">
+          <span className="resource-title">
+            <strong>{displayUrl}</strong>
+            <LaunchLink href={displayUrl} label={`Open ${displayUrl}`} />
+          </span>
+          <small>{domain.error ?? `${domain.https ? "HTTPS" : "HTTP"} · Expected ${domain.expectedStatusCodes.join(", ")} · Last checked ${formatRelativeTime(domain.lastCheckedAt)}`}</small>
+        </span>
+        <span>{domain.statusCode ? `HTTP ${domain.statusCode}` : "No status"}</span>
+        <span>{formatResponseTime(domain.responseTimeMs)}</span>
+        <span>{sslLabel(domain)}</span>
+        <StatusPill status={domain.status} />
+      </div>
+    );
+  }
 
   return (
-    <div className={`data-row ${hasActions ? "domain-action-row" : "domain-summary-row"}`}>
-      <span className="resource-cell">
-        <span className="resource-title">
-          <strong>{displayUrl}</strong>
-          <LaunchLink href={displayUrl} label={`Open ${displayUrl}`} />
+    <div className={`domain-entry ${isExpanded ? "is-expanded" : ""}`}>
+      <div className="data-row domain-action-row">
+        <span className="resource-cell">
+          <span className="resource-title">
+            <strong>{displayUrl}</strong>
+            <LaunchLink href={displayUrl} label={`Open ${displayUrl}`} />
+          </span>
+          <small>{domain.error ?? `${domain.https ? "HTTPS" : "HTTP"} · Expected ${domain.expectedStatusCodes.join(", ")} · Last checked ${formatRelativeTime(domain.lastCheckedAt)}`}</small>
         </span>
-        <small>{domain.error ?? `${domain.https ? "HTTPS" : "HTTP"} · Expected ${domain.expectedStatusCodes.join(", ")} · Last checked ${formatRelativeTime(domain.lastCheckedAt)}`}</small>
-      </span>
-      <span>{domain.statusCode ? `HTTP ${domain.statusCode}` : "No status"}</span>
-      <span>{formatResponseTime(domain.responseTimeMs)}</span>
-      <span>{sslLabel(domain)}</span>
-      <StatusPill status={domain.status} />
-      {onCheck ? (
-        <button className="icon-only" onClick={onCheck} aria-label={`Check ${domain.domain}`}>
-          <RefreshCcw size={15} />
-        </button>
-      ) : null}
-      {onEdit ? (
-        <button className="icon-only" onClick={onEdit} aria-label={`Edit ${domain.domain}`}>
-          <Pencil size={15} />
-        </button>
-      ) : null}
-      {onRemove ? (
-        <button className="icon-only danger-soft" onClick={onRemove} aria-label={`Remove ${domain.domain}`}>
-          <Trash2 size={15} />
-        </button>
+        <div className="domain-compact-metrics" aria-label={`HTTP ${domain.statusCode ?? "unavailable"}, response time ${formatResponseTime(domain.responseTimeMs)}, ${compactUptimeLabel(domain)}, ${compactSslLabel(domain)}`}>
+          <span>{domain.statusCode ? `HTTP ${domain.statusCode}` : "No status"}</span>
+          <span className={`latency-trend ${trend.tone}`} title={trend.label}>
+            {formatResponseTime(domain.responseTimeMs)} <span aria-hidden="true">{trend.symbol}</span>
+          </span>
+          <span>{compactUptimeLabel(domain)}</span>
+          <span>{compactSslLabel(domain)}</span>
+        </div>
+        <StatusPill status={domain.status} />
+        <div className="domain-row-actions">
+          <button
+            className="domain-details-toggle"
+            onClick={toggleDetails}
+            aria-expanded={isExpanded && !isDetailsClosing}
+            aria-label={`${isExpanded && !isDetailsClosing ? "Hide" : "Show"} details for ${domain.domain}`}
+          >
+            <span>Details</span>
+            <ChevronDown size={15} />
+          </button>
+          {onCheck ? (
+            <button className="icon-only" onClick={onCheck} aria-label={`Check ${domain.domain}`} title={`Check ${domain.domain}`}>
+              <RefreshCcw size={15} />
+            </button>
+          ) : null}
+          {onDuplicate ? (
+            <button className="icon-only" onClick={onDuplicate} aria-label={`Duplicate ${domain.domain}`} title={`Duplicate ${domain.domain}`}>
+              <Copy size={15} />
+            </button>
+          ) : null}
+          {onEdit ? (
+            <button className="icon-only" onClick={onEdit} aria-label={`Edit ${domain.domain}`} title={`Edit ${domain.domain}`}>
+              <Pencil size={15} />
+            </button>
+          ) : null}
+          {onRemove ? (
+            <button className="icon-only danger-soft" onClick={onRemove} aria-label={`Remove ${domain.domain}`} title={`Remove ${domain.domain}`}>
+              <Trash2 size={15} />
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {isExpanded ? (
+        <div className={`domain-expanded-details ${isDetailsClosing ? "is-closing" : ""}`}>
+          <div className="info-grid domain-detail-grid">
+            <Info label="Current status" value={getStatusLabel(domain.status)} />
+            <Info label="HTTP response" value={domain.statusCode ? `HTTP ${domain.statusCode}` : "No response"} />
+            <Info label="Current latency" value={formatResponseTime(domain.responseTimeMs)} />
+            <Info label="Previous latency" value={domain.previousResponseTimeMs === null ? "Collecting baseline" : formatResponseTime(domain.previousResponseTimeMs)} />
+            <Info label="Latency trend" value={trend.label} />
+            <Info label="30-day uptime" value={domain.uptimePercent === null ? "Collecting data" : `${domain.uptimePercent.toFixed(2)}%`} />
+            <Info label="History samples" value={domain.checkSamples.toLocaleString()} />
+            <Info label="Expected HTTP codes" value={domain.expectedStatusCodes.join(", ")} />
+            <Info label="Protocol" value={domain.https ? "HTTPS" : "HTTP"} />
+            <Info label="SSL expiration" value={domain.sslExpiresAt ? formatDateTime(domain.sslExpiresAt) : domain.https ? "Unavailable" : "Not applicable"} />
+            <Info label="Last checked" value={formatDateTime(domain.lastCheckedAt)} />
+            <Info label="Last successful" value={formatDateTime(domain.lastSuccessfulAt)} />
+            <Info label="Last failed" value={formatDateTime(domain.lastFailedAt)} />
+            <Info label="Latest result" value={domain.error ?? "Expected response received"} />
+          </div>
+        </div>
       ) : null}
     </div>
   );
@@ -1146,7 +1655,7 @@ function AlertRow({ alert }: { alert: Alert }) {
   );
 }
 
-function ServerMonitorRow({ monitor, onEdit, onRemove }: { monitor: MonitoredServerStatus; onEdit: () => void; onRemove: () => void }) {
+function ServerMonitorRow({ monitor, onDuplicate, onEdit, onRemove }: { monitor: MonitoredServerStatus; onDuplicate: () => void; onEdit: () => void; onRemove: () => void }) {
   return (
     <div className="data-row monitor-row">
       <span className="resource-cell">
@@ -1158,6 +1667,9 @@ function ServerMonitorRow({ monitor, onEdit, onRemove }: { monitor: MonitoredSer
         </small>
       </span>
       <StatusPill status={monitor.status} />
+      <button className="icon-only" onClick={onDuplicate} aria-label={`Duplicate ${monitor.name}`} title={`Duplicate ${monitor.name}`}>
+        <Copy size={15} />
+      </button>
       <button className="icon-only" onClick={onEdit} aria-label={`Edit ${monitor.name}`}>
         <Pencil size={15} />
       </button>
@@ -1168,7 +1680,7 @@ function ServerMonitorRow({ monitor, onEdit, onRemove }: { monitor: MonitoredSer
   );
 }
 
-function ContainerMonitorRow({ monitor, onEdit, onRemove }: { monitor: ContainerMonitorStatus; onEdit: () => void; onRemove: () => void }) {
+function ContainerMonitorRow({ monitor, onDuplicate, onEdit, onRemove }: { monitor: ContainerMonitorStatus; onDuplicate: () => void; onEdit: () => void; onRemove: () => void }) {
   return (
     <div className="data-row monitor-row">
       <span>
@@ -1181,6 +1693,9 @@ function ContainerMonitorRow({ monitor, onEdit, onRemove }: { monitor: Container
         </small>
       </span>
       <StatusPill status={monitor.status} />
+      <button className="icon-only" onClick={onDuplicate} aria-label={`Duplicate ${monitor.name}`} title={`Duplicate ${monitor.name}`}>
+        <Copy size={15} />
+      </button>
       <button className="icon-only" onClick={onEdit} aria-label={`Edit ${monitor.name}`}>
         <Pencil size={15} />
       </button>

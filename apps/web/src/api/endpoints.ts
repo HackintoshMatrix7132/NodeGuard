@@ -112,6 +112,10 @@ export function getAlert(config: ApiConfig, id: string) {
   return apiFetch<Alert>(config, `/api/alerts/${id}`);
 }
 
+export function removeAlert(config: ApiConfig, id: string) {
+  return apiFetch<{ removed: boolean }>(config, `/api/alerts/${id}`, { method: "DELETE" });
+}
+
 export function runChecks(config: ApiConfig) {
   return apiFetch<Overview>(config, "/api/checks/run", { method: "POST" });
 }
