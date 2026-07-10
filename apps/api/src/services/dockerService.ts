@@ -48,6 +48,31 @@ function formatPorts(ports: Docker.ContainerInfo["Ports"]) {
     .filter(Boolean);
 }
 
+function formatPublishedPorts(ports: Docker.ContainerInfo["Ports"]) {
+  return ports
+    .filter((port) => Boolean(port.PublicPort))
+    .map((port) => `${port.PublicPort}:${port.PrivatePort}${port.Type && port.Type !== "tcp" ? `/${port.Type}` : ""}`);
+}
+
+function composeStack(labels: Record<string, string> | undefined) {
+  return labels?.["com.docker.compose.project"] ?? labels?.["com.docker.stack.namespace"] ?? null;
+}
+
+function primaryIpAddress(details: Docker.ContainerInspectInfo | null) {
+  const networks = details?.NetworkSettings?.Networks;
+  if (!networks) {
+    return null;
+  }
+
+  for (const network of Object.values(networks)) {
+    if (network.IPAddress) {
+      return network.IPAddress;
+    }
+  }
+
+  return null;
+}
+
 async function inspectContainer(id: string) {
   try {
     return await docker.getContainer(id).inspect();
@@ -96,6 +121,8 @@ export async function getDockerSnapshot(): Promise<DockerSnapshot> {
           serverId: "local-node",
           name: normalizeName(item.Names),
           image: item.Image,
+          stack: composeStack(details?.Config?.Labels ?? item.Labels),
+          ipAddress: primaryIpAddress(details),
           status: normalizeStatus(item.State),
           state: item.State,
           health,
@@ -104,6 +131,7 @@ export async function getDockerSnapshot(): Promise<DockerSnapshot> {
           memoryMb: mb(details?.HostConfig?.Memory && details.HostConfig.Memory > 0 ? details.HostConfig.Memory : null),
           memoryLimitMb: mb(details?.HostConfig?.Memory && details.HostConfig.Memory > 0 ? details.HostConfig.Memory : null),
           ports: formatPorts(item.Ports),
+          publishedPorts: formatPublishedPorts(item.Ports),
           restartPolicy: details?.HostConfig?.RestartPolicy?.Name || null,
           startedAt,
           logs: await readLogs(item.Id)

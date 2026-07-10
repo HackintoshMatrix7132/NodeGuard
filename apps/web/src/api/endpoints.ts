@@ -1,4 +1,4 @@
-import type { Alert, AuthSession, Container, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, DockerSnapshot, DomainCheck, LoginInput, MetricSnapshot, MonitoredServerStatus, Overview, ServerListItem, Server } from "../types/nodeguard";
+import type { Alert, AuthSession, Container, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, DockerSnapshot, DomainCheck, LoginInput, MetricHistory, MetricHistoryRange, MetricSnapshot, MonitoredServerStatus, Overview, ServerListItem, Server } from "../types/nodeguard";
 import type { ApiConfig } from "./client";
 import { apiFetch } from "./client";
 
@@ -53,6 +53,10 @@ export function getServer(config: ApiConfig, id: string) {
 
 export function getServerMetrics(config: ApiConfig, id: string) {
   return apiFetch<MetricSnapshot>(config, `/api/servers/${id}/metrics`);
+}
+
+export function getServerMetricHistory(config: ApiConfig, id: string, range: MetricHistoryRange) {
+  return apiFetch<MetricHistory>(config, `/api/servers/${id}/metrics/history?range=${range}`);
 }
 
 export function getContainers(config: ApiConfig) {

@@ -85,6 +85,7 @@ PUT /api/servers/monitors/:id
 DELETE /api/servers/monitors/:id
 GET /api/servers/:id
 GET /api/servers/:id/metrics
+GET /api/servers/:id/metrics/history?range=1h|6h|24h|7d|30d
 GET /api/servers/:id/containers
 GET /api/containers
 GET /api/containers/monitors
@@ -113,6 +114,7 @@ SQLite stores:
 - Server monitors.
 - Container monitors.
 - Domain monitors with path, expected status codes, last success/failure, and minute-sampled 30-day check history.
+- Minute-sampled CPU, RAM, disk, and swap history with configurable retention of at least 30 days.
 - Alert history with first seen, last seen, occurrence count, active/resolved status, troubleshooting detail, and persistent active-alert dismissal.
 
 Legacy JSON monitor files may be imported once if they still exist, but SQLite is authoritative.
@@ -123,6 +125,8 @@ Legacy JSON monitor files may be imported once if they still exist, but SQLite i
 - Do not copy Grafana branding.
 - Preserve realistic `muthu.eu` demo data for portfolio screenshots.
 - Domain/service rows should show URL/path, HTTP status, latency trend, rolling uptime, SSL state, expected status codes, health, and expandable diagnostics.
+- Docker containers should use real metadata in a dense read-only table on desktop and compact cards on mobile; keep runtime state separate from Docker health and never imply lifecycle controls.
+- Server resource-history charts must use persisted real samples outside Demo Mode, open individually from their summary cards, and remain responsive without horizontal scrolling.
 - Server monitors may allow self-signed HTTPS per monitor for internal homelab tools such as Proxmox; do not disable TLS verification globally.
 - Alerts should use the dense searchable table, support persisted deletion/dismissal, and provide toggleable detail explaining what happened, first/last seen, occurrence count, likely cause, failed checks, and suggested next steps.
 - Keep UI elements aligned and prevent status pills/actions from overflowing panel boundaries.

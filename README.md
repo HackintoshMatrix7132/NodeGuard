@@ -19,14 +19,14 @@ The project is designed for a real self-hosted deployment at `nodeguard.muthu.eu
 - Password login screen backed by secure HTTP-only sessions.
 - Modern dark dashboard UI with sidebar navigation, sidebar collapse, subtle professional motion, and screenshot-friendly styling.
 - Dashboard overview with overall status, main issue, active issues, real status breakdowns, recent alerts, and domain reachability.
-- Server page with CPU, RAM, disk, swap, uptime, OS, kernel, Docker availability, and monitored server checks.
+- Server page with clickable CPU, RAM, disk, and swap summaries plus persistent per-resource history across 1-hour to 30-day ranges.
 - Monitored server support for internal NodeGuard backends or health URLs.
 - Per-monitor self-signed HTTPS option for internal services such as Proxmox.
-- Docker containers page with container status, health, image, uptime, ports, limited log preview, and monitored container checks.
+- Docker containers page with a searchable, filterable, sortable read-only table for runtime state, Docker health, Compose/Swarm stack, image, container IP, published ports, uptime, responsive mobile cards, detail inspection, limited log preview, and monitored container checks.
 - Domains / services page for public domains, internal URLs, reverse-proxy routes, paths, expected HTTP status codes, latency trends, rolling 30-day uptime, SSL state, expanded diagnostics, edit/delete/duplicate, and manual checks.
 - Alerts page with active/resolved/all views, search, pagination, dense operational columns, toggleable alert detail, persisted history, and alert deletion/dismissal.
 - Settings page with refresh interval, screenshot privacy, diagnostics export, demo mode, session details, and logout.
-- Demo mode with realistic `muthu.eu` sample data for screenshots.
+- Fully isolated Demo Mode with a populated multi-server homelab, varied Docker/runtime health, endpoint states, resource trends, and active/resolved alert history.
 - Production Docker image that serves the web UI and API from one container.
 
 ## Tech Stack
@@ -205,6 +205,8 @@ MONITORED_DOMAINS=https://bit.muthu.eu,https://cloud.muthu.eu,https://status.mut
 SERVER_DISPLAY_NAME=local-nodeguard-host
 LOG_PREVIEW_LINES=80
 DOMAIN_CHECK_TIMEOUT_MS=5000
+METRIC_SAMPLE_INTERVAL_SECONDS=60
+METRIC_HISTORY_RETENTION_DAYS=30
 CPU_WARNING_PERCENT=80
 CPU_CRITICAL_PERCENT=90
 MEMORY_WARNING_PERCENT=80
@@ -242,6 +244,7 @@ PUT /api/servers/monitors/:id
 DELETE /api/servers/monitors/:id
 GET /api/servers/:id
 GET /api/servers/:id/metrics
+GET /api/servers/:id/metrics/history?range=1h|6h|24h|7d|30d
 GET /api/servers/:id/containers
 GET /api/containers
 GET /api/containers/monitors

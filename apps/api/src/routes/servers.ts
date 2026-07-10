@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { getMonitoringSnapshot } from "../services/snapshotService.js";
+import { captureMetricSample, getMetricHistory, parseMetricHistoryRange } from "../services/metricHistoryService.js";
 import { addMonitoredServer, listMonitoredServerStatuses, removeMonitoredServer, updateMonitoredServer } from "../services/serverMonitorService.js";
 
 export const serversRouter = Router();
@@ -92,6 +93,26 @@ serversRouter.get("/:id/metrics", async (request, response, next) => {
     }
 
     response.json(snapshot.metrics);
+  } catch (error) {
+    next(error);
+  }
+});
+
+serversRouter.get("/:id/metrics/history", async (request, response, next) => {
+  try {
+    if (request.params.id !== "local-node") {
+      response.status(404).json({ error: "not_found", message: "Server metric history not found." });
+      return;
+    }
+
+    const range = parseMetricHistoryRange(request.query.range ?? "1h");
+    if (!range) {
+      response.status(400).json({ error: "invalid_range", message: "Range must be one of: 1h, 6h, 24h, 7d, 30d." });
+      return;
+    }
+
+    await captureMetricSample();
+    response.json(getMetricHistory(request.params.id, range));
   } catch (error) {
     next(error);
   }

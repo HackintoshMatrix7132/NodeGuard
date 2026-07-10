@@ -77,6 +77,18 @@ database.exec(`
     UNIQUE(domain_id, sample_minute)
   );
 
+  CREATE TABLE IF NOT EXISTS metric_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id TEXT NOT NULL,
+    sample_minute INTEGER NOT NULL,
+    cpu_usage_percent REAL,
+    memory_usage_percent REAL,
+    disk_usage_percent REAL,
+    swap_usage_percent REAL,
+    sampled_at TEXT NOT NULL,
+    UNIQUE(server_id, sample_minute)
+  );
+
   CREATE TABLE IF NOT EXISTS alert_history (
     id TEXT PRIMARY KEY,
     severity TEXT NOT NULL,
@@ -121,6 +133,7 @@ database.exec(`
   CREATE INDEX IF NOT EXISTS idx_alert_history_status ON alert_history(status);
   CREATE INDEX IF NOT EXISTS idx_alert_history_last_seen ON alert_history(last_seen_at);
   CREATE INDEX IF NOT EXISTS idx_domain_check_history_domain_time ON domain_check_history(domain_id, checked_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_metric_history_server_time ON metric_history(server_id, sampled_at DESC);
   CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(token_hash);
   CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
 `);
@@ -136,4 +149,8 @@ function hasColumn(tableName: string, columnName: string) {
 
 if (!hasColumn("server_monitors", "allow_insecure_tls")) {
   database.prepare("ALTER TABLE server_monitors ADD COLUMN allow_insecure_tls INTEGER NOT NULL DEFAULT 0").run();
+}
+
+if (!hasColumn("metric_history", "swap_usage_percent")) {
+  database.prepare("ALTER TABLE metric_history ADD COLUMN swap_usage_percent REAL").run();
 }

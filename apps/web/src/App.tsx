@@ -1,4 +1,4 @@
-import { AlertTriangle, Bell, Boxes, ChevronDown, ChevronLeft, ChevronRight, Copy, ExternalLink, Eye, EyeOff, Gauge, Globe2, LogOut, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RefreshCcw, Search, Server, Settings, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Bell, Boxes, ChevronDown, ChevronLeft, ChevronRight, Copy, ExternalLink, Eye, EyeOff, Gauge, Globe2, LogOut, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RefreshCcw, Search, Server, Settings, Trash2, X } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 
 import { getDefaultBackendUrl, normalizeBackendUrl } from "./api/client";
@@ -20,6 +20,7 @@ import {
   useRemoveServerMonitor,
   useRunChecks,
   useServer,
+  useServerMetricHistory,
   useServerMetrics,
   useServerMonitors,
   useUpdateContainerMonitor,
@@ -28,13 +29,15 @@ import {
   useLogin
 } from "./hooks/useNodeGuardQueries";
 import { useSettingsStore } from "./store/settingsStore";
-import type { Alert, Container, ContainerMonitorStatus, DomainCheck, HealthStatus, MonitoredServerStatus, Server as NodeGuardServer } from "./types/nodeguard";
+import type { Alert, Container, ContainerMonitorStatus, DomainCheck, HealthStatus, MetricHistory, MetricHistoryPoint, MetricHistoryRange, MetricHistorySummary, MonitoredServerStatus, Server as NodeGuardServer } from "./types/nodeguard";
 import { formatBytes, formatDateTime, formatPercentage, formatRelativeTime, formatResponseTime, formatUptime } from "./utils/format";
 import { getStatusLabel, getStatusTone } from "./utils/status";
 
 type View = "dashboard" | "server" | "containers" | "domains" | "alerts" | "settings";
 type MetricTone = "blue" | "green" | "orange" | "red" | "purple";
 type BreakdownItem = { label: string; value: string; tone?: MetricTone };
+type HistoricalResource = "cpu" | "memory" | "disk" | "swap";
+type HistoricalMetricKey = "cpuUsagePercent" | "memoryUsagePercent" | "diskUsagePercent" | "swapUsagePercent";
 
 function LogoMark({ className, label }: { className: string; label?: string }) {
   return (
@@ -97,6 +100,7 @@ function MetricCard({
   detail,
   tone = "blue",
   onClick,
+  selected = false,
   subdued = false,
   indicator
 }: {
@@ -105,6 +109,7 @@ function MetricCard({
   detail: string;
   tone?: MetricTone;
   onClick?: () => void;
+  selected?: boolean;
   subdued?: boolean;
   indicator?: React.ReactNode;
 }) {
@@ -118,7 +123,7 @@ function MetricCard({
   );
 
   if (onClick) {
-    return <button className={`metric-card metric-button ${tone}`} onClick={onClick}>{content}</button>;
+    return <button className={`metric-card metric-button ${tone} ${selected ? "selected" : ""}`} onClick={onClick} aria-pressed={selected} aria-expanded={selected}>{content}</button>;
   }
 
   return (
@@ -569,6 +574,8 @@ function formatIpAddresses(server: NodeGuardServer) {
 }
 
 function ServerPage() {
+  const [historyRange, setHistoryRange] = useState<MetricHistoryRange>("1h");
+  const [selectedResource, setSelectedResource] = useState<HistoricalResource | null>(null);
   const [monitorName, setMonitorName] = useState("");
   const [monitorUrl, setMonitorUrl] = useState("");
   const [monitorApiKey, setMonitorApiKey] = useState("");
@@ -582,10 +589,14 @@ function ServerPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const server = useServer("local-node");
   const metrics = useServerMetrics("local-node");
+  const metricHistory = useServerMetricHistory("local-node", historyRange, selectedResource !== null);
   const serverMonitors = useServerMonitors();
   const addServerMonitor = useAddServerMonitor();
   const updateServerMonitor = useUpdateServerMonitor();
   const removeServerMonitor = useRemoveServerMonitor();
+  const toggleResourceHistory = (resource: HistoricalResource) => {
+    setSelectedResource((current) => current === resource ? null : resource);
+  };
 
   const resetMonitorForm = () => {
     setMonitorName("");
@@ -710,6 +721,8 @@ function ServerPage() {
           value={formatPercentage(metrics.data.cpu.usagePercent)}
           detail={`Load ${metrics.data.cpu.loadAverage ?? "Unavailable"} · Last checked ${formatDateTime(metrics.data.createdAt)}`}
           tone="blue"
+          onClick={() => toggleResourceHistory("cpu")}
+          selected={selectedResource === "cpu"}
           indicator={<MetricMeter value={metrics.data.cpu.usagePercent ?? 0} tone="blue" label="Current usage" rows={[
             { label: "Load average", value: String(metrics.data.cpu.loadAverage ?? "Unavailable"), tone: "blue" }
           ]} />}
@@ -719,6 +732,8 @@ function ServerPage() {
           value={formatPercentage(metrics.data.memory.usagePercent)}
           detail={`${formatBytes(metrics.data.memory.usedGb)} / ${formatBytes(metrics.data.memory.totalGb)} used`}
           tone="green"
+          onClick={() => toggleResourceHistory("memory")}
+          selected={selectedResource === "memory"}
           indicator={<MetricMeter value={metrics.data.memory.usagePercent ?? 0} tone="green" label="Memory used" rows={[
             { label: "Used", value: formatBytes(metrics.data.memory.usedGb), tone: "green" },
             { label: "Total", value: formatBytes(metrics.data.memory.totalGb) }
@@ -729,6 +744,8 @@ function ServerPage() {
           value={formatPercentage(metrics.data.disk.usagePercent)}
           detail={`${formatBytes(metrics.data.disk.usedGb)} / ${formatBytes(metrics.data.disk.totalGb)} used`}
           tone="orange"
+          onClick={() => toggleResourceHistory("disk")}
+          selected={selectedResource === "disk"}
           indicator={<MetricMeter value={metrics.data.disk.usagePercent ?? 0} tone="orange" label="Disk used" rows={[
             { label: "Used", value: formatBytes(metrics.data.disk.usedGb), tone: "orange" },
             { label: "Total", value: formatBytes(metrics.data.disk.totalGb) }
@@ -739,6 +756,8 @@ function ServerPage() {
           value={metrics.data.swap.usagePercent === null ? "Not available" : formatPercentage(metrics.data.swap.usagePercent)}
           detail={metrics.data.swap.usagePercent === null ? "Not available on this host" : `${formatBytes(metrics.data.swap.usedGb)} / ${formatBytes(metrics.data.swap.totalGb)} used`}
           tone="purple"
+          onClick={() => toggleResourceHistory("swap")}
+          selected={selectedResource === "swap"}
           subdued={metrics.data.swap.usagePercent === null}
           indicator={metrics.data.swap.usagePercent === null ? (
             <MetricDiagnostic rows={[
@@ -753,6 +772,16 @@ function ServerPage() {
           )}
         />
       </div>
+      {selectedResource ? (
+        <ResourceHistory
+          resource={selectedResource}
+          range={historyRange}
+          onRangeChange={setHistoryRange}
+          history={metricHistory.data}
+          isLoading={metricHistory.isLoading}
+          error={metricHistory.error}
+        />
+      ) : null}
       <Panel title="Monitored servers" action={<button onClick={openAddMonitor}><Plus size={16} /> Add server</button>}>
         {actionError ? <div className="form-error">{actionError}</div> : null}
         {successMessage ? <SuccessNotice key={successMessage} message={successMessage} onDismiss={setSuccessMessage} /> : null}
@@ -812,9 +841,206 @@ function ServerPage() {
   );
 }
 
+const historyRangeOptions: Array<{ value: MetricHistoryRange; label: string }> = [
+  { value: "1h", label: "1H" },
+  { value: "6h", label: "6H" },
+  { value: "24h", label: "24H" },
+  { value: "7d", label: "7D" },
+  { value: "30d", label: "30D" }
+];
+
+const historicalResourceConfig: Record<HistoricalResource, { title: string; metricKey: HistoricalMetricKey; tone: "cyan" | "green" | "blue" | "purple" }> = {
+  cpu: { title: "CPU usage", metricKey: "cpuUsagePercent", tone: "cyan" },
+  memory: { title: "RAM usage", metricKey: "memoryUsagePercent", tone: "green" },
+  disk: { title: "Disk usage", metricKey: "diskUsagePercent", tone: "blue" },
+  swap: { title: "Swap usage", metricKey: "swapUsagePercent", tone: "purple" }
+};
+
+function ResourceHistory({ resource, range, onRangeChange, history, isLoading, error }: { resource: HistoricalResource; range: MetricHistoryRange; onRangeChange: (range: MetricHistoryRange) => void; history?: MetricHistory; isLoading: boolean; error: unknown }) {
+  const config = historicalResourceConfig[resource];
+  return (
+    <Panel
+      title={`${config.title} history`}
+      action={(
+        <div className="history-ranges" role="group" aria-label="Metric history time range">
+          {historyRangeOptions.map((option) => (
+            <button
+              key={option.value}
+              className={range === option.value ? "active" : ""}
+              onClick={() => onRangeChange(option.value)}
+              aria-pressed={range === option.value}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    >
+      {isLoading ? <StateBlock title="Loading resource history" message={`Reading persisted ${config.title.toLowerCase()} samples.`} /> : null}
+      {!isLoading && error && !history ? <StateBlock title="History unavailable" message={normalizeApiError(error).message} /> : null}
+      {!isLoading && error && history ? <div className="stale-notice">Showing the last available resource history. Live history refresh failed.</div> : null}
+      {!isLoading && history && history.points.length === 0 ? (
+        <StateBlock title="No historical samples yet" message="NodeGuard has started collecting metrics. History will appear as samples are recorded." />
+      ) : null}
+      {!isLoading && history && history.points.length > 0 ? (
+        <div className="history-chart-grid">
+          <MetricHistoryChart title={config.title} metricKey={config.metricKey} tone={config.tone} history={history} summary={history.summary[resource]} />
+        </div>
+      ) : null}
+    </Panel>
+  );
+}
+
+function formatHistoryAxisTime(timestamp: string, range: MetricHistoryRange) {
+  const date = new Date(timestamp);
+  if (range === "7d" || range === "30d") {
+    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+  }
+  return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function formatHistoryTooltipTime(timestamp: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).format(new Date(timestamp));
+}
+
+function availableMetricPoints(points: MetricHistoryPoint[], metricKey: HistoricalMetricKey) {
+  return points.filter((point): point is MetricHistoryPoint & Record<HistoricalMetricKey, number> => typeof point[metricKey] === "number");
+}
+
+function MetricHistoryChart({ title, metricKey, tone, history, summary }: { title: string; metricKey: HistoricalMetricKey; tone: "cyan" | "green" | "blue" | "purple"; history: MetricHistory; summary: MetricHistorySummary }) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const points = availableMetricPoints(history.points, metricKey);
+  const width = 800;
+  const height = 250;
+  const plot = { left: 48, right: 16, top: 18, bottom: 34 };
+  const plotWidth = width - plot.left - plot.right;
+  const plotHeight = height - plot.top - plot.bottom;
+  const fromMs = new Date(history.from).getTime();
+  const toMs = new Date(history.to).getTime();
+  const durationMs = Math.max(toMs - fromMs, 1);
+  const pointPosition = (point: MetricHistoryPoint) => ({
+    x: plot.left + ((new Date(point.timestamp).getTime() - fromMs) / durationMs) * plotWidth,
+    y: plot.top + (1 - (point[metricKey] as number) / 100) * plotHeight
+  });
+  const path = points.map((point, index) => {
+    const position = pointPosition(point);
+    return `${index === 0 ? "M" : "L"}${position.x.toFixed(2)} ${position.y.toFixed(2)}`;
+  }).join(" ");
+  const activePoint = activeIndex === null ? null : points[activeIndex];
+  const activePosition = activePoint ? pointPosition(activePoint) : null;
+  const xTicks = Array.from({ length: 5 }, (_, index) => {
+    const ratio = index / 4;
+    return { x: plot.left + ratio * plotWidth, timestamp: new Date(fromMs + ratio * durationMs).toISOString() };
+  });
+
+  const selectNearestPoint = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (points.length === 0) return;
+    const matrix = event.currentTarget.getScreenCTM();
+    if (!matrix) return;
+    const pointer = event.currentTarget.createSVGPoint();
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+    const svgX = pointer.matrixTransform(matrix.inverse()).x;
+    let nearestIndex = 0;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    points.forEach((point, index) => {
+      const distance = Math.abs(pointPosition(point).x - svgX);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = index;
+      }
+    });
+    setActiveIndex(nearestIndex);
+  };
+
+  return (
+    <article className={`history-chart-card ${tone}`}>
+      <div className="history-chart-heading">
+        <h3>{title}</h3>
+        <div className="history-stat-row">
+          <span>Current <strong>{formatPercentage(summary.current)}</strong></span>
+          <span>Average <strong>{formatPercentage(summary.average)}</strong></span>
+          <span>Peak <strong>{formatPercentage(summary.peak)}</strong></span>
+        </div>
+      </div>
+      {points.length === 0 ? (
+        <StateBlock title={`${title} unavailable`} message="This metric was unavailable in the selected period." />
+      ) : (
+        <div className="history-chart-wrap">
+          <svg
+            className="history-chart"
+            viewBox={`0 0 ${width} ${height}`}
+            role="img"
+            aria-label={`${title} from ${formatHistoryTooltipTime(history.from)} to ${formatHistoryTooltipTime(history.to)}`}
+            onPointerMove={selectNearestPoint}
+            onPointerDown={selectNearestPoint}
+            onPointerLeave={() => setActiveIndex(null)}
+          >
+            {[0, 25, 50, 75, 100].map((value) => {
+              const y = plot.top + (1 - value / 100) * plotHeight;
+              return (
+                <g key={value}>
+                  <line className="history-grid-line" x1={plot.left} x2={width - plot.right} y1={y} y2={y} />
+                  <text className="history-axis-label" x={plot.left - 9} y={y + 4} textAnchor="end">{value}%</text>
+                </g>
+              );
+            })}
+            {xTicks.map((tick, index) => (
+              <text key={tick.timestamp} className="history-axis-label" x={tick.x} y={height - 8} textAnchor={index === 0 ? "start" : index === xTicks.length - 1 ? "end" : "middle"}>
+                {formatHistoryAxisTime(tick.timestamp, history.range)}
+              </text>
+            ))}
+            <path className="history-line" d={path} />
+            {points.length === 1 ? (() => {
+              const position = pointPosition(points[0]);
+              return <circle className="history-point" cx={position.x} cy={position.y} r="4" />;
+            })() : null}
+            {activePoint && activePosition ? (
+              <g className="history-tooltip">
+                <line x1={activePosition.x} x2={activePosition.x} y1={plot.top} y2={height - plot.bottom} />
+                <circle cx={activePosition.x} cy={activePosition.y} r="5" />
+                <g transform={`translate(${Math.min(Math.max(activePosition.x - 76, plot.left), width - 168)}, ${Math.max(activePosition.y - 57, 4)})`}>
+                  <rect width="152" height="44" rx="4" />
+                  <text x="9" y="17">{formatHistoryTooltipTime(activePoint.timestamp)}</text>
+                  <text className="history-tooltip-value" x="9" y="35">{formatPercentage(activePoint[metricKey])}</text>
+                </g>
+              </g>
+            ) : null}
+          </svg>
+        </div>
+      )}
+    </article>
+  );
+}
+
+type ContainerSortKey = "name" | "state" | "health" | "stack" | "image" | "ipAddress" | "publishedPorts" | "uptime";
+type SortDirection = "asc" | "desc";
+
+function containerSortValue(container: Container, key: ContainerSortKey): string | number {
+  if (key === "state") return container.status;
+  if (key === "stack") return container.stack ?? "";
+  if (key === "ipAddress") return container.ipAddress ?? "";
+  if (key === "publishedPorts") return container.publishedPorts.join(", ");
+  if (key === "uptime") {
+    return container.startedAt ? Date.now() - new Date(container.startedAt).getTime() : -1;
+  }
+  return container[key];
+}
+
 function ContainersPage() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [isContainerDetailClosing, setIsContainerDetailClosing] = useState(false);
+  const [stateFilter, setStateFilter] = useState<"all" | Container["status"]>("all");
+  const [healthFilter, setHealthFilter] = useState<"all" | Container["health"]>("all");
+  const [sortKey, setSortKey] = useState<ContainerSortKey>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [monitorName, setMonitorName] = useState("");
   const [containerRef, setContainerRef] = useState("");
   const [editingMonitor, setEditingMonitor] = useState<ContainerMonitorStatus | null>(null);
@@ -826,12 +1052,84 @@ function ContainersPage() {
   const [editFormError, setEditFormError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const containerDetailRef = useRef<HTMLDivElement | null>(null);
+  const containerDetailTimerRef = useRef<number | null>(null);
   const containers = useContainers();
   const container = useContainer(selected);
   const addContainerMonitor = useAddContainerMonitor();
   const updateContainerMonitor = useUpdateContainerMonitor();
   const removeContainerMonitor = useRemoveContainerMonitor();
-  const filtered = useMemo(() => (containers.data?.containers ?? []).filter((item) => [item.name, item.image, item.status, item.health].join(" ").toLowerCase().includes(query.toLowerCase())), [containers.data, query]);
+  const filtered = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return (containers.data?.containers ?? [])
+      .filter((item) => stateFilter === "all" || item.status === stateFilter)
+      .filter((item) => healthFilter === "all" || item.health === healthFilter)
+      .filter((item) => !normalizedQuery || [
+        item.name,
+        item.image,
+        item.stack,
+        item.ipAddress,
+        item.status,
+        item.health,
+        item.publishedPorts.join(" ")
+      ].filter(Boolean).join(" ").toLowerCase().includes(normalizedQuery))
+      .sort((left, right) => {
+        const leftValue = containerSortValue(left, sortKey);
+        const rightValue = containerSortValue(right, sortKey);
+        const comparison = typeof leftValue === "number" && typeof rightValue === "number"
+          ? leftValue - rightValue
+          : String(leftValue).localeCompare(String(rightValue), undefined, { numeric: true, sensitivity: "base" });
+        return sortDirection === "asc" ? comparison : -comparison;
+      });
+  }, [containers.data, healthFilter, query, sortDirection, sortKey, stateFilter]);
+
+  const changeSort = (key: ContainerSortKey) => {
+    if (sortKey === key) {
+      setSortDirection((direction) => direction === "asc" ? "desc" : "asc");
+      return;
+    }
+    setSortKey(key);
+    setSortDirection("asc");
+  };
+
+  const toggleContainerDetail = (containerId: string) => {
+    if (selected === containerId) {
+      if (isContainerDetailClosing) return;
+      setIsContainerDetailClosing(true);
+      containerDetailTimerRef.current = window.setTimeout(() => {
+        setSelected(null);
+        setIsContainerDetailClosing(false);
+        containerDetailTimerRef.current = null;
+      }, 240);
+      return;
+    }
+
+    if (containerDetailTimerRef.current !== null) {
+      window.clearTimeout(containerDetailTimerRef.current);
+      containerDetailTimerRef.current = null;
+    }
+    setIsContainerDetailClosing(false);
+    setSelected(containerId);
+  };
+
+  useEffect(() => {
+    if (selected && !filtered.some((item) => item.id === selected)) {
+      setIsContainerDetailClosing(false);
+      setSelected(null);
+    }
+  }, [filtered, selected]);
+
+  useEffect(() => {
+    if (selected && containerDetailRef.current) {
+      containerDetailRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [selected]);
+
+  useEffect(() => () => {
+    if (containerDetailTimerRef.current !== null) {
+      window.clearTimeout(containerDetailTimerRef.current);
+    }
+  }, []);
 
   const resetAddForm = () => {
     setMonitorName("");
@@ -929,13 +1227,79 @@ function ContainersPage() {
     <div className="page-stack">
       <StaleNotice isError={containers.isError} dataUpdatedAt={containers.dataUpdatedAt} />
       {!containers.data.dockerAvailable ? <DockerUnavailable message={containers.data.message ?? "Docker is not available on this host."} /> : null}
-      <Panel title="Docker containers" action={<div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search containers" /></div>}>
-        {filtered.length === 0 ? <StateBlock title="No containers found" message={containers.data.dockerAvailable ? "No containers matched the current filter." : "Docker data is currently unavailable. Check Docker access on the backend or clear the search filter."} /> : (
-          <div className="table">
-            {filtered.map((item) => <ContainerRow key={item.id} container={item} onSelect={() => setSelected(item.id)} />)}
+      <Panel
+        title="Docker containers"
+        action={(
+          <div className="container-table-tools">
+            <div className="search container-search">
+              <Search size={16} />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search containers" aria-label="Search containers" />
+            </div>
+            <label className="container-filter">
+              <span>State</span>
+              <select value={stateFilter} onChange={(event) => setStateFilter(event.target.value as "all" | Container["status"])}>
+                <option value="all">All states</option>
+                <option value="running">Running</option>
+                <option value="restarting">Restarting</option>
+                <option value="stopped">Stopped</option>
+                <option value="exited">Exited</option>
+              </select>
+            </label>
+            <label className="container-filter">
+              <span>Health</span>
+              <select value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as "all" | Container["health"])}>
+                <option value="all">All health</option>
+                <option value="healthy">Healthy</option>
+                <option value="unhealthy">Unhealthy</option>
+                <option value="starting">Starting</option>
+                <option value="none">No healthcheck</option>
+              </select>
+            </label>
+            <button className="icon-only" onClick={() => containers.refetch()} disabled={containers.isFetching} aria-label="Refresh containers" title="Refresh containers">
+              <RefreshCcw className={containers.isFetching ? "is-spinning" : ""} size={15} />
+            </button>
+          </div>
+        )}
+      >
+        {filtered.length === 0 ? <StateBlock title="No containers found" message={containers.data.dockerAvailable ? "No containers matched the current search and filters." : "Docker data is currently unavailable. Check Docker access on the backend."} /> : (
+          <div className="container-results">
+            <div className="container-table-scroll">
+              <div className="container-table" role="table" aria-label="Docker containers">
+                <ContainerTableHeader sortKey={sortKey} sortDirection={sortDirection} onSort={changeSort} />
+                {filtered.map((item) => (
+                  <ContainerTableRow
+                    key={item.id}
+                    container={item}
+                    selected={selected === item.id}
+                    onSelect={() => toggleContainerDetail(item.id)}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="container-mobile-list">
+              {filtered.map((item) => (
+                <ContainerMobileCard
+                  key={item.id}
+                  container={item}
+                  selected={selected === item.id}
+                  onSelect={() => toggleContainerDetail(item.id)}
+                />
+              ))}
+            </div>
           </div>
         )}
       </Panel>
+      {selected ? (
+        <div ref={containerDetailRef} className={`container-detail-collapse ${isContainerDetailClosing ? "is-closing" : ""}`}>
+          <div className="container-detail-target">
+            <Panel title={container.data?.name ?? "Container detail"} action={<span className="read-only-label">Read-only details</span>}>
+              {container.isLoading ? <StateBlock title="Loading detail" message="Reading container inspection data." /> : null}
+              {container.isError ? <StateBlock title="Container detail unavailable" message={normalizeApiError(container.error).message} /> : null}
+              {container.data ? <ContainerDetail container={container.data} /> : null}
+            </Panel>
+          </div>
+        </div>
+      ) : null}
       <Panel title="Monitored containers">
         <form className="inline-form compact-form" onSubmit={saveMonitor}>
           <label>
@@ -969,11 +1333,6 @@ function ContainersPage() {
           </div>
         )}
       </Panel>
-      {selected ? (
-        <Panel title={container.data?.name ?? "Container detail"}>
-          {!container.data ? <StateBlock title="Loading detail" message="Reading container detail." /> : <ContainerDetail container={container.data} />}
-        </Panel>
-      ) : null}
       {isMonitorModalOpen && (editingMonitor || duplicatingMonitor) ? (
         <Modal title={editingMonitor ? "Edit monitored container" : "Duplicate monitored container"} onClose={closeEditModal} isClosing={isMonitorModalClosing}>
           <form className="inline-form modal-form" onSubmit={saveMonitorEdits}>
@@ -1467,15 +1826,119 @@ function SettingsPage() {
   );
 }
 
-function ContainerRow({ container, onSelect }: { container: Container; onSelect: () => void }) {
+function ContainerSortHeader({ label, column, sortKey, sortDirection, onSort }: { label: string; column: ContainerSortKey; sortKey: ContainerSortKey; sortDirection: SortDirection; onSort: (key: ContainerSortKey) => void }) {
+  const active = sortKey === column;
+  const Icon = !active ? ArrowUpDown : sortDirection === "asc" ? ArrowUp : ArrowDown;
   return (
-    <button className="table-row" onClick={onSelect}>
-      <span><strong>{container.name}</strong><small>{container.image}</small></span>
-      <StatusPill status={container.status === "running" ? "healthy" : container.status === "restarting" ? "warning" : "offline"} />
-      <span>{container.health}</span>
-      <span>{container.uptime}</span>
-      <span>{container.ports.join(", ") || "No ports"}</span>
-    </button>
+    <span role="columnheader" aria-sort={active ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}>
+      <button className={active ? "active" : ""} onClick={() => onSort(column)}>
+        {label}
+        <Icon size={13} />
+      </button>
+    </span>
+  );
+}
+
+function ContainerTableHeader({ sortKey, sortDirection, onSort }: { sortKey: ContainerSortKey; sortDirection: SortDirection; onSort: (key: ContainerSortKey) => void }) {
+  return (
+    <div className="container-table-header" role="row">
+      <ContainerSortHeader label="Name" column="name" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+      <ContainerSortHeader label="State" column="state" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+      <ContainerSortHeader label="Health" column="health" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+      <ContainerSortHeader label="Stack" column="stack" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+      <ContainerSortHeader label="Image" column="image" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+      <ContainerSortHeader label="IP address" column="ipAddress" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+      <ContainerSortHeader label="Published ports" column="publishedPorts" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+      <ContainerSortHeader label="Uptime" column="uptime" sortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+      <span role="columnheader">Actions</span>
+    </div>
+  );
+}
+
+function ContainerStateBadge({ container }: { container: Container }) {
+  const labels: Record<Container["status"], string> = {
+    running: "Running",
+    restarting: "Restarting",
+    stopped: "Stopped",
+    exited: "Exited"
+  };
+  return <span className={`container-badge state-${container.status}`}>{labels[container.status]}</span>;
+}
+
+function ContainerHealthBadge({ health }: { health: Container["health"] }) {
+  const label = health === "none" ? "None" : health.charAt(0).toUpperCase() + health.slice(1);
+  return <span className={`container-badge health-${health}`}>{label}</span>;
+}
+
+function ContainerTableRow({ container, selected, onSelect }: { container: Container; selected: boolean; onSelect: () => void }) {
+  return (
+    <div
+      className={`container-table-row ${selected ? "selected" : ""}`}
+      role="row"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      aria-label={`${selected ? "Hide" : "View"} details for ${container.name}`}
+    >
+      <span className="container-name-cell" role="cell" title={container.name}><strong>{container.name}</strong><small>{container.id}</small></span>
+      <span role="cell"><ContainerStateBadge container={container} /></span>
+      <span role="cell"><ContainerHealthBadge health={container.health} /></span>
+      <span className="container-truncate" role="cell" title={container.stack ?? "Standalone"}>{container.stack ?? "Standalone"}</span>
+      <span className="container-truncate" role="cell" title={container.image}>{container.image}</span>
+      <span className="container-mono" role="cell">{container.ipAddress ?? "Unavailable"}</span>
+      <span className="container-truncate container-mono" role="cell" title={container.publishedPorts.join(", ") || "None"}>{container.publishedPorts.join(", ") || "None"}</span>
+      <span role="cell">{container.uptime}</span>
+      <span className="container-row-actions" role="cell">
+        <button className="icon-only" onClick={(event) => { event.stopPropagation(); onSelect(); }} aria-label={`${selected ? "Hide" : "View"} details for ${container.name}`} title={selected ? "Hide details" : "View details"}>
+          {selected ? <EyeOff size={15} /> : <Eye size={15} />}
+        </button>
+      </span>
+    </div>
+  );
+}
+
+function ContainerMobileCard({ container, selected, onSelect }: { container: Container; selected: boolean; onSelect: () => void }) {
+  return (
+    <article
+      className={`container-mobile-card ${selected ? "selected" : ""}`}
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      aria-label={`${selected ? "Hide" : "View"} details for ${container.name}`}
+    >
+      <div className="container-mobile-head">
+        <div>
+          <strong>{container.name}</strong>
+          <small>{container.image}</small>
+        </div>
+        <button className="icon-only" onClick={(event) => { event.stopPropagation(); onSelect(); }} aria-label={`${selected ? "Hide" : "View"} details for ${container.name}`}>
+          {selected ? <EyeOff size={15} /> : <Eye size={15} />}
+        </button>
+      </div>
+      <div className="container-mobile-badges">
+        <ContainerStateBadge container={container} />
+        <ContainerHealthBadge health={container.health} />
+      </div>
+      <dl className="container-mobile-meta">
+        <div><dt>Stack</dt><dd>{container.stack ?? "Standalone"}</dd></div>
+        <div><dt>IP address</dt><dd>{container.ipAddress ?? "Unavailable"}</dd></div>
+        <div><dt>Published ports</dt><dd>{container.publishedPorts.join(", ") || "None"}</dd></div>
+        <div><dt>Uptime</dt><dd>{container.uptime}</dd></div>
+      </dl>
+    </article>
   );
 }
 
@@ -1484,10 +1947,14 @@ function ContainerDetail({ container }: { container: Container }) {
     <div className="page-stack compact">
       <div className="info-grid">
         <Info label="Image" value={container.image} />
-        <Info label="Status" value={container.status} />
-        <Info label="Health" value={container.health} />
+        <Info label="Runtime state" value={container.state} />
+        <Info label="Docker health" value={container.health === "none" ? "No healthcheck" : container.health} />
+        <Info label="Stack" value={container.stack ?? "Standalone"} />
+        <Info label="IP address" value={container.ipAddress ?? "Unavailable"} />
         <Info label="Restart policy" value={container.restartPolicy ?? "Unavailable"} />
-        <Info label="Ports" value={container.ports.join(", ") || "No ports"} />
+        <Info label="Published ports" value={container.publishedPorts.join(", ") || "None"} />
+        <Info label="Container ports" value={container.ports.join(", ") || "None"} />
+        <Info label="Uptime" value={container.uptime} />
         <Info label="Memory" value={container.memoryLimitMb ? `${container.memoryLimitMb} MB limit` : "Unavailable"} />
       </div>
       <pre className="logs">{container.logs.length ? container.logs.join("\n") : "No limited log preview available."}</pre>

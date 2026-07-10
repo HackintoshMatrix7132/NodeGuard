@@ -50,6 +50,8 @@ export const env = {
   serverDisplayName: process.env.SERVER_DISPLAY_NAME ?? "local-nodeguard-host",
   logPreviewLines: numberEnv("LOG_PREVIEW_LINES", 80),
   domainCheckTimeoutMs: numberEnv("DOMAIN_CHECK_TIMEOUT_MS", 5000),
+  metricSampleIntervalSeconds: Math.max(10, numberEnv("METRIC_SAMPLE_INTERVAL_SECONDS", 60)),
+  metricHistoryRetentionDays: Math.max(30, numberEnv("METRIC_HISTORY_RETENTION_DAYS", 30)),
   thresholds: {
     cpuWarning: numberEnv("CPU_WARNING_PERCENT", 80),
     cpuCritical: numberEnv("CPU_CRITICAL_PERCENT", 90),

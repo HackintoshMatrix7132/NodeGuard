@@ -75,11 +75,44 @@ export type MetricSnapshot = {
   createdAt: string;
 };
 
+export type MetricHistoryRange = "1h" | "6h" | "24h" | "7d" | "30d";
+
+export type MetricHistoryPoint = {
+  timestamp: string;
+  cpuUsagePercent: number | null;
+  memoryUsagePercent: number | null;
+  diskUsagePercent: number | null;
+  swapUsagePercent: number | null;
+};
+
+export type MetricHistorySummary = {
+  current: number | null;
+  average: number | null;
+  peak: number | null;
+};
+
+export type MetricHistory = {
+  serverId: string;
+  range: MetricHistoryRange;
+  from: string;
+  to: string;
+  intervalSeconds: number;
+  points: MetricHistoryPoint[];
+  summary: {
+    cpu: MetricHistorySummary;
+    memory: MetricHistorySummary;
+    disk: MetricHistorySummary;
+    swap: MetricHistorySummary;
+  };
+};
+
 export type Container = {
   id: string;
   serverId: string;
   name: string;
   image: string;
+  stack: string | null;
+  ipAddress: string | null;
   status: ContainerStatus;
   state: string;
   health: ContainerHealth;
@@ -88,6 +121,7 @@ export type Container = {
   memoryMb: number | null;
   memoryLimitMb: number | null;
   ports: string[];
+  publishedPorts: string[];
   restartPolicy: string | null;
   startedAt: string | null;
   logs: string[];

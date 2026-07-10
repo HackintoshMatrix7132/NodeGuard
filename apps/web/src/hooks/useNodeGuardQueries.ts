@@ -11,6 +11,7 @@ import {
   getDomains,
   getOverview,
   getServer,
+  getServerMetricHistory,
   getServerMetrics,
   getServerMonitors,
   getServers,
@@ -25,8 +26,8 @@ import {
   updateServerMonitor
 } from "../api/endpoints";
 import type { ApiConfig } from "../api/client";
-import type { CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, LoginInput } from "../types/nodeguard";
-import { demoAlerts, demoContainers, demoDocker, demoDomains, demoMetrics, demoOverview, demoServer, demoServerMonitors } from "../demoData";
+import type { CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, LoginInput, MetricHistoryRange } from "../types/nodeguard";
+import { demoAlerts, demoContainers, demoDocker, demoDomains, getDemoMetricHistory, demoMetrics, demoOverview, demoServer, demoServerMonitors } from "../demoData";
 import { useSettingsStore } from "../store/settingsStore";
 
 const dismissedDemoAlertIds = new Set<string>();
@@ -37,6 +38,7 @@ export const queryKeys = {
   serverMonitors: ["server-monitors"] as const,
   server: (id: string) => ["server", id] as const,
   metrics: (id: string) => ["server", id, "metrics"] as const,
+  metricHistory: (id: string, range: MetricHistoryRange) => ["server", id, "metrics", "history", range] as const,
   containers: ["containers"] as const,
   container: (id: string) => ["container", id] as const,
   domains: ["domains"] as const,
@@ -157,6 +159,18 @@ export function useServerMetrics(id: string) {
   return useQuery({ queryKey: [...queryKeys.metrics(id), demoMode], queryFn: () => demoMode ? Promise.resolve({ ...demoMetrics, createdAt: new Date().toISOString() }) : getServerMetrics(config, id), ...liveOptions });
 }
 
+export function useServerMetricHistory(id: string, range: MetricHistoryRange, enabled = true) {
+  const config = useConfig();
+  const demoMode = useSettingsStore((state) => state.demoMode);
+  const liveOptions = useLiveQueryOptions(enabled);
+  return useQuery({
+    queryKey: [...queryKeys.metricHistory(id, range), demoMode],
+    queryFn: () => demoMode ? Promise.resolve(getDemoMetricHistory(range)) : getServerMetricHistory(config, id, range),
+    enabled,
+    ...liveOptions
+  });
+}
+
 export function useContainers() {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
@@ -259,7 +273,13 @@ export function useAlerts(status: "active" | "resolved" | "all" = "active") {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
   const liveOptions = useLiveQueryOptions();
-  return useQuery({ queryKey: [...queryKeys.alerts(status), demoMode], queryFn: () => demoMode ? Promise.resolve(demoAlerts.filter((alert) => !dismissedDemoAlertIds.has(alert.id))) : getAlerts(config, status), ...liveOptions });
+  return useQuery({
+    queryKey: [...queryKeys.alerts(status), demoMode],
+    queryFn: () => demoMode
+      ? Promise.resolve(demoAlerts.filter((alert) => !dismissedDemoAlertIds.has(alert.id) && (status === "all" || alert.status === status)))
+      : getAlerts(config, status),
+    ...liveOptions
+  });
 }
 
 export function useAlert(id: string | null) {

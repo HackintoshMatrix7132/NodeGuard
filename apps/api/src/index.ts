@@ -17,12 +17,14 @@ import { healthRouter } from "./routes/health.js";
 import { overviewRouter } from "./routes/overview.js";
 import { serversRouter } from "./routes/servers.js";
 import { cleanupExpiredSessions, ensureAdminUser } from "./services/authService.js";
+import { startMetricHistorySampler } from "./services/metricHistoryService.js";
 
 const app = express();
 const webDistPath = path.resolve(process.cwd(), env.webDistDir);
 
 ensureAdminUser();
 cleanupExpiredSessions();
+startMetricHistorySampler();
 
 app.set("trust proxy", env.trustProxy);
 app.use(helmet({
