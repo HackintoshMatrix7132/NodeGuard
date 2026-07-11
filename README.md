@@ -504,5 +504,5 @@ docker compose down
 7. Open Alerts and alert detail.
 8. Show Settings, screenshot privacy, diagnostics, and logout.
 
-Screenshots: TODO  
-Demo video: TODO
+Screenshots: TODO List
+Demo video: TODO List
