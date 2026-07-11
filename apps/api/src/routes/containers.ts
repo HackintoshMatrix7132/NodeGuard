@@ -75,7 +75,11 @@ containersRouter.delete("/monitors/:id", async (request, response, next) => {
 containersRouter.get("/:id", async (request, response, next) => {
   try {
     const snapshot = await getMonitoringSnapshot();
-    const container = snapshot.docker.containers.find((item) => item.id === request.params.id || item.id.startsWith(request.params.id));
+    const serverId = typeof request.query.serverId === "string" ? request.query.serverId : null;
+    const container = snapshot.docker.containers.find((item) =>
+      (!serverId || item.serverId === serverId)
+      && (item.id === request.params.id || item.id.startsWith(request.params.id))
+    );
     if (!container) {
       response.status(404).json({ error: "not_found", message: "Container not found." });
       return;

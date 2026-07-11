@@ -3,6 +3,7 @@ node_modules
 dist
 **/dist
 build
+agent/bin
 coverage
 .git
 .expo

@@ -1,4 +1,4 @@
-import type { Alert, AuthSession, Container, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, DockerSnapshot, DomainCheck, LoginInput, MetricHistory, MetricHistoryRange, MetricSnapshot, MonitoredServerStatus, Overview, ServerListItem, Server } from "../types/nodeguard";
+import type { AgentDetail, AgentEnrollmentToken, AgentSummary, Alert, AuthSession, Container, CreateAgentEnrollmentInput, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, CreatedAgentEnrollmentToken, DockerSnapshot, DomainCheck, HomeAssistantSettings, HomeAssistantSettingsInput, LoginInput, MetricHistory, MetricHistoryRange, MetricSnapshot, MonitoredServerStatus, Overview, ServerListItem, Server, UpdateCenterSnapshot } from "../types/nodeguard";
 import type { ApiConfig } from "./client";
 import { apiFetch } from "./client";
 
@@ -63,6 +63,44 @@ export function getContainers(config: ApiConfig) {
   return apiFetch<DockerSnapshot>(config, "/api/containers");
 }
 
+export function getAgents(config: ApiConfig) {
+  return apiFetch<{ agents: AgentSummary[] }>(config, "/api/agents");
+}
+
+export function getAgent(config: ApiConfig, id: string) {
+  return apiFetch<AgentDetail>(config, `/api/agents/${id}`);
+}
+
+export function getAgentEnrollmentTokens(config: ApiConfig) {
+  return apiFetch<{ tokens: AgentEnrollmentToken[] }>(config, "/api/agents/enrollment-tokens");
+}
+
+export function createAgentEnrollmentToken(config: ApiConfig, input: CreateAgentEnrollmentInput) {
+  return apiFetch<CreatedAgentEnrollmentToken>(config, "/api/agents/enrollment-tokens", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function revokeAgentEnrollmentToken(config: ApiConfig, id: string) {
+  return apiFetch<{ revoked: boolean }>(config, `/api/agents/enrollment-tokens/${id}`, { method: "DELETE" });
+}
+
+export function renameAgent(config: ApiConfig, id: string, displayName: string) {
+  return apiFetch<AgentDetail>(config, `/api/agents/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ displayName })
+  });
+}
+
+export function createAgentRotationToken(config: ApiConfig, id: string) {
+  return apiFetch<CreatedAgentEnrollmentToken>(config, `/api/agents/${id}/rotate-credential`, { method: "POST" });
+}
+
+export function revokeAgent(config: ApiConfig, id: string) {
+  return apiFetch<{ revoked: boolean }>(config, `/api/agents/${id}/revoke`, { method: "POST" });
+}
+
 export function addContainerMonitor(config: ApiConfig, input: CreateContainerMonitorInput) {
   return apiFetch<DockerSnapshot["containerMonitors"]>(config, "/api/containers/monitors", {
     method: "POST",
@@ -81,8 +119,9 @@ export function removeContainerMonitor(config: ApiConfig, id: string) {
   return apiFetch<{ removed: boolean }>(config, `/api/containers/monitors/${id}`, { method: "DELETE" });
 }
 
-export function getContainer(config: ApiConfig, id: string) {
-  return apiFetch<Container>(config, `/api/containers/${id}`);
+export function getContainer(config: ApiConfig, id: string, serverId?: string | null) {
+  const query = serverId ? `?serverId=${encodeURIComponent(serverId)}` : "";
+  return apiFetch<Container>(config, `/api/containers/${id}${query}`);
 }
 
 export function getDomains(config: ApiConfig) {
@@ -122,4 +161,30 @@ export function removeAlert(config: ApiConfig, id: string) {
 
 export function runChecks(config: ApiConfig) {
   return apiFetch<Overview>(config, "/api/checks/run", { method: "POST" });
+}
+
+export function getUpdates(config: ApiConfig) {
+  return apiFetch<UpdateCenterSnapshot>(config, "/api/updates");
+}
+
+export function refreshUpdates(config: ApiConfig) {
+  return apiFetch<UpdateCenterSnapshot>(config, "/api/updates/refresh", { method: "POST" });
+}
+
+export function getHomeAssistantSettings(config: ApiConfig) {
+  return apiFetch<HomeAssistantSettings>(config, "/api/updates/settings/home-assistant");
+}
+
+export function saveHomeAssistantSettings(config: ApiConfig, input: HomeAssistantSettingsInput) {
+  return apiFetch<HomeAssistantSettings>(config, "/api/updates/settings/home-assistant", {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
+
+export function testHomeAssistantConnection(config: ApiConfig, input: HomeAssistantSettingsInput) {
+  return apiFetch<{ connected: boolean; updateEntities: number }>(config, "/api/updates/settings/home-assistant/test", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }

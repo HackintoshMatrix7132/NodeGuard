@@ -15,6 +15,7 @@ authRouter.get("/me", (request, response) => {
 authRouter.post("/login", (request, response) => {
   const username = typeof request.body?.username === "string" ? request.body.username.trim() : "";
   const password = typeof request.body?.password === "string" ? request.body.password : "";
+  const rememberMe = request.body?.rememberMe === true;
 
   if (!username || !password) {
     response.status(400).json({ error: "missing_credentials", message: "Enter your username and password." });
@@ -27,7 +28,7 @@ authRouter.post("/login", (request, response) => {
     return;
   }
 
-  createSession(request, response, user.id);
+  createSession(request, response, user.id, rememberMe);
   response.json({
     authenticated: true,
     user

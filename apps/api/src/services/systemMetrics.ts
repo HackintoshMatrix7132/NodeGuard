@@ -76,6 +76,7 @@ export async function getSystemSnapshot(): Promise<SystemSnapshot> {
     server: {
       id: "local-node",
       name: env.serverDisplayName,
+      source: "local",
       hostname: os.hostname(),
       os: osInfo ? `${osInfo.distro} ${osInfo.release}`.trim() : os.type(),
       kernel: osInfo?.kernel ?? os.release(),

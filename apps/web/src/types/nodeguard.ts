@@ -3,6 +3,119 @@ export type ContainerStatus = "running" | "stopped" | "restarting" | "exited";
 export type ContainerHealth = "healthy" | "unhealthy" | "starting" | "none";
 export type AlertSeverity = "critical" | "warning" | "info" | "resolved";
 export type AlertStatus = "active" | "resolved";
+export type AgentStatus = "online" | "stale" | "offline" | "revoked";
+export type AgentCredentialStatus = "active" | "revoked";
+
+export type AgentFilesystem = {
+  device: string | null;
+  mount: string;
+  filesystem: string | null;
+  totalBytes: number | null;
+};
+
+export type AgentSummary = {
+  id: string;
+  displayName: string;
+  hostname: string;
+  status: AgentStatus;
+  agentVersion: string;
+  osName: string | null;
+  osVersion: string | null;
+  kernel: string | null;
+  architecture: string | null;
+  cpuUsagePercent: number | null;
+  memoryUsagePercent: number | null;
+  diskUsagePercent: number | null;
+  swapUsagePercent: number | null;
+  dockerAvailable: boolean;
+  dockerVersion: string | null;
+  containerCount: number;
+  registeredAt: string;
+  lastSeenAt: string | null;
+  lastMetricsAt: string | null;
+  lastInventoryAt: string | null;
+  lastDockerAt: string | null;
+  credentialStatus: AgentCredentialStatus;
+};
+
+export type AgentDetail = AgentSummary & {
+  cpuModel: string | null;
+  physicalCoreCount: number | null;
+  logicalCpuCount: number | null;
+  totalMemoryBytes: number | null;
+  totalSwapBytes: number | null;
+  filesystems: AgentFilesystem[];
+  ipAddresses: string[];
+  bootTime: string | null;
+  systemUptimeSeconds: number | null;
+  latestMetrics: MetricSnapshot | null;
+  containers: Container[];
+};
+
+export type AgentEnrollmentToken = {
+  id: string;
+  displayName: string | null;
+  purpose: "enroll" | "rotate";
+  agentId: string | null;
+  expiresAt: string;
+  createdAt: string;
+  revokedAt: string | null;
+};
+
+export type CreatedAgentEnrollmentToken = AgentEnrollmentToken & {
+  token: string;
+};
+
+export type CreateAgentEnrollmentInput = {
+  displayName?: string;
+};
+
+export type UpdateCategory = "core" | "add-on" | "integration" | "application" | "firmware" | "system" | "container" | "other";
+export type UpdateStatus = "available" | "up_to_date" | "installing" | "unknown";
+
+export type UpdateItem = {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  name: string;
+  installedVersion: string | null;
+  availableVersion: string | null;
+  category: UpdateCategory;
+  status: UpdateStatus;
+  securityCritical: boolean;
+  lastCheckedAt: string;
+  openUrl: string | null;
+  releaseNotesUrl: string | null;
+};
+
+export type UpdateSource = {
+  id: string;
+  name: string;
+  configured: boolean;
+  connected: boolean;
+  lastCheckedAt: string | null;
+  lastError: string | null;
+};
+
+export type UpdateCenterSnapshot = {
+  updates: UpdateItem[];
+  sources: UpdateSource[];
+  availableCount: number;
+  securityCriticalCount: number;
+  lastCheckedAt: string | null;
+};
+
+export type HomeAssistantSettings = {
+  configured: boolean;
+  url: string | null;
+  lastCheckedAt: string | null;
+  lastError: string | null;
+};
+
+export type HomeAssistantSettingsInput = {
+  url: string;
+  accessToken?: string;
+};
 
 export type Overview = {
   status: HealthStatus;
@@ -15,6 +128,8 @@ export type Overview = {
   domainsTotal: number;
   criticalAlerts: number;
   warnings: number;
+  agentsOnline: number;
+  agentsTotal: number;
 };
 
 export type Server = {
@@ -42,6 +157,8 @@ export type Server = {
   dockerAvailable: boolean;
   runningContainers: number;
   stoppedContainers: number;
+  source?: "local" | "agent";
+  agentStatus?: AgentStatus;
 };
 
 export type MonitoredServerStatus = {
@@ -66,7 +183,7 @@ export type CreateMonitoredServerInput = {
 
 export type MetricSnapshot = {
   serverId: string;
-  cpu: { usagePercent: number | null; loadAverage: number | null };
+  cpu: { usagePercent: number | null; loadAverage: number | null; loadAverage5?: number | null; loadAverage15?: number | null };
   memory: { usedGb: number | null; totalGb: number | null; usagePercent: number | null };
   disk: { usedGb: number | null; totalGb: number | null; usagePercent: number | null };
   swap: { usedGb: number | null; totalGb: number | null; usagePercent: number | null };
@@ -125,6 +242,11 @@ export type Container = {
   restartPolicy: string | null;
   startedAt: string | null;
   logs: string[];
+  hostName?: string;
+  restartCount?: number | null;
+  networks?: string[];
+  ipAddresses?: string[];
+  uptimeSeconds?: number | null;
 };
 
 export type ContainerMonitorStatus = {
@@ -183,6 +305,7 @@ export type AuthUser = {
   id: string;
   username: string;
   role: string;
+  dataMode: "live" | "demo";
 };
 
 export type AuthSession = {
@@ -193,6 +316,7 @@ export type AuthSession = {
 export type LoginInput = {
   username: string;
   password: string;
+  rememberMe: boolean;
 };
 
 export type Alert = {

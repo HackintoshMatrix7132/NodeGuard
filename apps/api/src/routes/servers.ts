@@ -1,5 +1,6 @@
 import { Router } from "express";
 
+import { getAgentDockerSnapshot, getAgentMetricSnapshot, getAgentServer, listAgentServers } from "../services/agentService.js";
 import { getMonitoringSnapshot } from "../services/snapshotService.js";
 import { captureMetricSample, getMetricHistory, parseMetricHistoryRange } from "../services/metricHistoryService.js";
 import { addMonitoredServer, listMonitoredServerStatuses, removeMonitoredServer, updateMonitoredServer } from "../services/serverMonitorService.js";
@@ -9,7 +10,7 @@ export const serversRouter = Router();
 serversRouter.get("/", async (_request, response, next) => {
   try {
     const snapshot = await getMonitoringSnapshot();
-    response.json([snapshot.server, ...snapshot.serverMonitors]);
+    response.json([snapshot.server, ...listAgentServers(), ...snapshot.serverMonitors]);
   } catch (error) {
     next(error);
   }
@@ -73,12 +74,13 @@ serversRouter.delete("/monitors/:id", async (request, response, next) => {
 serversRouter.get("/:id", async (request, response, next) => {
   try {
     const snapshot = await getMonitoringSnapshot();
-    if (request.params.id !== snapshot.server.id) {
+    const server = request.params.id === snapshot.server.id ? snapshot.server : getAgentServer(request.params.id);
+    if (!server) {
       response.status(404).json({ error: "not_found", message: "Server not found." });
       return;
     }
 
-    response.json(snapshot.server);
+    response.json(server);
   } catch (error) {
     next(error);
   }
@@ -87,12 +89,13 @@ serversRouter.get("/:id", async (request, response, next) => {
 serversRouter.get("/:id/metrics", async (request, response, next) => {
   try {
     const snapshot = await getMonitoringSnapshot();
-    if (request.params.id !== snapshot.server.id) {
+    const metrics = request.params.id === snapshot.server.id ? snapshot.metrics : getAgentMetricSnapshot(request.params.id);
+    if (!metrics) {
       response.status(404).json({ error: "not_found", message: "Server metrics not found." });
       return;
     }
 
-    response.json(snapshot.metrics);
+    response.json(metrics);
   } catch (error) {
     next(error);
   }
@@ -100,7 +103,8 @@ serversRouter.get("/:id/metrics", async (request, response, next) => {
 
 serversRouter.get("/:id/metrics/history", async (request, response, next) => {
   try {
-    if (request.params.id !== "local-node") {
+    const isLocal = request.params.id === "local-node";
+    if (!isLocal && !getAgentServer(request.params.id)) {
       response.status(404).json({ error: "not_found", message: "Server metric history not found." });
       return;
     }
@@ -111,7 +115,7 @@ serversRouter.get("/:id/metrics/history", async (request, response, next) => {
       return;
     }
 
-    await captureMetricSample();
+    if (isLocal) await captureMetricSample();
     response.json(getMetricHistory(request.params.id, range));
   } catch (error) {
     next(error);
@@ -121,12 +125,16 @@ serversRouter.get("/:id/metrics/history", async (request, response, next) => {
 serversRouter.get("/:id/containers", async (request, response, next) => {
   try {
     const snapshot = await getMonitoringSnapshot();
-    if (request.params.id !== snapshot.server.id) {
+    const docker = request.params.id === snapshot.server.id ? {
+      ...snapshot.docker,
+      containers: snapshot.docker.containers.filter((container) => container.serverId === snapshot.server.id)
+    } : getAgentDockerSnapshot(request.params.id);
+    if (!docker) {
       response.status(404).json({ error: "not_found", message: "Server containers not found." });
       return;
     }
 
-    response.json(snapshot.docker);
+    response.json(docker);
   } catch (error) {
     next(error);
   }

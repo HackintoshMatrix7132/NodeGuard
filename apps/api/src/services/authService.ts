@@ -9,6 +9,7 @@ type UserRow = {
   username: string;
   password_hash: string;
   role: string;
+  data_mode: "live" | "demo";
 };
 
 type SessionRow = {
@@ -22,6 +23,7 @@ export type AuthUser = {
   id: string;
   username: string;
   role: string;
+  dataMode: "live" | "demo";
 };
 
 const developmentPassword = "nodeguard";
@@ -65,11 +67,12 @@ function verifyPassword(password: string, storedHash: string) {
   return safeEqual(Buffer.from(key), Buffer.from(expectedKey));
 }
 
-function publicUser(row: Pick<UserRow, "id" | "username" | "role">): AuthUser {
+function publicUser(row: Pick<UserRow, "id" | "username" | "role" | "data_mode">): AuthUser {
   return {
     id: row.id,
     username: row.username,
-    role: row.role
+    role: row.role,
+    dataMode: row.data_mode
   };
 }
 
@@ -81,14 +84,17 @@ function readCookies(request: Request) {
   }).filter(([name]) => Boolean(name)));
 }
 
-function serializeCookie(name: string, value: string, maxAgeSeconds: number, secure: boolean) {
+function serializeCookie(name: string, value: string, maxAgeSeconds: number | null, secure: boolean) {
   const parts = [
     `${name}=${encodeURIComponent(value)}`,
     "Path=/",
     "HttpOnly",
-    "SameSite=Lax",
-    `Max-Age=${maxAgeSeconds}`
+    "SameSite=Lax"
   ];
+
+  if (maxAgeSeconds !== null) {
+    parts.push(`Max-Age=${maxAgeSeconds}`);
+  }
 
   if (secure) {
     parts.push("Secure");
@@ -97,46 +103,59 @@ function serializeCookie(name: string, value: string, maxAgeSeconds: number, sec
   return parts.join("; ");
 }
 
-export function ensureAdminUser() {
+function ensureEnvironmentUser(username: string, password: string, role: string, dataMode: "live" | "demo") {
   const database = getDatabase();
-  const username = env.adminUsername.trim() || "admin";
+  const existingUser = database.prepare("SELECT * FROM users WHERE lower(username) = lower(?)").get(username) as UserRow | undefined;
 
-  if (env.isProduction && !env.adminPassword) {
-    throw new Error("NODEGUARD_ADMIN_PASSWORD is required when NODE_ENV=production.");
-  }
-
-  const existingAdmin = database.prepare("SELECT * FROM users WHERE lower(username) = lower(?)").get(username) as UserRow | undefined;
-
-  if (existingAdmin) {
-    if (env.adminPassword && !verifyPassword(env.adminPassword, existingAdmin.password_hash)) {
-      database.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").run(passwordHash(env.adminPassword), nowIso(), existingAdmin.id);
-      database.prepare("DELETE FROM user_sessions WHERE user_id = ?").run(existingAdmin.id);
+  if (existingUser) {
+    const passwordChanged = !verifyPassword(password, existingUser.password_hash);
+    const identityChanged = existingUser.role !== role || existingUser.data_mode !== dataMode;
+    if (passwordChanged || identityChanged) {
+      database.prepare("UPDATE users SET password_hash = ?, role = ?, data_mode = ?, updated_at = ? WHERE id = ?")
+        .run(passwordChanged ? passwordHash(password) : existingUser.password_hash, role, dataMode, nowIso(), existingUser.id);
+      database.prepare("DELETE FROM user_sessions WHERE user_id = ?").run(existingUser.id);
     }
     return;
   }
 
-  const existing = database.prepare("SELECT id FROM users LIMIT 1").get() as { id: string } | undefined;
-  if (existing) {
-    return;
-  }
-
-  const password = env.adminPassword || developmentPassword;
-
-  if (!env.isProduction && !env.adminPassword) {
-    console.warn("NodeGuard development login created with username 'admin' and password 'nodeguard'. Set NODEGUARD_ADMIN_PASSWORD to override it.");
-  }
-
   const timestamp = nowIso();
   database.prepare(`
-    INSERT INTO users (id, username, password_hash, role, created_at, updated_at)
-    VALUES (@id, @username, @passwordHash, 'owner', @createdAt, @updatedAt)
+    INSERT INTO users (id, username, password_hash, role, data_mode, created_at, updated_at)
+    VALUES (@id, @username, @passwordHash, @role, @dataMode, @createdAt, @updatedAt)
   `).run({
     id: crypto.randomUUID(),
     username,
     passwordHash: passwordHash(password),
+    role,
+    dataMode,
     createdAt: timestamp,
     updatedAt: timestamp
   });
+}
+
+export function ensureAdminUser() {
+  const adminUsername = env.adminUsername.trim() || "admin";
+  const demoUsername = env.demoUsername.trim() || "demo";
+
+  if (adminUsername.toLowerCase() === demoUsername.toLowerCase()) {
+    throw new Error("Admin and demo usernames must be different.");
+  }
+  if (env.isProduction && !env.adminPassword) {
+    throw new Error("NODEGUARD_ADMIN_PASSWORD is required when NODE_ENV=production.");
+  }
+  if (env.isProduction && !env.demoPassword) {
+    throw new Error("NODEGUARD_DEMO_PASSWORD is required when NODE_ENV=production.");
+  }
+
+  const adminPassword = env.adminPassword || developmentPassword;
+  const demoPassword = env.demoPassword || "demo";
+
+  if (!env.isProduction && !env.adminPassword) {
+    console.warn("NodeGuard development admin account uses its documented development credential. Set NODEGUARD_ADMIN_PASSWORD to override it.");
+  }
+
+  ensureEnvironmentUser(adminUsername, adminPassword, "owner", "live");
+  ensureEnvironmentUser(demoUsername, demoPassword, "viewer", "demo");
 }
 
 export function authenticateUser(username: string, password: string) {
@@ -153,12 +172,13 @@ function useSecureCookie(request: Request) {
   return env.sessionCookieSecure === "auto" ? request.secure : env.sessionCookieSecure;
 }
 
-export function createSession(request: Request, response: Response, userId: string) {
+export function createSession(request: Request, response: Response, userId: string, rememberMe = false) {
   const database = getDatabase();
   const token = crypto.randomBytes(32).toString("base64url");
   const tokenHash = sha256(token);
   const timestamp = nowIso();
-  const expiresAt = futureIso(env.sessionDurationDays);
+  const durationDays = rememberMe ? env.rememberedSessionDurationDays : env.sessionDurationDays;
+  const expiresAt = futureIso(durationDays);
 
   database.prepare(`
     INSERT INTO user_sessions (id, user_id, token_hash, created_at, expires_at, last_seen_at)
@@ -172,7 +192,8 @@ export function createSession(request: Request, response: Response, userId: stri
     lastSeenAt: timestamp
   });
 
-  response.setHeader("Set-Cookie", serializeCookie(env.sessionCookieName, token, env.sessionDurationDays * 24 * 60 * 60, useSecureCookie(request)));
+  const cookieMaxAge = rememberMe ? durationDays * 24 * 60 * 60 : null;
+  response.setHeader("Set-Cookie", serializeCookie(env.sessionCookieName, token, cookieMaxAge, useSecureCookie(request)));
 }
 
 export function getSessionUser(request: Request) {
@@ -184,7 +205,7 @@ export function getSessionUser(request: Request) {
   const database = getDatabase();
   const tokenHash = sha256(token);
   const row = database.prepare(`
-    SELECT users.id, users.username, users.role, user_sessions.id AS session_id, user_sessions.expires_at
+    SELECT users.id, users.username, users.role, users.data_mode, user_sessions.id AS session_id, user_sessions.expires_at
     FROM user_sessions
     JOIN users ON users.id = user_sessions.user_id
     WHERE user_sessions.token_hash = ?

@@ -49,6 +49,7 @@ dist/
 **/dist/
 build/
 **/build/
+agent/bin/
 web-build/
 .next/
 .nuxt/

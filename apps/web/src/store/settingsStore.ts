@@ -42,7 +42,6 @@ type SettingsState = {
   saveSession: (backendUrl: string, user: AuthUser) => void;
   disconnect: () => void;
   setRefreshIntervalSeconds: (value: number) => void;
-  setDemoMode: (value: boolean) => void;
   setHideSensitiveValues: (value: boolean) => void;
 };
 
@@ -62,6 +61,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         if (parsed.backendUrl && parsed.user?.username) {
           const migrated = { ...parsed, backendUrl: migrateDevBackendUrl(parsed.backendUrl) } as BackendConfig;
           nextState.backendConfig = migrated;
+          nextState.demoMode = migrated.user.dataMode === "demo";
           if (migrated.backendUrl !== parsed.backendUrl) {
             localStorage.setItem(storageKey, JSON.stringify(migrated));
           }
@@ -75,8 +75,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
     if (preferencesRaw) {
       try {
-        const parsed = JSON.parse(preferencesRaw) as Partial<Pick<SettingsState, "demoMode" | "hideSensitiveValues" | "refreshIntervalSeconds">>;
-        nextState.demoMode = Boolean(parsed.demoMode);
+        const parsed = JSON.parse(preferencesRaw) as Partial<Pick<SettingsState, "hideSensitiveValues" | "refreshIntervalSeconds">>;
         nextState.hideSensitiveValues = parsed.hideSensitiveValues ?? true;
         nextState.refreshIntervalSeconds = parsed.refreshIntervalSeconds ?? 1;
       } catch {
@@ -93,19 +92,15 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       connectedAt: new Date().toISOString()
     };
     localStorage.setItem(storageKey, JSON.stringify(backendConfig));
-    set({ backendConfig });
+    set({ backendConfig, demoMode: user.dataMode === "demo" });
   },
   disconnect: () => {
     localStorage.removeItem(storageKey);
-    set({ backendConfig: null });
+    set({ backendConfig: null, demoMode: false });
   },
   setRefreshIntervalSeconds: (refreshIntervalSeconds) => {
     writePreference("refreshIntervalSeconds", refreshIntervalSeconds);
     set({ refreshIntervalSeconds });
-  },
-  setDemoMode: (demoMode) => {
-    writePreference("demoMode", demoMode);
-    set({ demoMode });
   },
   setHideSensitiveValues: (hideSensitiveValues) => {
     writePreference("hideSensitiveValues", hideSensitiveValues);

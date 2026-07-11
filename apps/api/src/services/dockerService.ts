@@ -119,6 +119,7 @@ export async function getDockerSnapshot(): Promise<DockerSnapshot> {
         return {
           id: item.Id.slice(0, 12),
           serverId: "local-node",
+          hostName: env.serverDisplayName,
           name: normalizeName(item.Names),
           image: item.Image,
           stack: composeStack(details?.Config?.Labels ?? item.Labels),

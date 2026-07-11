@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 
 import { env } from "../config/env.js";
-import { getSessionUser } from "../services/authService.js";
+import { getSessionUser, type AuthUser } from "../services/authService.js";
 
 export function readApiKey(request: Request) {
   const authorization = request.header("authorization");
@@ -44,10 +44,16 @@ export function hasValidApiKey(request: Request) {
   return Boolean(providedKey && env.apiKey && apiKeysMatch(providedKey, env.apiKey));
 }
 
+function setAuthenticatedUser(response: Response, user: AuthUser | null, dataMode: "live" | "demo") {
+  response.locals.authUser = user;
+  response.locals.dataMode = dataMode;
+}
+
 export function requireAuthenticated(request: Request, response: Response, next: NextFunction) {
   const providedKey = readApiKey(request);
   if (providedKey) {
     if (hasValidApiKey(request)) {
+      setAuthenticatedUser(response, null, "live");
       next();
       return;
     }
@@ -59,6 +65,34 @@ export function requireAuthenticated(request: Request, response: Response, next:
   const user = getSessionUser(request);
   if (!user) {
     response.status(401).json({ error: "not_authenticated", message: "Sign in to NodeGuard." });
+    return;
+  }
+
+  setAuthenticatedUser(response, user, user.dataMode);
+  next();
+}
+
+export function requireLiveDataAccess(_request: Request, response: Response, next: NextFunction) {
+  if (response.locals.dataMode === "demo") {
+    response.status(403).json({
+      error: "demo_data_only",
+      message: "This account is restricted to isolated Demo Mode data."
+    });
+    return;
+  }
+
+  next();
+}
+
+export function requireOwner(request: Request, response: Response, next: NextFunction) {
+  const user = response.locals.authUser as AuthUser | null | undefined ?? getSessionUser(request);
+  if (!user) {
+    response.status(401).json({ error: "not_authenticated", message: "Sign in to NodeGuard." });
+    return;
+  }
+
+  if (user.dataMode !== "live" || (user.role !== "owner" && user.role !== "admin")) {
+    response.status(403).json({ error: "owner_required", message: "Owner or admin access is required." });
     return;
   }
 

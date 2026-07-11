@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Bell, Boxes, ChevronDown, ChevronLeft, ChevronRight, Copy, ExternalLink, Eye, EyeOff, Gauge, Globe2, LogOut, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RefreshCcw, Search, Server, Settings, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Bell, Boxes, ChevronDown, ChevronLeft, ChevronRight, Copy, ExternalLink, Eye, EyeOff, Gauge, Globe2, Github, Heart, KeyRound, LogOut, PackageOpen, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RadioTower, RefreshCcw, Search, Server, Settings, ShieldAlert, Trash2, X } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 
 import { getDefaultBackendUrl, normalizeBackendUrl } from "./api/client";
@@ -8,33 +8,47 @@ import {
   useAddContainerMonitor,
   useAddDomain,
   useAddServerMonitor,
+  useAgent,
+  useAgentEnrollmentTokens,
+  useAgents,
   useAlert,
   useAlerts,
   useContainer,
   useContainers,
   useDomains,
+  useHomeAssistantSettings,
   useOverview,
+  useCreateAgentEnrollmentToken,
+  useCreateAgentRotationToken,
+  useRefreshUpdates,
   useRemoveAlert,
   useRemoveContainerMonitor,
   useRemoveDomain,
   useRemoveServerMonitor,
+  useRenameAgent,
+  useRevokeAgent,
+  useRevokeAgentEnrollmentToken,
   useRunChecks,
   useServer,
+  useServers,
   useServerMetricHistory,
   useServerMetrics,
   useServerMonitors,
+  useSaveHomeAssistantSettings,
+  useTestHomeAssistantConnection,
   useUpdateContainerMonitor,
   useUpdateDomain,
   useUpdateServerMonitor,
+  useUpdates,
   useLogin
 } from "./hooks/useNodeGuardQueries";
 import { useSettingsStore } from "./store/settingsStore";
-import type { Alert, Container, ContainerMonitorStatus, DomainCheck, HealthStatus, MetricHistory, MetricHistoryPoint, MetricHistoryRange, MetricHistorySummary, MonitoredServerStatus, Server as NodeGuardServer } from "./types/nodeguard";
+import type { AgentStatus, AgentSummary, Alert, Container, ContainerMonitorStatus, CreatedAgentEnrollmentToken, DomainCheck, HealthStatus, HomeAssistantSettingsInput, MetricHistory, MetricHistoryPoint, MetricHistoryRange, MetricHistorySummary, MonitoredServerStatus, Server as NodeGuardServer, UpdateCategory, UpdateItem, UpdateStatus } from "./types/nodeguard";
 import { getContainerImageRepositoryUrl } from "./utils/containerImage";
 import { formatBytes, formatDateTime, formatPercentage, formatRelativeTime, formatResponseTime, formatUptime } from "./utils/format";
 import { getStatusLabel, getStatusTone } from "./utils/status";
 
-type View = "dashboard" | "server" | "containers" | "domains" | "alerts" | "settings";
+type View = "dashboard" | "server" | "agents" | "containers" | "domains" | "updates" | "alerts" | "settings";
 type MetricTone = "blue" | "green" | "orange" | "red" | "purple";
 type BreakdownItem = { label: string; value: string; tone?: MetricTone };
 type HistoricalResource = "cpu" | "memory" | "disk" | "swap";
@@ -348,6 +362,7 @@ function ConnectScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const saveSession = useSettingsStore((state) => state.saveSession);
   const login = useLogin();
@@ -362,7 +377,10 @@ function ConnectScreen() {
         setError("Enter your username and password.");
         return;
       }
-      const session = await login.mutateAsync({ config: { backendUrl }, input: { username: username.trim(), password } });
+      const session = await login.mutateAsync({
+        config: { backendUrl },
+        input: { username: username.trim(), password, rememberMe }
+      });
       if (!session.authenticated || !session.user) {
         setError("Invalid username or password.");
         return;
@@ -381,14 +399,12 @@ function ConnectScreen() {
       <div className="orbital-bg" />
       <form className="login-card" onSubmit={submit}>
         <div className="logo-mark"><LogoMark className="logo-mark-img" label="NodeGuard logo" /></div>
-        <h1>Welcome back</h1>
-        <p>Monitor everything. Miss nothing.</p>
-        <p>Sign in to access your infrastructure dashboard.</p>
-        <ol className="setup-list">
-          <li>Connect your monitoring backend</li>
-          <li>Add servers, services, and domains</li>
-          <li>Track health and respond to alerts</li>
-        </ol>
+        <h1>Welcome to NodeGuard</h1>
+        <p>Enter your credentials to continue.</p>
+        <aside className="demo-login-card" aria-label="Demo Mode credentials">
+          <span className="demo-login-icon"><KeyRound size={17} /></span>
+          <span><strong>Demo Mode</strong><small>Login with <code>demo</code> / <code>demo</code></small></span>
+        </aside>
         {error ? <div className="login-error"><strong>Sign in failed</strong><span>{error}</span></div> : null}
         <label>
           Username
@@ -417,6 +433,10 @@ function ConnectScreen() {
             </button>
           </span>
         </label>
+        <label className="remember-option">
+          <input type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} />
+          <span>Remember me</span>
+        </label>
         <button type="submit" disabled={login.isPending}>{login.isPending ? "Signing in..." : "Sign in to NodeGuard"}</button>
       </form>
     </main>
@@ -429,11 +449,13 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
   const server = useServer("local-node");
   const containers = useContainers();
   const domains = useDomains();
+  const updates = useUpdates();
   const alerts = useAlerts();
   const runChecks = useRunChecks();
   const refreshIntervalSeconds = useSettingsStore((state) => state.refreshIntervalSeconds);
   const activeAlerts = alerts.data?.slice(0, 4) ?? [];
   const allAlerts = alerts.data ?? [];
+  const healthAlerts = allAlerts.filter((alert) => alert.affectedResource !== "Update Center");
   const dockerUnavailable = containers.data && !containers.data.dockerAvailable;
   const domainItems = domains.data ?? [];
   const healthyDomains = domainItems.filter((domain) => domain.status === "healthy").length;
@@ -467,20 +489,17 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
         <div>
           <span className="eyebrow">NodeGuard</span>
           <h1>{getStatusLabel(overview.data.status)}</h1>
-          <p>{summarizeIssues(allAlerts)}</p>
+          <p className="hero-summary">{summarizeIssues(healthAlerts)}</p>
+          {healthAlerts.length > 0 ? <p className="hero-main-issue"><span>Main issue</span>{mainIssue(healthAlerts)}</p> : null}
           <small>Last checked {formatDateTime(overview.data.lastCheckedAt)} · Live refresh every {refreshIntervalSeconds}s</small>
         </div>
         <button className="icon-button" onClick={refresh} disabled={runChecks.isPending}><RefreshCcw size={17} /> {runChecks.isPending ? "Refreshing..." : "Refresh"}</button>
       </section>
       {refreshMessage ? <div className="stale-notice success">{refreshMessage}</div> : null}
-      <section className="root-cause">
-        <span>Main issue</span>
-        <strong>{mainIssue(allAlerts)}</strong>
-      </section>
-      <Panel title="Active issues" action={<button onClick={() => setView("alerts")}>View details</button>}>
-        {allAlerts.length === 0 ? <StateBlock title="No active issues" message="All monitored checks are currently healthy." /> : (
+      <Panel title="Active issues" action={<button className="dashboard-panel-action" onClick={() => setView("alerts")}>View details</button>}>
+        {healthAlerts.length === 0 ? <StateBlock title="No active issues" message="All monitored checks are currently healthy." /> : (
           <div className="issue-list">
-            {allAlerts.slice(0, 3).map((alert) => <button className="issue-row" key={alert.id} onClick={() => setView("alerts")}><StatusPill status={alert.severity} /><span>{alert.title}</span></button>)}
+            {healthAlerts.slice(0, 3).map((alert) => <button className="issue-row" key={alert.id} onClick={() => setView("alerts")}><StatusPill status={alert.severity} /><span>{alert.title}</span></button>)}
           </div>
         )}
       </Panel>
@@ -494,6 +513,17 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
           indicator={<MetricMeter value={percentage(overview.data.serversOnline, overview.data.serversTotal)} tone="green" label="Reachability" rows={[
             { label: "Online", value: String(overview.data.serversOnline), tone: "green" },
             { label: "Needs attention", value: String(Math.max(overview.data.serversTotal - overview.data.serversOnline, 0)), tone: overview.data.serversOnline === overview.data.serversTotal ? "green" : "red" }
+          ]} />}
+        />
+        <MetricCard
+          label="Agents online"
+          value={`${overview.data.agentsOnline}/${overview.data.agentsTotal}`}
+          detail={overview.data.agentsTotal === 0 ? "No remote agents registered" : `${overview.data.agentsTotal - overview.data.agentsOnline} need attention`}
+          tone={overview.data.agentsOnline === overview.data.agentsTotal ? "green" : "orange"}
+          onClick={() => setView("agents")}
+          indicator={<MetricMeter value={percentage(overview.data.agentsOnline, overview.data.agentsTotal)} tone={overview.data.agentsOnline === overview.data.agentsTotal ? "green" : "orange"} label="Connected agents" rows={[
+            { label: "Online", value: String(overview.data.agentsOnline), tone: "green" },
+            { label: "Stale or offline", value: String(Math.max(overview.data.agentsTotal - overview.data.agentsOnline, 0)), tone: overview.data.agentsOnline === overview.data.agentsTotal ? "green" : "orange" }
           ]} />}
         />
         <MetricCard
@@ -539,12 +569,24 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
             { label: "Active total", value: String(allAlerts.length), tone: allAlerts.length > 0 ? "red" : "green" }
           ]} />}
         />
+        <MetricCard
+          label="Updates"
+          value={String(updates.data?.availableCount ?? 0)}
+          detail={updates.data?.lastCheckedAt ? `Last checked ${formatRelativeTime(updates.data.lastCheckedAt)}` : "Configure an update source"}
+          tone={(updates.data?.securityCriticalCount ?? 0) > 0 ? "orange" : "blue"}
+          onClick={() => setView("updates")}
+          indicator={<MetricDiagnostic rows={[
+            { label: "Available", value: String(updates.data?.availableCount ?? 0), tone: (updates.data?.availableCount ?? 0) > 0 ? "blue" : "green" },
+            { label: "Security-critical", value: String(updates.data?.securityCriticalCount ?? 0), tone: (updates.data?.securityCriticalCount ?? 0) > 0 ? "orange" : "green" },
+            { label: "Sources", value: String(updates.data?.sources.filter((source) => source.configured).length ?? 0), tone: "green" }
+          ]} />}
+        />
       </div>
       <div className="two-col">
-        <Panel title="Recent alerts" action={<button onClick={() => setView("alerts")}>View all</button>}>
+        <Panel title="Recent alerts" action={<button className="dashboard-panel-action" onClick={() => setView("alerts")}>View all</button>}>
           {activeAlerts.length === 0 ? <StateBlock title="No alerts" message="No active alerts were generated." /> : activeAlerts.map((alert) => <AlertRow key={alert.id} alert={alert} />)}
         </Panel>
-        <Panel title="Domain reachability" action={<button onClick={() => setView("domains")}>Open</button>}>
+        <Panel title="Domain reachability" action={<button className="dashboard-panel-action" onClick={() => setView("domains")}>Open</button>}>
           {(domains.data ?? []).slice(0, 4).map((domain) => <DomainRow key={domain.id} domain={domain} />)}
         </Panel>
       </div>
@@ -575,6 +617,7 @@ function formatIpAddresses(server: NodeGuardServer) {
 }
 
 function ServerPage() {
+  const [selectedHostId, setSelectedHostId] = useState("local-node");
   const [historyRange, setHistoryRange] = useState<MetricHistoryRange>("1h");
   const [selectedResource, setSelectedResource] = useState<HistoricalResource | null>(null);
   const [monitorName, setMonitorName] = useState("");
@@ -588,9 +631,12 @@ function ServerPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const server = useServer("local-node");
-  const metrics = useServerMetrics("local-node");
-  const metricHistory = useServerMetricHistory("local-node", historyRange, selectedResource !== null);
+  const resourceHistoryRef = useRef<HTMLDivElement | null>(null);
+  const servers = useServers();
+  const serverHosts = (servers.data ?? []).filter((item): item is NodeGuardServer => "hostname" in item);
+  const server = useServer(selectedHostId);
+  const metrics = useServerMetrics(selectedHostId);
+  const metricHistory = useServerMetricHistory(selectedHostId, historyRange, selectedResource !== null);
   const serverMonitors = useServerMonitors();
   const addServerMonitor = useAddServerMonitor();
   const updateServerMonitor = useUpdateServerMonitor();
@@ -598,6 +644,23 @@ function ServerPage() {
   const toggleResourceHistory = (resource: HistoricalResource) => {
     setSelectedResource((current) => current === resource ? null : resource);
   };
+
+  useEffect(() => {
+    if (serverHosts.length > 0 && !serverHosts.some((host) => host.id === selectedHostId)) {
+      setSelectedHostId(serverHosts[0].id);
+      setSelectedResource(null);
+    }
+  }, [selectedHostId, serverHosts]);
+
+  useEffect(() => {
+    if (!selectedResource) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      resourceHistoryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedResource]);
 
   const resetMonitorForm = () => {
     setMonitorName("");
@@ -698,22 +761,41 @@ function ServerPage() {
   return (
     <div className="page-stack">
       <StaleNotice isError={server.isError || metrics.isError} dataUpdatedAt={Math.max(server.dataUpdatedAt, metrics.dataUpdatedAt)} />
-      <Panel title={server.data.name} action={<StatusPill status={server.data.status} />}>
-        <div className="info-grid">
-          <Info label="Hostname" value={server.data.hostname} />
-          <Info label="OS" value={server.data.os ?? "Unavailable"} />
-          <Info label="Kernel" value={server.data.kernel ?? "Unavailable"} />
-          <Info label="Architecture" value={[server.data.platform, server.data.architecture].filter(Boolean).join(" / ") || "Unavailable"} />
-          <Info label="Uptime" value={formatUptime(server.data.uptimeSeconds)} />
-          <Info label="CPU model" value={formatCpuModel(server.data)} />
-          <Info label="CPU cores" value={formatCpuCores(server.data)} />
-          <Info label="RAM installed" value={formatBytes(server.data.totalMemoryGb)} />
-          <Info label="Root disk" value={formatBytes(server.data.totalDiskGb)} />
-          <Info label="Swap" value={server.data.swapTotalGb === null || server.data.swapTotalGb === 0 ? "Not configured" : formatBytes(server.data.swapTotalGb)} />
-          <Info label="Primary IP" value={server.data.primaryIp ?? "Unavailable"} />
-          <Info label="IP addresses" value={formatIpAddresses(server.data)} />
-          <Info label="Docker" value={server.data.dockerAvailable ? server.data.dockerVersion ?? "Available" : "Unavailable"} />
-          <Info label="Containers" value={server.data.dockerAvailable ? `${server.data.runningContainers} running / ${server.data.stoppedContainers} stopped` : "Not checked"} />
+      <Panel title={server.data.name} action={(
+        <div className="host-selector-actions">
+          {serverHosts.length > 1 ? (
+            <label className="host-selector">
+              <span>Host</span>
+              <select value={selectedHostId} onChange={(event) => { setSelectedHostId(event.target.value); setSelectedResource(null); }}>
+                {serverHosts.map((host) => <option key={host.id} value={host.id}>{host.name}</option>)}
+              </select>
+            </label>
+          ) : null}
+          <StatusPill status={server.data.status} />
+        </div>
+      )}>
+        <div className="server-info-groups">
+          <InfoGroup title="System">
+            <Info label="Hostname" value={server.data.hostname} />
+            <Info label="OS" value={server.data.os ?? "Unavailable"} />
+            <Info label="Kernel" value={server.data.kernel ?? "Unavailable"} />
+            <Info label="Architecture" value={[server.data.platform, server.data.architecture].filter(Boolean).join(" / ") || "Unavailable"} />
+            <Info label="Uptime" value={formatUptime(server.data.uptimeSeconds)} />
+          </InfoGroup>
+          <InfoGroup title="Hardware">
+            <Info label="CPU model" value={formatCpuModel(server.data)} />
+            <Info label="CPU cores" value={formatCpuCores(server.data)} />
+            <Info label="RAM installed" value={formatBytes(server.data.totalMemoryGb)} />
+            <Info label="Root disk" value={formatBytes(server.data.totalDiskGb)} />
+            <Info label="Swap" value={server.data.swapTotalGb === null || server.data.swapTotalGb === 0 ? "Not configured" : formatBytes(server.data.swapTotalGb)} />
+          </InfoGroup>
+          <InfoGroup title="Network & Runtime">
+            <Info label="Primary IP" value={server.data.primaryIp ?? "Unavailable"} />
+            <Info label="IP addresses" value={formatIpAddresses(server.data)} />
+            <Info label="Docker" value={server.data.dockerAvailable ? server.data.dockerVersion ?? "Available" : "Unavailable"} />
+            <Info label="Containers" value={server.data.dockerAvailable ? `${server.data.runningContainers} running / ${server.data.stoppedContainers} stopped` : "Not checked"} />
+            <Info label="Monitoring source" value={server.data.source === "agent" ? `NodeGuard Agent${server.data.agentStatus ? ` · ${server.data.agentStatus}` : ""}` : "Local backend"} />
+          </InfoGroup>
         </div>
       </Panel>
       <div className="metric-grid">
@@ -774,14 +856,16 @@ function ServerPage() {
         />
       </div>
       {selectedResource ? (
-        <ResourceHistory
-          resource={selectedResource}
-          range={historyRange}
-          onRangeChange={setHistoryRange}
-          history={metricHistory.data}
-          isLoading={metricHistory.isLoading}
-          error={metricHistory.error}
-        />
+        <div ref={resourceHistoryRef} className="resource-history-anchor">
+          <ResourceHistory
+            resource={selectedResource}
+            range={historyRange}
+            onRangeChange={setHistoryRange}
+            history={metricHistory.data}
+            isLoading={metricHistory.isLoading}
+            error={metricHistory.error}
+          />
+        </div>
       ) : null}
       <Panel title="Monitored servers" action={<button onClick={openAddMonitor}><Plus size={16} /> Add server</button>}>
         {actionError ? <div className="form-error">{actionError}</div> : null}
@@ -885,7 +969,7 @@ function ResourceHistory({ resource, range, onRangeChange, history, isLoading, e
       ) : null}
       {!isLoading && history && history.points.length > 0 ? (
         <div className="history-chart-grid">
-          <MetricHistoryChart title={config.title} metricKey={config.metricKey} tone={config.tone} history={history} summary={history.summary[resource]} />
+          <MetricHistoryChart key={`${resource}-${range}`} title={config.title} metricKey={config.metricKey} tone={config.tone} history={history} summary={history.summary[resource]} />
         </div>
       ) : null}
     </Panel>
@@ -997,7 +1081,7 @@ function MetricHistoryChart({ title, metricKey, tone, history, summary }: { titl
                 {formatHistoryAxisTime(tick.timestamp, history.range)}
               </text>
             ))}
-            <path className="history-line" d={path} />
+            <path className="history-line" d={path} pathLength={1} />
             {points.length === 1 ? (() => {
               const position = pointPosition(points[0]);
               return <circle className="history-point" cx={position.x} cy={position.y} r="4" />;
@@ -1034,9 +1118,11 @@ function containerSortValue(container: Container, key: ContainerSortKey): string
   return container[key];
 }
 
-function ContainersPage() {
+function ContainersPage({ initialHostId, onHostFilterApplied }: { initialHostId?: string | null; onHostFilterApplied?: () => void }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
+  const [hostFilter, setHostFilter] = useState("all");
   const [isContainerDetailClosing, setIsContainerDetailClosing] = useState(false);
   const [stateFilter, setStateFilter] = useState<"all" | Container["status"]>("all");
   const [healthFilter, setHealthFilter] = useState<"all" | Container["health"]>("all");
@@ -1056,15 +1142,32 @@ function ContainersPage() {
   const containerDetailRef = useRef<HTMLDivElement | null>(null);
   const containerDetailTimerRef = useRef<number | null>(null);
   const containers = useContainers();
-  const container = useContainer(selected);
+  const container = useContainer(selected, selectedServerId);
   const addContainerMonitor = useAddContainerMonitor();
   const updateContainerMonitor = useUpdateContainerMonitor();
   const removeContainerMonitor = useRemoveContainerMonitor();
+  const containerHosts = useMemo(() => {
+    const hosts = new Map<string, string>();
+    for (const item of containers.data?.containers ?? []) {
+      hosts.set(item.serverId, item.hostName ?? (item.serverId === "local-node" ? "Local NodeGuard host" : item.serverId));
+    }
+    return [...hosts.entries()].map(([id, name]) => ({ id, name })).sort((left, right) => left.name.localeCompare(right.name));
+  }, [containers.data]);
+
+  useEffect(() => {
+    if (!initialHostId) return;
+    setHostFilter(initialHostId);
+    setSelected(null);
+    setSelectedServerId(null);
+    onHostFilterApplied?.();
+  }, [initialHostId, onHostFilterApplied]);
+
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return (containers.data?.containers ?? [])
       .filter((item) => stateFilter === "all" || item.status === stateFilter)
       .filter((item) => healthFilter === "all" || item.health === healthFilter)
+      .filter((item) => hostFilter === "all" || item.serverId === hostFilter)
       .filter((item) => !normalizedQuery || [
         item.name,
         item.image,
@@ -1072,7 +1175,8 @@ function ContainersPage() {
         item.ipAddress,
         item.status,
         item.health,
-        item.publishedPorts.join(" ")
+        item.publishedPorts.join(" "),
+        item.hostName
       ].filter(Boolean).join(" ").toLowerCase().includes(normalizedQuery))
       .sort((left, right) => {
         const leftValue = containerSortValue(left, sortKey);
@@ -1082,7 +1186,7 @@ function ContainersPage() {
           : String(leftValue).localeCompare(String(rightValue), undefined, { numeric: true, sensitivity: "base" });
         return sortDirection === "asc" ? comparison : -comparison;
       });
-  }, [containers.data, healthFilter, query, sortDirection, sortKey, stateFilter]);
+  }, [containers.data, healthFilter, hostFilter, query, sortDirection, sortKey, stateFilter]);
 
   const changeSort = (key: ContainerSortKey) => {
     if (sortKey === key) {
@@ -1093,12 +1197,13 @@ function ContainersPage() {
     setSortDirection("asc");
   };
 
-  const toggleContainerDetail = (containerId: string) => {
-    if (selected === containerId) {
+  const toggleContainerDetail = (containerId: string, serverId: string) => {
+    if (selected === containerId && selectedServerId === serverId) {
       if (isContainerDetailClosing) return;
       setIsContainerDetailClosing(true);
       containerDetailTimerRef.current = window.setTimeout(() => {
         setSelected(null);
+        setSelectedServerId(null);
         setIsContainerDetailClosing(false);
         containerDetailTimerRef.current = null;
       }, 240);
@@ -1111,14 +1216,16 @@ function ContainersPage() {
     }
     setIsContainerDetailClosing(false);
     setSelected(containerId);
+    setSelectedServerId(serverId);
   };
 
   useEffect(() => {
-    if (selected && !filtered.some((item) => item.id === selected)) {
+    if (selected && !filtered.some((item) => item.id === selected && item.serverId === selectedServerId)) {
       setIsContainerDetailClosing(false);
       setSelected(null);
+      setSelectedServerId(null);
     }
-  }, [filtered, selected]);
+  }, [filtered, selected, selectedServerId]);
 
   useEffect(() => {
     if (selected && containerDetailRef.current) {
@@ -1246,6 +1353,15 @@ function ContainersPage() {
                 <option value="exited">Exited</option>
               </select>
             </label>
+            {containerHosts.length > 1 ? (
+              <label className="container-filter">
+                <span>Host</span>
+                <select value={hostFilter} onChange={(event) => { setHostFilter(event.target.value); setSelected(null); setSelectedServerId(null); }}>
+                  <option value="all">All hosts</option>
+                  {containerHosts.map((host) => <option key={host.id} value={host.id}>{host.name}</option>)}
+                </select>
+              </label>
+            ) : null}
             <label className="container-filter">
               <span>Health</span>
               <select value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as "all" | Container["health"])}>
@@ -1269,10 +1385,10 @@ function ContainersPage() {
                 <ContainerTableHeader sortKey={sortKey} sortDirection={sortDirection} onSort={changeSort} />
                 {filtered.map((item) => (
                   <ContainerTableRow
-                    key={item.id}
+                    key={`${item.serverId}-${item.id}`}
                     container={item}
-                    selected={selected === item.id}
-                    onSelect={() => toggleContainerDetail(item.id)}
+                    selected={selected === item.id && selectedServerId === item.serverId}
+                    onSelect={() => toggleContainerDetail(item.id, item.serverId)}
                   />
                 ))}
               </div>
@@ -1280,10 +1396,10 @@ function ContainersPage() {
             <div className="container-mobile-list">
               {filtered.map((item) => (
                 <ContainerMobileCard
-                  key={item.id}
+                  key={`${item.serverId}-${item.id}`}
                   container={item}
-                  selected={selected === item.id}
-                  onSelect={() => toggleContainerDetail(item.id)}
+                  selected={selected === item.id && selectedServerId === item.serverId}
+                  onSelect={() => toggleContainerDetail(item.id, item.serverId)}
                 />
               ))}
             </div>
@@ -1521,6 +1637,7 @@ type AlertView = "active" | "resolved" | "all";
 
 function alertSource(alert: Alert) {
   const resource = alert.affectedResource.toLowerCase();
+  if (resource === "update center") return "Updates";
   if (resource === "docker" || resource.includes("container")) return "Docker";
   if (resource.startsWith("http://") || resource.startsWith("https://")) return "Domain";
   if (resource.includes("server") || resource.includes("node") || resource.includes("host")) return "Server";
@@ -1738,21 +1855,181 @@ function AlertsPage() {
   );
 }
 
+function updateCategoryLabel(category: UpdateCategory) {
+  const labels: Record<UpdateCategory, string> = {
+    core: "Core",
+    "add-on": "Add-on",
+    integration: "Integration",
+    application: "Application",
+    firmware: "Firmware",
+    system: "System",
+    container: "Container",
+    other: "Other"
+  };
+  return labels[category];
+}
+
+function updateStatusLabel(status: UpdateStatus) {
+  const labels: Record<UpdateStatus, string> = {
+    available: "Available",
+    up_to_date: "Up to date",
+    installing: "Installing",
+    unknown: "Unknown"
+  };
+  return labels[status];
+}
+
+function UpdateStatusPill({ update }: { update: UpdateItem }) {
+  const tone = update.securityCritical && update.status === "available"
+    ? "critical"
+    : update.status === "available"
+      ? "warning"
+      : update.status === "up_to_date"
+        ? "healthy"
+        : "unknown";
+  return <span className={`pill ${tone}`}>{update.securityCritical && update.status === "available" ? "Security" : updateStatusLabel(update.status)}</span>;
+}
+
+function UpdateActions({ update }: { update: UpdateItem }) {
+  return (
+    <div className="update-actions">
+      {update.openUrl ? <a className="small-action-link" href={update.openUrl} target="_blank" rel="noreferrer" title={update.sourceId === "home_assistant" ? "Open in Home Assistant" : "Open update source"}><ExternalLink size={14} /><span>{update.sourceId === "home_assistant" ? "Open in Home Assistant" : "Open source"}</span></a> : null}
+      {update.releaseNotesUrl ? <a className="small-action-link" href={update.releaseNotesUrl} target="_blank" rel="noreferrer" title="Open release notes"><PackageOpen size={14} /><span>Release notes</span></a> : null}
+      {!update.openUrl && !update.releaseNotesUrl ? <span className="muted">No links</span> : null}
+    </div>
+  );
+}
+
+function UpdatesPage() {
+  const updates = useUpdates();
+  const refreshUpdates = useRefreshUpdates();
+  const [search, setSearch] = useState("");
+  const [source, setSource] = useState("all");
+  const [category, setCategory] = useState("all");
+  const [status, setStatus] = useState("all");
+  const [message, setMessage] = useState<string | null>(null);
+
+  const items = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return (updates.data?.updates ?? []).filter((update) => {
+      if (source !== "all" && update.sourceId !== source) return false;
+      if (category !== "all" && update.category !== category) return false;
+      if (status !== "all" && update.status !== status) return false;
+      return !term || [update.name, update.sourceName, update.installedVersion, update.availableVersion].some((value) => value?.toLowerCase().includes(term));
+    });
+  }, [updates.data?.updates, search, source, category, status]);
+
+  const categories = [...new Set((updates.data?.updates ?? []).map((update) => update.category))];
+  const refresh = async () => {
+    setMessage(null);
+    try {
+      const snapshot = await refreshUpdates.mutateAsync();
+      setMessage(`Update check completed. ${snapshot.availableCount} ${snapshot.availableCount === 1 ? "update is" : "updates are"} available.`);
+    } catch (error) {
+      setMessage(normalizeApiError(error).message);
+    }
+  };
+
+  if (updates.isLoading) return <StateBlock title="Loading updates" message="Reading configured update sources." />;
+  if (!updates.data) return <StateBlock title="Updates unavailable" message={normalizeApiError(updates.error).message} />;
+
+  return (
+    <div className="page-stack updates-page">
+      <StaleNotice isError={updates.isError} dataUpdatedAt={updates.dataUpdatedAt} />
+      <section className="update-summary-strip">
+        <div><span>Available updates</span><strong>{updates.data.availableCount}</strong></div>
+        <div><span>Security-critical</span><strong className={updates.data.securityCriticalCount ? "security-value" : ""}>{updates.data.securityCriticalCount}</strong></div>
+        <div><span>Connected sources</span><strong>{updates.data.sources.filter((item) => item.connected).length}/{updates.data.sources.length}</strong></div>
+        <div><span>Last checked</span><strong>{updates.data.lastCheckedAt ? formatRelativeTime(updates.data.lastCheckedAt) : "Never"}</strong></div>
+      </section>
+      {message ? <div className={`stale-notice ${refreshUpdates.isError ? "" : "success"}`}>{message}</div> : null}
+      {updates.data.sources.filter((item) => item.lastError).map((item) => <div className="stale-notice" key={item.id}><strong>{item.name}:</strong> {item.lastError}</div>)}
+      <Panel title="Update Center" action={<button onClick={refresh} disabled={refreshUpdates.isPending}><RefreshCcw size={16} /> {refreshUpdates.isPending ? "Checking..." : "Check now"}</button>}>
+        <div className="update-toolbar">
+          <label className="search-field"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search updates" aria-label="Search updates" /></label>
+          <label><span>Source</span><select value={source} onChange={(event) => setSource(event.target.value)}><option value="all">All sources</option>{updates.data.sources.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
+          <label><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">All categories</option>{categories.map((item) => <option value={item} key={item}>{updateCategoryLabel(item)}</option>)}</select></label>
+          <label><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option><option value="available">Available</option><option value="up_to_date">Up to date</option><option value="installing">Installing</option><option value="unknown">Unknown</option></select></label>
+        </div>
+        {items.length === 0 ? <StateBlock title="No matching updates" message={updates.data.updates.length ? "Adjust the search or filters." : "Configure Home Assistant in Settings to discover updates."} /> : (
+          <>
+            <div className="updates-table-wrap">
+              <table className="updates-table">
+                <thead><tr><th>Source</th><th>Update name</th><th>Installed</th><th>Available</th><th>Category</th><th>Status</th><th>Last checked</th><th>Actions</th></tr></thead>
+                <tbody>{items.map((update) => <tr key={update.id}>
+                  <td>{update.sourceName}</td>
+                  <td><strong>{update.name}</strong>{update.securityCritical ? <span className="security-flag"><ShieldAlert size={13} /> Security-critical</span> : null}</td>
+                  <td className="mono-cell">{update.installedVersion ?? "Unknown"}</td>
+                  <td className="mono-cell">{update.availableVersion ?? "Unknown"}</td>
+                  <td>{updateCategoryLabel(update.category)}</td>
+                  <td><UpdateStatusPill update={update} /></td>
+                  <td>{formatRelativeTime(update.lastCheckedAt)}</td>
+                  <td><UpdateActions update={update} /></td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+            <div className="updates-mobile-list">{items.map((update) => <article className="update-mobile-card" key={update.id}>
+              <div className="update-mobile-head"><div><span>{update.sourceName}</span><strong>{update.name}</strong></div><UpdateStatusPill update={update} /></div>
+              <dl><div><dt>Installed</dt><dd>{update.installedVersion ?? "Unknown"}</dd></div><div><dt>Available</dt><dd>{update.availableVersion ?? "Unknown"}</dd></div><div><dt>Category</dt><dd>{updateCategoryLabel(update.category)}</dd></div><div><dt>Last checked</dt><dd>{formatRelativeTime(update.lastCheckedAt)}</dd></div></dl>
+              {update.securityCritical ? <span className="security-flag"><ShieldAlert size={13} /> Security-critical</span> : null}
+              <UpdateActions update={update} />
+            </article>)}</div>
+          </>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
 function SettingsPage() {
   const [connectionMessage, setConnectionMessage] = useState<string | null>(null);
+  const [integrationMessage, setIntegrationMessage] = useState<string | null>(null);
+  const [homeAssistantUrl, setHomeAssistantUrl] = useState("");
+  const [homeAssistantToken, setHomeAssistantToken] = useState("");
   const backendConfig = useSettingsStore((state) => state.backendConfig);
   const refreshIntervalSeconds = useSettingsStore((state) => state.refreshIntervalSeconds);
   const setRefreshIntervalSeconds = useSettingsStore((state) => state.setRefreshIntervalSeconds);
-  const demoMode = useSettingsStore((state) => state.demoMode);
-  const setDemoMode = useSettingsStore((state) => state.setDemoMode);
+  const demoMode = backendConfig?.user.dataMode === "demo";
   const hideSensitiveValues = useSettingsStore((state) => state.hideSensitiveValues);
   const setHideSensitiveValues = useSettingsStore((state) => state.setHideSensitiveValues);
-  const disconnect = useSettingsStore((state) => state.disconnect);
+  const homeAssistantSettings = useHomeAssistantSettings();
+  const testHomeAssistant = useTestHomeAssistantConnection();
+  const saveHomeAssistant = useSaveHomeAssistantSettings();
+
+  useEffect(() => {
+    if (homeAssistantSettings.data?.url) setHomeAssistantUrl(homeAssistantSettings.data.url);
+  }, [homeAssistantSettings.data?.url]);
+
+  const homeAssistantInput = (): HomeAssistantSettingsInput => ({
+    url: homeAssistantUrl,
+    ...(homeAssistantToken.trim() ? { accessToken: homeAssistantToken.trim() } : {})
+  });
+
+  const testHomeAssistantConnection = async () => {
+    setIntegrationMessage(null);
+    try {
+      const result = await testHomeAssistant.mutateAsync(homeAssistantInput());
+      setIntegrationMessage(`Connected to Home Assistant. Found ${result.updateEntities} update ${result.updateEntities === 1 ? "entity" : "entities"}.`);
+    } catch (error) {
+      setIntegrationMessage(normalizeApiError(error).message);
+    }
+  };
+
+  const saveHomeAssistantConnection = async () => {
+    setIntegrationMessage(null);
+    try {
+      await saveHomeAssistant.mutateAsync(homeAssistantInput());
+      setHomeAssistantToken("");
+      setIntegrationMessage("Home Assistant connection saved and updates refreshed.");
+    } catch (error) {
+      setIntegrationMessage(normalizeApiError(error).message);
+    }
+  };
 
   const testConnection = async () => {
     setConnectionMessage(null);
     if (!backendConfig) {
-      setConnectionMessage(demoMode ? "Demo mode is enabled. No backend connection is required." : "No backend is configured.");
+      setConnectionMessage("No backend is configured.");
       return;
     }
 
@@ -1764,15 +2041,6 @@ function SettingsPage() {
     }
   };
 
-  const signOut = async () => {
-    if (backendConfig) {
-      await logoutSession({ backendUrl: backendConfig.backendUrl }).catch(() => null);
-    }
-
-    disconnect();
-    setDemoMode(false);
-  };
-
   const exportDiagnostics = () => {
     const diagnostics = {
       generatedAt: new Date().toISOString(),
@@ -1781,7 +2049,7 @@ function SettingsPage() {
       role: backendConfig?.user.role ?? null,
       connectedAt: backendConfig?.connectedAt ?? null,
       refreshIntervalSeconds,
-      demoMode,
+      dataMode: "live",
       hideSensitiveValues
     };
     const blob = new Blob([JSON.stringify(diagnostics, null, 2)], { type: "application/json" });
@@ -1794,38 +2062,80 @@ function SettingsPage() {
   };
 
   return (
-    <div className="page-stack">
-      <Panel title="Connection" action={<button onClick={testConnection}><RefreshCcw size={16} /> Test connection</button>}>
-        <div className="info-grid">
-          <Info label="Backend URL" value={backendConfig ? maskSensitiveUrl(backendConfig.backendUrl, hideSensitiveValues) : demoMode ? "Demo data" : "Not connected"} />
-          <Info label="Signed in as" value={backendConfig?.user.username ?? "Not signed in"} />
-          <Info label="Role" value={backendConfig?.user.role ?? "Unavailable"} />
-          <Info label="Session started" value={formatDateTime(backendConfig?.connectedAt ?? null)} />
-        </div>
-        {connectionMessage ? <div className="stale-notice success">{connectionMessage}</div> : null}
-      </Panel>
-      <Panel title="Live refresh interval">
-        <div className="segmented">
-          {[1, 5, 10, 30, 60].map((value) => <button key={value} className={value === refreshIntervalSeconds ? "active" : ""} onClick={() => setRefreshIntervalSeconds(value)}>{value}s</button>)}
-        </div>
-      </Panel>
-      <Panel title="Security">
-        <div className="settings-list">
-          <label><input type="checkbox" checked={hideSensitiveValues} onChange={(event) => setHideSensitiveValues(event.target.checked)} /> Hide backend URL in screenshots</label>
-          <label><input type="checkbox" checked={demoMode} onChange={(event) => setDemoMode(event.target.checked)} /> Enable demo mode</label>
-        </div>
-        <div className="button-row">
-          <button onClick={exportDiagnostics}>Export diagnostics</button>
-          <button onClick={signOut}>Sign out</button>
+    <div className="page-stack settings-page">
+      <Panel title={demoMode ? "Session" : "Connection"} action={!demoMode ? <button onClick={testConnection}><RefreshCcw size={16} /> Test connection</button> : undefined}>
+        <div className="settings-content">
+          <p className="muted settings-description">{demoMode ? "This account is restricted to isolated fictional Demo Mode data." : "View and verify the active NodeGuard session."}</p>
+          <div className="info-grid">
+            {!demoMode ? <Info label="Backend URL" value={backendConfig ? maskSensitiveUrl(backendConfig.backendUrl, hideSensitiveValues) : "Not connected"} /> : null}
+            <Info label="Signed in as" value={backendConfig?.user.username ?? "Not signed in"} />
+            <Info label="Role" value={backendConfig?.user.role ?? "Unavailable"} />
+            <Info label="Data mode" value={demoMode ? "Demo only" : "Live only"} />
+            <Info label="Session started" value={formatDateTime(backendConfig?.connectedAt ?? null)} />
+          </div>
+          {connectionMessage ? <div className="stale-notice success">{connectionMessage}</div> : null}
         </div>
       </Panel>
+      <Panel title="Monitoring">
+        <div className="settings-content">
+          <p className="muted settings-description">Choose how often NodeGuard refreshes health checks and live status data.</p>
+          <div className="settings-control">
+            <h3 className="settings-subheading">Live refresh interval</h3>
+            <div className="segmented">
+              {[1, 5, 10, 30, 60].map((value) => <button key={value} className={value === refreshIntervalSeconds ? "active" : ""} onClick={() => setRefreshIntervalSeconds(value)}>{value}s</button>)}
+            </div>
+          </div>
+        </div>
+      </Panel>
+      {!demoMode ? <Panel title="Update sources">
+        <div className="settings-content">
+          <p className="muted settings-description">Connect read-only update sources. Credentials are encrypted and stored only by the NodeGuard backend.</p>
+          <div className="integration-card">
+            <div className="integration-heading">
+              <div><strong>Home Assistant</strong><span>Discovers available update.* entities. NodeGuard never installs updates.</span></div>
+              <span className={`pill ${homeAssistantSettings.data?.configured ? homeAssistantSettings.data.lastError ? "warning" : "healthy" : "unknown"}`}>{homeAssistantSettings.data?.configured ? homeAssistantSettings.data.lastError ? "Needs attention" : "Configured" : "Not configured"}</span>
+            </div>
+            <div className="integration-form">
+              <label><span>Home Assistant URL</span><input type="url" value={homeAssistantUrl} onChange={(event) => setHomeAssistantUrl(event.target.value)} placeholder="https://homeassistant.example.com" /></label>
+              <label><span>Long-lived access token</span><input type="password" value={homeAssistantToken} onChange={(event) => setHomeAssistantToken(event.target.value)} placeholder={homeAssistantSettings.data?.configured ? "Leave blank to keep the saved token" : "Paste a long-lived access token"} autoComplete="new-password" /></label>
+            </div>
+            <div className="integration-footer">
+              <span className="muted">{homeAssistantSettings.data?.lastCheckedAt ? `Last checked ${formatRelativeTime(homeAssistantSettings.data.lastCheckedAt)}` : "Not checked yet"}</span>
+              <div><button className="secondary-button" onClick={testHomeAssistantConnection} disabled={testHomeAssistant.isPending}>{testHomeAssistant.isPending ? "Testing..." : "Test connection"}</button><button className="primary-button" onClick={saveHomeAssistantConnection} disabled={saveHomeAssistant.isPending}>{saveHomeAssistant.isPending ? "Saving..." : "Save connection"}</button></div>
+            </div>
+            {integrationMessage ? <div className={`stale-notice ${testHomeAssistant.isError || saveHomeAssistant.isError ? "" : "success"}`}>{integrationMessage}</div> : null}
+          </div>
+        </div>
+      </Panel> : <Panel title="Demo environment">
+        <div className="settings-content"><p className="muted settings-description">Demo Mode is enforced for this account. All pages use isolated fictional infrastructure and cannot switch to Live Mode.</p></div>
+      </Panel>}
+      <Panel title={demoMode ? "Privacy" : "Privacy & Security"}>
+        <div className="settings-content">
+          <p className="muted settings-description">{demoMode ? "Live backend configuration and production diagnostics are hidden for this account." : "Control what is visible when sharing screenshots of NodeGuard."}</p>
+          {!demoMode ? <div className="settings-list"><label><input type="checkbox" checked={hideSensitiveValues} onChange={(event) => setHideSensitiveValues(event.target.checked)} /> Hide backend URL in screenshots</label></div> : null}
+        </div>
+      </Panel>
+      {!demoMode ? <Panel title="Diagnostics">
+        <div className="settings-content">
+          <div className="settings-inline-action">
+            <p className="muted settings-description">Export a sanitized snapshot of this app's local configuration for troubleshooting.</p>
+            <button onClick={exportDiagnostics}>Export diagnostics</button>
+          </div>
+        </div>
+      </Panel> : null}
       <Panel title="About NodeGuard">
-        <p className="muted">Web-only, read-only infrastructure monitoring for local homelab hosts, containers, and services. Human users sign in with a password-backed session; API keys remain reserved for future agents and integrations.</p>
-        <button className="danger" onClick={signOut}><LogOut size={16} /> Sign out</button>
+        <div className="settings-content about-content">
+          <p className="muted settings-description">NodeGuard is a cross-platform infrastructure monitoring app for web, iOS, and Android. Monitor hosts, containers, domains, and alerts from one secure dashboard. Human users sign in with password-backed sessions; API keys are reserved for future agents and integrations.</p>
+          <div className="about-actions">
+            <a className="secondary-button" href="https://github.com/HackintoshMatrix7132/NodeGuard" target="_blank" rel="noreferrer" title="Open NodeGuard on GitHub"><Github size={15} /> GitHub</a>
+            <button className="secondary-button" type="button" disabled title="Support NodeGuard is coming soon"><Heart size={15} /> Support NodeGuard <span>Coming soon</span></button>
+          </div>
+        </div>
       </Panel>
     </div>
   );
 }
+
 
 function ContainerSortHeader({ label, column, sortKey, sortDirection, onSort }: { label: string; column: ContainerSortKey; sortKey: ContainerSortKey; sortDirection: SortDirection; onSort: (key: ContainerSortKey) => void }) {
   const active = sortKey === column;
@@ -1970,6 +2280,7 @@ function ContainerDetail({ container }: { container: Container }) {
   return (
     <div className="page-stack compact">
       <div className="info-grid">
+        <Info label="Host" value={container.hostName ?? container.serverId} />
         <Info label="Image" value={container.image} />
         <Info label="Runtime state" value={container.state} />
         <Info label="Docker health" value={container.health === "none" ? "No healthcheck" : container.health} />
@@ -1979,9 +2290,13 @@ function ContainerDetail({ container }: { container: Container }) {
         <Info label="Published ports" value={container.publishedPorts.join(", ") || "None"} />
         <Info label="Container ports" value={container.ports.join(", ") || "None"} />
         <Info label="Uptime" value={container.uptime} />
+        <Info label="Restart count" value={container.restartCount === null || container.restartCount === undefined ? "Unavailable" : String(container.restartCount)} />
         <Info label="Memory" value={container.memoryLimitMb ? `${container.memoryLimitMb} MB limit` : "Unavailable"} />
       </div>
-      <pre className="logs">{container.logs.length ? container.logs.join("\n") : "No limited log preview available."}</pre>
+      <section className="container-logs" aria-labelledby={`container-logs-${container.id}`}>
+        <h3 id={`container-logs-${container.id}`}>Logs</h3>
+        <pre className="logs">{container.logs.length ? container.logs.join("\n") : "No limited log preview available."}</pre>
+      </section>
     </div>
   );
 }
@@ -2239,8 +2554,224 @@ function Info({ label, value }: { label: string; value: string }) {
   return <div className="info"><span>{label}</span><strong>{value}</strong></div>;
 }
 
+function InfoGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return <section className="server-info-group">
+    <h3>{title}</h3>
+    <div className="info-grid">{children}</div>
+  </section>;
+}
+
+function agentStatusTone(status: AgentStatus) {
+  if (status === "online") return "healthy";
+  if (status === "stale") return "warning";
+  if (status === "offline" || status === "revoked") return "critical";
+  return "unknown";
+}
+
+function AgentStatusPill({ status }: { status: AgentStatus }) {
+  return <span className={`pill ${agentStatusTone(status)}`}>{status.charAt(0).toUpperCase() + status.slice(1)}</span>;
+}
+
+function formatReportedBytes(value: number | null) {
+  return value === null ? "Unavailable" : formatBytes(value / 1024 / 1024 / 1024);
+}
+
+function shortAgentId(value: string) {
+  return value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+}
+
+function shellQuote(value: string) {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+function RegistrationCommand({ enrollment, serverUrl, onCopy }: { enrollment: CreatedAgentEnrollmentToken; serverUrl: string; onCopy: (command: string) => void }) {
+  const command = `sudo nodeguard-agent register --server ${shellQuote(serverUrl)} --token ${shellQuote(enrollment.token)}${enrollment.displayName ? ` --name ${shellQuote(enrollment.displayName)}` : ""}`;
+  return (
+    <div className="agent-command-block">
+      <div>
+        <strong>{enrollment.purpose === "rotate" ? "Rotate this agent credential" : "Register the Linux host"}</strong>
+        <span>Expires {formatDateTime(enrollment.expiresAt)} · usable once</span>
+      </div>
+      <code>{command}</code>
+      <button type="button" onClick={() => onCopy(command)}><Copy size={15} /> Copy command</button>
+    </div>
+  );
+}
+
+function AgentListRow({ agent, selected, onSelect }: { agent: AgentSummary; selected: boolean; onSelect: () => void }) {
+  return (
+    <tr className={selected ? "selected" : ""} onClick={onSelect} tabIndex={0} onKeyDown={(event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onSelect();
+      }
+    }}>
+      <td><strong>{agent.displayName}</strong><small>{agent.hostname}</small></td>
+      <td><AgentStatusPill status={agent.status} /></td>
+      <td>{agent.osName ?? "Unavailable"}</td>
+      <td className="mono-cell">{agent.agentVersion}</td>
+      <td>{formatPercentage(agent.cpuUsagePercent)}</td>
+      <td>{formatPercentage(agent.memoryUsagePercent)}</td>
+      <td>{agent.containerCount}</td>
+      <td>{formatRelativeTime(agent.lastSeenAt)}</td>
+      <td>{formatDateTime(agent.registeredAt)}</td>
+      <td><button className="icon-only" onClick={(event) => { event.stopPropagation(); onSelect(); }} aria-label={`${selected ? "Hide" : "View"} ${agent.displayName} details`}>{selected ? <EyeOff size={15} /> : <Eye size={15} />}</button></td>
+    </tr>
+  );
+}
+
+function AgentMobileCard({ agent, selected, onSelect }: { agent: AgentSummary; selected: boolean; onSelect: () => void }) {
+  return (
+    <button className={`agent-mobile-card ${selected ? "selected" : ""}`} onClick={onSelect}>
+      <span className="agent-mobile-heading"><span><strong>{agent.displayName}</strong><small>{agent.hostname}</small></span><AgentStatusPill status={agent.status} /></span>
+      <span className="agent-mobile-metrics"><span>CPU <strong>{formatPercentage(agent.cpuUsagePercent)}</strong></span><span>RAM <strong>{formatPercentage(agent.memoryUsagePercent)}</strong></span><span>Containers <strong>{agent.containerCount}</strong></span></span>
+      <small>{agent.osName ?? "OS unavailable"} · Seen {formatRelativeTime(agent.lastSeenAt)}</small>
+    </button>
+  );
+}
+
+function AgentsPage({ onOpenContainers }: { onOpenContainers: (agentId: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | AgentStatus>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [modal, setModal] = useState<"add" | "rename" | "rotate" | "revoke" | null>(null);
+  const [displayName, setDisplayName] = useState("");
+  const [enrollment, setEnrollment] = useState<CreatedAgentEnrollmentToken | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const agents = useAgents();
+  const detail = useAgent(selectedId);
+  const enrollmentTokens = useAgentEnrollmentTokens();
+  const createEnrollment = useCreateAgentEnrollmentToken();
+  const revokeEnrollment = useRevokeAgentEnrollmentToken();
+  const renameAgent = useRenameAgent();
+  const createRotation = useCreateAgentRotationToken();
+  const revokeAgent = useRevokeAgent();
+  const backendConfig = useSettingsStore((state) => state.backendConfig);
+  const serverUrl = backendConfig?.backendUrl ?? window.location.origin;
+  const visibleAgents = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return (agents.data?.agents ?? []).filter((agent) => statusFilter === "all" || agent.status === statusFilter).filter((agent) =>
+      !normalized || [agent.displayName, agent.hostname, agent.osName, agent.agentVersion].filter(Boolean).join(" ").toLowerCase().includes(normalized));
+  }, [agents.data, query, statusFilter]);
+
+  const closeModal = () => {
+    setModal(null);
+    setEnrollment(null);
+    setDisplayName("");
+    setFormError(null);
+  };
+
+  const copyCommand = (command: string) => {
+    void navigator.clipboard.writeText(command).then(() => setSuccessMessage("Registration command copied to the clipboard.")).catch(() => setFormError("The browser could not copy the command."));
+  };
+
+  const generateEnrollment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setFormError(null);
+    try {
+      setEnrollment(await createEnrollment.mutateAsync({ displayName: displayName.trim() || undefined }));
+    } catch (error) {
+      setFormError(normalizeApiError(error).message);
+    }
+  };
+
+  const saveRename = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedId) return;
+    setFormError(null);
+    try {
+      await renameAgent.mutateAsync({ id: selectedId, displayName });
+      setSuccessMessage(`${displayName.trim()} was successfully renamed.`);
+      closeModal();
+    } catch (error) {
+      setFormError(normalizeApiError(error).message);
+    }
+  };
+
+  const startRotation = async () => {
+    if (!selectedId) return;
+    setFormError(null);
+    setModal("rotate");
+    try {
+      setEnrollment(await createRotation.mutateAsync(selectedId));
+    } catch (error) {
+      setFormError(normalizeApiError(error).message);
+    }
+  };
+
+  const confirmRevoke = async () => {
+    if (!selectedId) return;
+    setFormError(null);
+    try {
+      await revokeAgent.mutateAsync(selectedId);
+      setSuccessMessage(`${detail.data?.displayName ?? "Agent"} was successfully revoked.`);
+      setSelectedId(null);
+      closeModal();
+    } catch (error) {
+      setFormError(normalizeApiError(error).message);
+    }
+  };
+
+  return (
+    <div className="page-stack agents-page">
+      {successMessage ? <SuccessNotice key={successMessage} message={successMessage} onDismiss={setSuccessMessage} /> : null}
+      <Panel title="Linux agents" action={(
+        <div className="agent-toolbar">
+          <div className="search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search agents" aria-label="Search agents" /></div>
+          <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "all" | AgentStatus)}><option value="all">All statuses</option><option value="online">Online</option><option value="stale">Stale</option><option value="offline">Offline</option><option value="revoked">Revoked</option></select></label>
+          <button className="icon-only" onClick={() => agents.refetch()} disabled={agents.isFetching} title="Refresh agents" aria-label="Refresh agents"><RefreshCcw className={agents.isFetching ? "is-spinning" : ""} size={15} /></button>
+          <button className="primary-button" onClick={() => { setModal("add"); setDisplayName(""); setEnrollment(null); }}><Plus size={16} /> Add agent</button>
+        </div>
+      )}>
+        {agents.isLoading ? <StateBlock title="Loading agents" message="Reading registered Linux hosts." /> : null}
+        {agents.isError && !agents.data ? <StateBlock title="Agents unavailable" message={normalizeApiError(agents.error).message} /> : null}
+        {!agents.isLoading && visibleAgents.length === 0 ? <StateBlock title="No agents found" message={(agents.data?.agents.length ?? 0) === 0 ? "Generate an enrollment token to register the first Linux host." : "No agents matched the current search and status filter."} /> : null}
+        {visibleAgents.length > 0 ? (
+          <>
+            <div className="agents-table-wrap"><table className="agents-table"><thead><tr><th>Agent</th><th>Status</th><th>Operating system</th><th>Version</th><th>CPU</th><th>RAM</th><th>Containers</th><th>Last seen</th><th>Registered</th><th>Actions</th></tr></thead><tbody>{visibleAgents.map((agent) => <AgentListRow key={agent.id} agent={agent} selected={selectedId === agent.id} onSelect={() => setSelectedId((current) => current === agent.id ? null : agent.id)} />)}</tbody></table></div>
+            <div className="agents-mobile-list">{visibleAgents.map((agent) => <AgentMobileCard key={agent.id} agent={agent} selected={selectedId === agent.id} onSelect={() => setSelectedId((current) => current === agent.id ? null : agent.id)} />)}</div>
+          </>
+        ) : null}
+      </Panel>
+      {selectedId ? (
+        <Panel title={detail.data?.displayName ?? "Agent detail"} action={detail.data ? <AgentStatusPill status={detail.data.status} /> : undefined}>
+          {detail.isLoading ? <StateBlock title="Loading agent" message="Reading the latest inventory and metrics." /> : null}
+          {detail.isError ? <StateBlock title="Agent detail unavailable" message={normalizeApiError(detail.error).message} /> : null}
+          {detail.data ? (
+            <div className="agent-detail">
+              <InfoGroup title="Overview"><Info label="Display name" value={detail.data.displayName} /><Info label="Hostname" value={detail.data.hostname} /><Info label="OS" value={[detail.data.osName, detail.data.osVersion].filter(Boolean).join(" ") || "Unavailable"} /><Info label="Kernel" value={detail.data.kernel ?? "Unavailable"} /><Info label="Architecture" value={detail.data.architecture ?? "Unavailable"} /><Info label="IP addresses" value={detail.data.ipAddresses.join(", ") || "Unavailable"} /><Info label="Agent version" value={detail.data.agentVersion} /><Info label="Registered" value={formatDateTime(detail.data.registeredAt)} /><Info label="Last seen" value={formatDateTime(detail.data.lastSeenAt)} /></InfoGroup>
+              <InfoGroup title="Resources"><Info label="CPU" value={formatPercentage(detail.data.latestMetrics?.cpu.usagePercent ?? null)} /><Info label="CPU model" value={detail.data.cpuModel ?? "Unavailable"} /><Info label="CPU cores" value={[detail.data.physicalCoreCount === null ? null : `${detail.data.physicalCoreCount} physical`, detail.data.logicalCpuCount === null ? null : `${detail.data.logicalCpuCount} logical`].filter(Boolean).join(" / ") || "Unavailable"} /><Info label="RAM" value={formatPercentage(detail.data.latestMetrics?.memory.usagePercent ?? null)} /><Info label="Disk" value={formatPercentage(detail.data.latestMetrics?.disk.usagePercent ?? null)} /><Info label="Swap" value={formatPercentage(detail.data.latestMetrics?.swap.usagePercent ?? null)} /><Info label="Load averages" value={[detail.data.latestMetrics?.cpu.loadAverage, detail.data.latestMetrics?.cpu.loadAverage5, detail.data.latestMetrics?.cpu.loadAverage15].map((value) => value ?? "-").join(" / ")} /><Info label="Uptime" value={formatUptime(detail.data.systemUptimeSeconds)} /><Info label="Installed RAM" value={formatReportedBytes(detail.data.totalMemoryBytes)} /><Info label="Installed swap" value={formatReportedBytes(detail.data.totalSwapBytes)} /></InfoGroup>
+              <InfoGroup title="Docker"><Info label="Availability" value={detail.data.dockerAvailable ? "Available" : "Unavailable"} /><Info label="Version" value={detail.data.dockerVersion ?? "Unavailable"} /><Info label="Containers" value={String(detail.data.containerCount)} /><Info label="Last inventory" value={formatDateTime(detail.data.lastDockerAt)} /></InfoGroup>
+              <InfoGroup title="Connection"><Info label="Last heartbeat" value={formatDateTime(detail.data.lastSeenAt)} /><Info label="Last metrics report" value={formatDateTime(detail.data.lastMetricsAt)} /><Info label="Last host inventory" value={formatDateTime(detail.data.lastInventoryAt)} /><Info label="Agent ID" value={shortAgentId(detail.data.id)} /><Info label="Credential" value={detail.data.credentialStatus === "active" ? "Active" : "Revoked"} /></InfoGroup>
+              <div className="agent-detail-actions">
+                <button onClick={() => onOpenContainers(detail.data.id)}><Boxes size={15} /> View host containers</button>
+                <button onClick={() => void navigator.clipboard.writeText(detail.data.id).then(() => setSuccessMessage("Agent ID copied to the clipboard.")).catch(() => setFormError("The browser could not copy the agent ID."))}><Copy size={15} /> Copy agent ID</button>
+                <button onClick={() => { setDisplayName(detail.data.displayName); setModal("rename"); }}><Pencil size={15} /> Rename</button>
+                <button onClick={() => void startRotation()}><KeyRound size={15} /> Rotate credential</button>
+                {detail.data.status !== "revoked" ? <button className="danger-button" onClick={() => setModal("revoke")}><Trash2 size={15} /> Revoke agent</button> : null}
+              </div>
+            </div>
+          ) : null}
+        </Panel>
+      ) : null}
+      {modal === "add" ? <Modal title="Add NodeGuard Agent" onClose={closeModal}><form className="modal-form" onSubmit={generateEnrollment}><label>Display name (optional)<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Docker main" /></label>{enrollment ? <RegistrationCommand enrollment={enrollment} serverUrl={serverUrl} onCopy={copyCommand} /> : <button className="modal-submit" type="submit" disabled={createEnrollment.isPending}>Generate enrollment token</button>}</form>{formError ? <div className="form-error">{formError}</div> : null}{(enrollmentTokens.data?.tokens.length ?? 0) > 0 ? <div className="active-enrollments"><strong>Active enrollment tokens</strong>{enrollmentTokens.data?.tokens.map((token) => <div key={token.id}><span>{token.displayName ?? "Unnamed agent"} · expires {formatDateTime(token.expiresAt)}</span><button className="icon-only danger-button" onClick={() => revokeEnrollment.mutate(token.id)} title="Revoke enrollment token" aria-label="Revoke enrollment token"><Trash2 size={14} /></button></div>)}</div> : null}</Modal> : null}
+      {modal === "rename" ? <Modal title="Rename agent" onClose={closeModal}><form className="modal-form" onSubmit={saveRename}><label>Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required maxLength={120} /></label><button className="modal-submit" disabled={renameAgent.isPending}>Save name</button></form>{formError ? <div className="form-error">{formError}</div> : null}</Modal> : null}
+      {modal === "rotate" ? <Modal title="Rotate agent credential" onClose={closeModal}>{createRotation.isPending ? <StateBlock title="Creating rotation token" message="Preparing a single-use credential rotation command." /> : null}{enrollment ? <RegistrationCommand enrollment={enrollment} serverUrl={serverUrl} onCopy={copyCommand} /> : null}{formError ? <div className="form-error">{formError}</div> : null}</Modal> : null}
+      {modal === "revoke" ? <Modal title="Revoke agent" onClose={closeModal}><div className="confirmation-dialog"><p>Revoke <strong>{detail.data?.displayName}</strong>? Its credential will stop working immediately. Existing history remains available.</p><div><button onClick={closeModal}>Cancel</button><button className="danger-button" onClick={() => void confirmRevoke()} disabled={revokeAgent.isPending}>Revoke agent</button></div></div>{formError ? <div className="form-error">{formError}</div> : null}</Modal> : null}
+    </div>
+  );
+}
+
+function UpdatesNavLabel() {
+  const updates = useUpdates();
+  const count = updates.data?.availableCount ?? 0;
+  return <><span>Updates</span>{count > 0 ? <span className="nav-count" aria-label={`${count} updates available`}>{count > 99 ? "99+" : count}</span> : null}</>;
+}
+
 export function App() {
   const [view, setView] = useState<View>("dashboard");
+  const [containerHostFilter, setContainerHostFilter] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const logoutTimer = useRef<number | null>(null);
@@ -2248,7 +2779,6 @@ export function App() {
   const demoMode = useSettingsStore((state) => state.demoMode);
   const load = useSettingsStore((state) => state.load);
   const disconnect = useSettingsStore((state) => state.disconnect);
-  const setDemoMode = useSettingsStore((state) => state.setDemoMode);
 
   useEffect(() => {
     load();
@@ -2265,8 +2795,10 @@ export function App() {
   const nav = [
     ["dashboard", Gauge, "Dashboard"],
     ["server", Server, "Server"],
+    ["agents", RadioTower, "Agents"],
     ["containers", Boxes, "Containers"],
     ["domains", Globe2, "Domains"],
+    ["updates", PackageOpen, "Updates"],
     ["alerts", Bell, "Alerts"],
     ["settings", Settings, "Settings"]
   ] as const;
@@ -2282,7 +2814,6 @@ export function App() {
         void logoutSession({ backendUrl: backendConfig.backendUrl }).catch(() => null);
       }
       disconnect();
-      setDemoMode(false);
       setIsLoggingOut(false);
     }, 260);
   };
@@ -2301,7 +2832,7 @@ export function App() {
             <PanelLeftClose size={18} />
           </button>
         </div>
-        <nav>{nav.map(([key, Icon, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key)}><Icon size={18} /> {label}</button>)}</nav>
+        <nav>{nav.map(([key, Icon, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key)}><Icon size={18} /> {key === "updates" ? <UpdatesNavLabel /> : label}</button>)}</nav>
         <button className="sidebar-logout" onClick={logout} disabled={isLoggingOut}><LogOut size={18} /> {isLoggingOut ? "Logging out" : "Logout"}</button>
       </aside>
       <main className="workspace">
@@ -2317,8 +2848,10 @@ export function App() {
         </header>
         {view === "dashboard" && <Dashboard setView={setView} />}
         {view === "server" && <ServerPage />}
-        {view === "containers" && <ContainersPage />}
+        {view === "agents" && <AgentsPage onOpenContainers={(agentId) => { setContainerHostFilter(agentId); setView("containers"); }} />}
+        {view === "containers" && <ContainersPage initialHostId={containerHostFilter} onHostFilterApplied={() => setContainerHostFilter(null)} />}
         {view === "domains" && <DomainsPage />}
+        {view === "updates" && <UpdatesPage />}
         {view === "alerts" && <AlertsPage />}
         {view === "settings" && <SettingsPage />}
       </main>

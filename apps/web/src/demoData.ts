@@ -1,4 +1,4 @@
-import type { Alert, Container, DockerSnapshot, DomainCheck, MetricHistory, MetricHistoryRange, MetricSnapshot, MonitoredServerStatus, Overview, Server } from "./types/nodeguard";
+import type { AgentDetail, AgentSummary, Alert, Container, DockerSnapshot, DomainCheck, MetricHistory, MetricHistoryRange, MetricSnapshot, MonitoredServerStatus, Overview, Server, UpdateCenterSnapshot, UpdateItem } from "./types/nodeguard";
 
 const now = () => new Date().toISOString();
 const ago = ({ minutes = 0, hours = 0, days = 0 }: { minutes?: number; hours?: number; days?: number }) => new Date(Date.now() - (((days * 24 + hours) * 60 + minutes) * 60 * 1000)).toISOString();
@@ -7,7 +7,7 @@ const inDays = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 100
 export const demoServer: Server = {
   id: "local-node",
   name: "nodeguard-demo-host",
-  hostname: "homelab-core",
+  hostname: "demo-control-01",
   status: "healthy",
   os: "Ubuntu 24.04.2 LTS",
   kernel: "6.8.0-63-generic",
@@ -21,8 +21,8 @@ export const demoServer: Server = {
   totalMemoryGb: 32,
   totalDiskGb: 1000,
   swapTotalGb: 8,
-  primaryIp: "10.0.0.20",
-  ipAddresses: ["10.0.0.20", "172.18.0.1", "172.19.0.1"],
+  primaryIp: "192.0.2.20",
+  ipAddresses: ["192.0.2.20", "172.20.0.1", "172.21.0.1"],
   uptimeSeconds: 1_130_400,
   lastCheckedAt: now(),
   dockerVersion: "27.5.1",
@@ -41,6 +41,49 @@ export const demoMetrics: MetricSnapshot = {
   uptimeSeconds: 1_130_400,
   createdAt: now()
 };
+
+const demoAgentDefinitions = [
+  { id: "agent-docker-main", displayName: "Docker main", hostname: "docker-main", status: "online" as const, os: "Ubuntu 24.04.2 LTS", version: "0.1.0", cpu: 21.8, memory: 48.2, disk: 37.4, swap: 4.1, ip: "192.0.2.41", docker: true, dockerVersion: "27.5.1", lastSeenMinutes: 0, registeredDays: 34 },
+  { id: "agent-photos-vm", displayName: "Photos VM", hostname: "photos-vm", status: "online" as const, os: "Debian GNU/Linux 12", version: "0.1.0", cpu: 38.6, memory: 76.4, disk: 61.2, swap: 12.8, ip: "192.0.2.42", docker: true, dockerVersion: "27.5.1", lastSeenMinutes: 0, registeredDays: 27 },
+  { id: "agent-backup-node", displayName: "Backup node", hostname: "backup-node", status: "stale" as const, os: "Ubuntu Server 24.04 LTS", version: "0.1.0", cpu: 7.2, memory: 31.5, disk: 72.1, swap: null, ip: "192.0.2.43", docker: false, dockerVersion: null, lastSeenMinutes: 2, registeredDays: 18 },
+  { id: "agent-edge-node", displayName: "Edge node", hostname: "edge-node", status: "offline" as const, os: "Ubuntu Server 22.04 LTS", version: "0.1.0", cpu: null, memory: null, disk: null, swap: null, ip: "198.51.100.44", docker: false, dockerVersion: null, lastSeenMinutes: 43, registeredDays: 9 }
+];
+
+export const demoAgents: AgentSummary[] = demoAgentDefinitions.map((agent) => ({
+  id: agent.id,
+  displayName: agent.displayName,
+  hostname: agent.hostname,
+  status: agent.status,
+  agentVersion: agent.version,
+  osName: agent.os,
+  osVersion: null,
+  kernel: "6.8.0-63-generic",
+  architecture: "amd64",
+  cpuUsagePercent: agent.cpu,
+  memoryUsagePercent: agent.memory,
+  diskUsagePercent: agent.disk,
+  swapUsagePercent: agent.swap,
+  dockerAvailable: agent.docker,
+  dockerVersion: agent.dockerVersion,
+  containerCount: 0,
+  registeredAt: ago({ days: agent.registeredDays }),
+  lastSeenAt: ago({ minutes: agent.lastSeenMinutes }),
+  lastMetricsAt: agent.status === "offline" ? ago({ minutes: 43 }) : ago({ minutes: agent.lastSeenMinutes }),
+  lastInventoryAt: ago({ hours: 3 }),
+  lastDockerAt: agent.docker ? ago({ minutes: agent.lastSeenMinutes }) : ago({ hours: 1 }),
+  credentialStatus: "active"
+}));
+
+const demoAgentMetrics = Object.fromEntries(demoAgentDefinitions.map((agent) => [agent.id, {
+  serverId: agent.id,
+  cpu: { usagePercent: agent.cpu, loadAverage: agent.cpu === null ? null : Number((agent.cpu / 20).toFixed(2)), loadAverage5: agent.cpu === null ? null : Number((agent.cpu / 22).toFixed(2)), loadAverage15: agent.cpu === null ? null : Number((agent.cpu / 24).toFixed(2)) },
+  memory: { usedGb: agent.memory === null ? null : Number((agent.memory / 100 * 16).toFixed(1)), totalGb: agent.memory === null ? null : 16, usagePercent: agent.memory },
+  disk: { usedGb: agent.disk === null ? null : Number((agent.disk / 100 * 500).toFixed(1)), totalGb: agent.disk === null ? null : 500, usagePercent: agent.disk },
+  swap: { usedGb: agent.swap === null ? null : Number((agent.swap / 100 * 4).toFixed(1)), totalGb: agent.swap === null ? null : 4, usagePercent: agent.swap },
+  network: { downloadMbps: null, uploadMbps: null },
+  uptimeSeconds: agent.status === "offline" ? 610200 : 1123000,
+  createdAt: ago({ minutes: agent.lastSeenMinutes })
+} satisfies MetricSnapshot])) as Record<string, MetricSnapshot>;
 
 const demoHistoryConfig: Record<MetricHistoryRange, { durationMs: number; intervalSeconds: number }> = {
   "1h": { durationMs: 60 * 60 * 1000, intervalSeconds: 60 },
@@ -103,7 +146,7 @@ export function getDemoMetricHistory(range: MetricHistoryRange): MetricHistory {
   };
 }
 
-export const demoContainers: Container[] = [
+const baseDemoContainers: Container[] = [
   { id: "traefik001", serverId: "local-node", name: "traefik", image: "traefik:v3.4", stack: "edge", ipAddress: "172.18.0.2", status: "running", state: "running", health: "healthy", uptime: "13d 2h", cpuPercent: 1.2, memoryMb: 92, memoryLimitMb: 256, ports: ["80/tcp", "443/tcp"], publishedPorts: ["80:80", "443:443"], restartPolicy: "unless-stopped", startedAt: ago({ days: 13, hours: 2 }), logs: ["Configuration loaded from file", "Provider event received from docker", "Health check passed"] },
   { id: "vault001", serverId: "local-node", name: "vaultwarden", image: "vaultwarden/server:1.33.2", stack: "security", ipAddress: "172.18.0.3", status: "running", state: "running", health: "healthy", uptime: "12d 18h", cpuPercent: 0.8, memoryMb: 184, memoryLimitMb: 512, ports: ["80/tcp"], publishedPorts: ["8080:80"], restartPolicy: "unless-stopped", startedAt: ago({ days: 12, hours: 18 }), logs: ["Rocket has launched from http://0.0.0.0:80", "Database pool initialized", "Background jobs completed"] },
   { id: "next001", serverId: "local-node", name: "nextcloud", image: "nextcloud:30-apache", stack: "cloud", ipAddress: "172.18.0.4", status: "running", state: "running", health: "healthy", uptime: "8d 6h", cpuPercent: 3.4, memoryMb: 1360, memoryLimitMb: 2048, ports: ["80/tcp"], publishedPorts: ["8081:80"], restartPolicy: "unless-stopped", startedAt: ago({ days: 8, hours: 6 }), logs: ["Apache configured", "Background job finished", "No pending migrations"] },
@@ -117,6 +160,79 @@ export const demoContainers: Container[] = [
   { id: "ente001", serverId: "local-node", name: "ente-server", image: "ghcr.io/ente-io/server:latest", stack: "photos", ipAddress: null, status: "exited", state: "exited (1)", health: "none", uptime: "Exited 18 minutes ago", cpuPercent: null, memoryMb: null, memoryLimitMb: 1024, ports: ["8080/tcp"], publishedPorts: ["8082:8080"], restartPolicy: "unless-stopped", startedAt: null, logs: ["Database connection refused", "Process exited with code 1"] },
   { id: "worker001", serverId: "local-node", name: "legacy-worker", image: "node:20-alpine", stack: "archive", ipAddress: null, status: "stopped", state: "created", health: "none", uptime: "Stopped 6d ago", cpuPercent: null, memoryMb: null, memoryLimitMb: null, ports: [], publishedPorts: [], restartPolicy: "no", startedAt: null, logs: [] }
 ];
+
+const agentHostByContainer: Record<string, { serverId: string; hostName: string }> = {
+  traefik001: { serverId: "agent-docker-main", hostName: "Docker main" },
+  vault001: { serverId: "agent-docker-main", hostName: "Docker main" },
+  port001: { serverId: "agent-docker-main", hostName: "Docker main" },
+  home001: { serverId: "agent-docker-main", hostName: "Docker main" },
+  immich001: { serverId: "agent-photos-vm", hostName: "Photos VM" },
+  postgres001: { serverId: "agent-photos-vm", hostName: "Photos VM" },
+  redis001: { serverId: "agent-photos-vm", hostName: "Photos VM" },
+  paper001: { serverId: "agent-photos-vm", hostName: "Photos VM" }
+};
+
+export const demoContainers: Container[] = baseDemoContainers.map((container) => ({
+  ...container,
+  ...(agentHostByContainer[container.id] ?? { serverId: "local-node", hostName: "Demo control host" })
+}));
+
+for (const agent of demoAgents) {
+  agent.containerCount = demoContainers.filter((container) => container.serverId === agent.id).length;
+}
+
+export const demoAgentDetails: Record<string, AgentDetail> = Object.fromEntries(demoAgents.map((agent) => {
+  const definition = demoAgentDefinitions.find((item) => item.id === agent.id)!;
+  return [agent.id, {
+    ...agent,
+    cpuModel: "AMD EPYC 7282 16-Core Processor",
+    physicalCoreCount: 4,
+    logicalCpuCount: 8,
+    totalMemoryBytes: agent.memoryUsagePercent === null ? null : 16 * 1024 ** 3,
+    totalSwapBytes: agent.swapUsagePercent === null ? null : 4 * 1024 ** 3,
+    filesystems: [{ device: "/dev/vda1", mount: "/", filesystem: "ext4", totalBytes: 500 * 1024 ** 3 }],
+    ipAddresses: [definition.ip],
+    bootTime: ago({ days: 13 }),
+    systemUptimeSeconds: demoAgentMetrics[agent.id].uptimeSeconds,
+    latestMetrics: demoAgentMetrics[agent.id],
+    containers: demoContainers.filter((container) => container.serverId === agent.id)
+  } satisfies AgentDetail];
+}));
+
+export const demoAgentServers: Server[] = demoAgents.map((agent) => {
+  const detail = demoAgentDetails[agent.id];
+  const metrics = detail.latestMetrics;
+  return {
+    id: agent.id,
+    name: agent.displayName,
+    hostname: agent.hostname,
+    status: agent.status === "online" ? "healthy" : agent.status === "stale" ? "warning" : "offline",
+    source: "agent",
+    agentStatus: agent.status,
+    os: [agent.osName, agent.osVersion].filter(Boolean).join(" "),
+    kernel: agent.kernel,
+    architecture: agent.architecture,
+    platform: "linux",
+    cpuManufacturer: "AMD",
+    cpuModel: detail.cpuModel,
+    cpuCores: detail.logicalCpuCount,
+    cpuPhysicalCores: detail.physicalCoreCount,
+    cpuSpeedGhz: null,
+    totalMemoryGb: metrics?.memory.totalGb ?? null,
+    totalDiskGb: metrics?.disk.totalGb ?? null,
+    swapTotalGb: metrics?.swap.totalGb ?? null,
+    primaryIp: detail.ipAddresses[0] ?? null,
+    ipAddresses: detail.ipAddresses,
+    uptimeSeconds: detail.systemUptimeSeconds,
+    lastCheckedAt: agent.lastSeenAt ?? agent.registeredAt,
+    dockerVersion: agent.dockerVersion,
+    dockerAvailable: agent.dockerAvailable,
+    runningContainers: detail.containers.filter((container) => container.status === "running").length,
+    stoppedContainers: detail.containers.filter((container) => container.status !== "running").length
+  };
+});
+
+export const demoServers: Server[] = [demoServer, ...demoAgentServers];
 
 export const demoDocker: DockerSnapshot = {
   dockerAvailable: true,
@@ -132,44 +248,88 @@ export const demoDocker: DockerSnapshot = {
 };
 
 export const demoDomains: DomainCheck[] = [
-  { id: "bit-muthu-eu", domain: "https://bit.muthu.eu", path: "/", expectedStatusCodes: [200, 301, 302, 401], editable: true, status: "healthy", statusCode: 200, responseTimeMs: 142, previousResponseTimeMs: 151, latencyTrendPercent: -6, uptimePercent: 99.99, checkSamples: 43200, https: true, sslExpiresAt: inDays(72), sslExpiresInDays: 72, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: ago({ days: 18 }), error: null },
-  { id: "nc-muthu-eu", domain: "https://nc.muthu.eu", path: "/status.php", expectedStatusCodes: [200], editable: true, status: "healthy", statusCode: 200, responseTimeMs: 318, previousResponseTimeMs: 344, latencyTrendPercent: -7.6, uptimePercent: 99.97, checkSamples: 43198, https: true, sslExpiresAt: inDays(72), sslExpiresInDays: 72, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: ago({ days: 4 }), error: null },
-  { id: "status-muthu-eu", domain: "https://status.muthu.eu", path: "/api/status-page/heartbeat", expectedStatusCodes: [200], editable: true, status: "healthy", statusCode: 200, responseTimeMs: 67, previousResponseTimeMs: 72, latencyTrendPercent: -6.9, uptimePercent: 100, checkSamples: 43200, https: true, sslExpiresAt: inDays(118), sslExpiresInDays: 118, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: null, error: null },
-  { id: "nas-muthu-eu", domain: "https://nas.muthu.eu", path: "/", expectedStatusCodes: [200, 401], editable: true, status: "healthy", statusCode: 401, responseTimeMs: 24, previousResponseTimeMs: 26, latencyTrendPercent: -7.7, uptimePercent: 99.99, checkSamples: 43200, https: true, sslExpiresAt: inDays(164), sslExpiresInDays: 164, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: ago({ days: 23 }), error: null },
-  { id: "home-muthu-eu", domain: "https://home.muthu.eu", path: "/", expectedStatusCodes: [200], editable: true, status: "healthy", statusCode: 200, responseTimeMs: 104, previousResponseTimeMs: 110, latencyTrendPercent: -5.5, uptimePercent: 99.96, checkSamples: 43190, https: true, sslExpiresAt: inDays(72), sslExpiresInDays: 72, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: ago({ hours: 12 }), error: null },
-  { id: "grafana-muthu-eu", domain: "https://grafana.muthu.eu", path: "/api/health", expectedStatusCodes: [200], editable: true, status: "warning", statusCode: 200, responseTimeMs: 1840, previousResponseTimeMs: 620, latencyTrendPercent: 196.8, uptimePercent: 99.91, checkSamples: 43160, https: true, sslExpiresAt: inDays(19), sslExpiresInDays: 19, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: ago({ hours: 3 }), error: "Endpoint is reachable but response latency exceeds the warning threshold." },
-  { id: "photos-muthu-eu", domain: "https://photos.muthu.eu", path: "/api/server/ping", expectedStatusCodes: [200], editable: true, status: "critical", statusCode: 502, responseTimeMs: 93, previousResponseTimeMs: 89, latencyTrendPercent: 4.5, uptimePercent: 98.74, checkSamples: 43196, https: true, sslExpiresAt: inDays(52), sslExpiresInDays: 52, lastCheckedAt: now(), lastSuccessfulAt: ago({ minutes: 21 }), lastFailedAt: now(), error: "Expected HTTP 200 but received HTTP 502." },
-  { id: "pihole-internal", domain: "http://10.0.0.53", path: "/admin/", expectedStatusCodes: [200, 302], editable: true, status: "offline", statusCode: null, responseTimeMs: null, previousResponseTimeMs: 18, latencyTrendPercent: null, uptimePercent: 97.42, checkSamples: 42910, https: false, sslExpiresAt: null, sslExpiresInDays: null, lastCheckedAt: now(), lastSuccessfulAt: ago({ minutes: 14 }), lastFailedAt: now(), error: "Connection timed out after 5 seconds." },
-  { id: "legacy-console", domain: "https://10.0.0.44:8443", path: "/", expectedStatusCodes: [200], editable: true, status: "unknown", statusCode: null, responseTimeMs: null, previousResponseTimeMs: null, latencyTrendPercent: null, uptimePercent: null, checkSamples: 0, https: true, sslExpiresAt: null, sslExpiresInDays: null, lastCheckedAt: now(), lastSuccessfulAt: null, lastFailedAt: now(), error: "TLS certificate details are unavailable for this internal endpoint." }
+  { id: "vault-demo-example", domain: "https://vault.demo.example", path: "/", expectedStatusCodes: [200, 301, 302, 401], editable: true, status: "healthy", statusCode: 200, responseTimeMs: 142, previousResponseTimeMs: 151, latencyTrendPercent: -6, uptimePercent: 99.99, checkSamples: 43200, https: true, sslExpiresAt: inDays(72), sslExpiresInDays: 72, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: ago({ days: 18 }), error: null },
+  { id: "cloud-demo-example", domain: "https://cloud.demo.example", path: "/status.php", expectedStatusCodes: [200], editable: true, status: "healthy", statusCode: 200, responseTimeMs: 318, previousResponseTimeMs: 344, latencyTrendPercent: -7.6, uptimePercent: 99.97, checkSamples: 43198, https: true, sslExpiresAt: inDays(72), sslExpiresInDays: 72, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: ago({ days: 4 }), error: null },
+  { id: "status-demo-example", domain: "https://status.demo.example", path: "/api/heartbeat", expectedStatusCodes: [200], editable: true, status: "healthy", statusCode: 200, responseTimeMs: 67, previousResponseTimeMs: 72, latencyTrendPercent: -6.9, uptimePercent: 100, checkSamples: 43200, https: true, sslExpiresAt: inDays(118), sslExpiresInDays: 118, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: null, error: null },
+  { id: "storage-demo-example", domain: "https://storage.demo.example", path: "/", expectedStatusCodes: [200, 401], editable: true, status: "healthy", statusCode: 401, responseTimeMs: 24, previousResponseTimeMs: 26, latencyTrendPercent: -7.7, uptimePercent: 99.99, checkSamples: 43200, https: true, sslExpiresAt: inDays(164), sslExpiresInDays: 164, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: ago({ days: 23 }), error: null },
+  { id: "home-demo-example", domain: "https://home.demo.example", path: "/", expectedStatusCodes: [200], editable: true, status: "healthy", statusCode: 200, responseTimeMs: 104, previousResponseTimeMs: 110, latencyTrendPercent: -5.5, uptimePercent: 99.96, checkSamples: 43190, https: true, sslExpiresAt: inDays(72), sslExpiresInDays: 72, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: ago({ hours: 12 }), error: null },
+  { id: "metrics-demo-example", domain: "https://metrics.demo.example", path: "/api/health", expectedStatusCodes: [200], editable: true, status: "warning", statusCode: 200, responseTimeMs: 1840, previousResponseTimeMs: 620, latencyTrendPercent: 196.8, uptimePercent: 99.91, checkSamples: 43160, https: true, sslExpiresAt: inDays(19), sslExpiresInDays: 19, lastCheckedAt: now(), lastSuccessfulAt: now(), lastFailedAt: ago({ hours: 3 }), error: "Endpoint is reachable but response latency exceeds the warning threshold." },
+  { id: "photos-demo-example", domain: "https://photos.demo.example", path: "/api/server/ping", expectedStatusCodes: [200], editable: true, status: "critical", statusCode: 502, responseTimeMs: 93, previousResponseTimeMs: 89, latencyTrendPercent: 4.5, uptimePercent: 98.74, checkSamples: 43196, https: true, sslExpiresAt: inDays(52), sslExpiresInDays: 52, lastCheckedAt: now(), lastSuccessfulAt: ago({ minutes: 21 }), lastFailedAt: now(), error: "Expected HTTP 200 but received HTTP 502." },
+  { id: "dns-console", domain: "http://192.0.2.53", path: "/admin/", expectedStatusCodes: [200, 302], editable: true, status: "offline", statusCode: null, responseTimeMs: null, previousResponseTimeMs: 18, latencyTrendPercent: null, uptimePercent: 97.42, checkSamples: 42910, https: false, sslExpiresAt: null, sslExpiresInDays: null, lastCheckedAt: now(), lastSuccessfulAt: ago({ minutes: 14 }), lastFailedAt: now(), error: "Connection timed out after 5 seconds." },
+  { id: "legacy-console", domain: "https://198.51.100.44:8443", path: "/", expectedStatusCodes: [200], editable: true, status: "unknown", statusCode: null, responseTimeMs: null, previousResponseTimeMs: null, latencyTrendPercent: null, uptimePercent: null, checkSamples: 0, https: true, sslExpiresAt: null, sslExpiresInDays: null, lastCheckedAt: now(), lastSuccessfulAt: null, lastFailedAt: now(), error: "TLS certificate details are unavailable for this internal endpoint." }
 ];
 
 export const demoAlerts: Alert[] = [
-  { id: "domain-photos-502", severity: "critical", title: "photos.muthu.eu returned HTTP 502", message: "The reverse proxy cannot reach the Immich upstream.", affectedResource: "https://photos.muthu.eu", status: "active", createdAt: ago({ minutes: 21 }), firstSeenAt: ago({ minutes: 21 }), lastSeenAt: now(), occurrenceCount: 7, resolvedAt: null, failedChecks: ["HTTP 502", "upstream ping failed"], possibleCause: "The reverse proxy route points to an unavailable upstream service.", suggestedNextSteps: ["Inspect reverse proxy logs.", "Verify the Immich container network.", "Confirm the upstream port is 2283."] },
-  { id: "domain-pihole-timeout", severity: "critical", title: "Pi-hole is unreachable", message: "The internal DNS dashboard timed out after 5 seconds.", affectedResource: "http://10.0.0.53", status: "active", createdAt: ago({ minutes: 14 }), firstSeenAt: ago({ minutes: 14 }), lastSeenAt: now(), occurrenceCount: 5, resolvedAt: null, failedChecks: ["TCP connection timeout", "HTTP check unavailable"], possibleCause: "The Pi-hole host may be offline or isolated from the monitoring network.", suggestedNextSteps: ["Ping 10.0.0.53 from the NodeGuard host.", "Check the Pi-hole VM state.", "Verify firewall rules."] },
-  { id: "container-ente-stopped", severity: "warning", title: "ente-server is not running", message: "The monitored container exited with code 1.", affectedResource: "ente-server", status: "active", createdAt: ago({ minutes: 18 }), firstSeenAt: ago({ minutes: 18 }), lastSeenAt: now(), occurrenceCount: 6, resolvedAt: null, failedChecks: ["container state: exited", "database connection refused"], possibleCause: "The service cannot establish its database connection.", suggestedNextSteps: ["Inspect container logs.", "Verify database credentials.", "Check the Compose dependency health."] },
-  { id: "domain-grafana-latency", severity: "warning", title: "Grafana response time is elevated", message: "The endpoint is healthy but responded in 1840 ms.", affectedResource: "https://grafana.muthu.eu", status: "active", createdAt: ago({ minutes: 9 }), firstSeenAt: ago({ minutes: 9 }), lastSeenAt: now(), occurrenceCount: 3, resolvedAt: null, failedChecks: ["latency above 1500 ms"], possibleCause: "A dashboard query or storage operation may be saturating Grafana.", suggestedNextSteps: ["Review Grafana server logs.", "Inspect host I/O usage.", "Check datasource latency."] },
+  { id: "agent-backup-node-stale", severity: "warning", title: "Backup node agent is stale", message: "The latest heartbeat is overdue but remains within the configured grace period.", affectedResource: "Backup node", status: "active", createdAt: ago({ minutes: 2 }), firstSeenAt: ago({ minutes: 2 }), lastSeenAt: now(), occurrenceCount: 2, resolvedAt: null, failedChecks: ["agent status: stale"], possibleCause: "The backup host may have intermittent outbound connectivity.", suggestedNextSteps: ["Check the systemd service.", "Inspect the agent journal."] },
+  { id: "agent-edge-node-offline", severity: "critical", title: "Edge node agent is offline", message: "No heartbeat has arrived within the offline threshold.", affectedResource: "Edge node", status: "active", createdAt: ago({ minutes: 43 }), firstSeenAt: ago({ minutes: 43 }), lastSeenAt: now(), occurrenceCount: 9, resolvedAt: null, failedChecks: ["agent status: offline"], possibleCause: "The edge host may be powered off or disconnected.", suggestedNextSteps: ["Check host power and network.", "Inspect the agent systemd service."] },
+  { id: "updates-available", severity: "info", title: "7 updates available", message: "New software updates are available in the Update Center.", affectedResource: "Update Center", status: "active", createdAt: ago({ minutes: 11 }), firstSeenAt: ago({ minutes: 11 }), lastSeenAt: now(), occurrenceCount: 1, resolvedAt: null, failedChecks: ["7 updates available"], possibleCause: null, suggestedNextSteps: ["Open the Update Center.", "Review release notes before scheduling maintenance."] },
+  { id: "security-updates-available", severity: "warning", title: "1 security-critical update available", message: "A security-critical update is available in the Update Center.", affectedResource: "Update Center", status: "active", createdAt: ago({ minutes: 11 }), firstSeenAt: ago({ minutes: 11 }), lastSeenAt: now(), occurrenceCount: 1, resolvedAt: null, failedChecks: ["1 security-critical update available"], possibleCause: null, suggestedNextSteps: ["Review the security advisory.", "Schedule maintenance from the source system."] },
+  { id: "domain-photos-502", severity: "critical", title: "photos.demo.example returned HTTP 502", message: "The reverse proxy cannot reach the photo-service upstream.", affectedResource: "https://photos.demo.example", status: "active", createdAt: ago({ minutes: 21 }), firstSeenAt: ago({ minutes: 21 }), lastSeenAt: now(), occurrenceCount: 7, resolvedAt: null, failedChecks: ["HTTP 502", "upstream ping failed"], possibleCause: "The reverse proxy route points to an unavailable upstream service.", suggestedNextSteps: ["Inspect reverse proxy logs.", "Verify the photo-service container network.", "Confirm the upstream port is 2283."] },
+  { id: "domain-dns-timeout", severity: "critical", title: "DNS console is unreachable", message: "The internal DNS dashboard timed out after 5 seconds.", affectedResource: "http://192.0.2.53", status: "active", createdAt: ago({ minutes: 14 }), firstSeenAt: ago({ minutes: 14 }), lastSeenAt: now(), occurrenceCount: 5, resolvedAt: null, failedChecks: ["TCP connection timeout", "HTTP check unavailable"], possibleCause: "The DNS console host may be offline or isolated from the monitoring network.", suggestedNextSteps: ["Ping 192.0.2.53 from the NodeGuard host.", "Check the DNS console VM state.", "Verify firewall rules."] },
+  { id: "container-ente-stopped", severity: "warning", title: "archive-service is not running", message: "The monitored archive-service container exited with code 1.", affectedResource: "archive-service", status: "active", createdAt: ago({ minutes: 18 }), firstSeenAt: ago({ minutes: 18 }), lastSeenAt: now(), occurrenceCount: 6, resolvedAt: null, failedChecks: ["container state: exited", "database connection refused"], possibleCause: "The service cannot establish its database connection.", suggestedNextSteps: ["Inspect container logs.", "Verify database credentials.", "Check the Compose dependency health."] },
+  { id: "domain-metrics-latency", severity: "warning", title: "Metrics endpoint response time is elevated", message: "The endpoint is healthy but responded in 1840 ms.", affectedResource: "https://metrics.demo.example", status: "active", createdAt: ago({ minutes: 9 }), firstSeenAt: ago({ minutes: 9 }), lastSeenAt: now(), occurrenceCount: 3, resolvedAt: null, failedChecks: ["latency above 1500 ms"], possibleCause: "A dashboard query or storage operation may be saturating the metrics service.", suggestedNextSteps: ["Review service logs.", "Inspect host I/O usage.", "Check datasource latency."] },
   { id: "resolved-vaultwarden-health", severity: "warning", title: "Vaultwarden health check recovered", message: "The container returned to a healthy state after one failed probe.", affectedResource: "vaultwarden", status: "resolved", createdAt: ago({ hours: 4 }), firstSeenAt: ago({ hours: 4 }), lastSeenAt: ago({ hours: 3, minutes: 51 }), occurrenceCount: 2, resolvedAt: ago({ hours: 3, minutes: 51 }), failedChecks: ["Docker health: unhealthy"], possibleCause: "A short database lock delayed the health endpoint.", suggestedNextSteps: ["No immediate action required.", "Review logs if the event repeats."] },
-  { id: "resolved-proxmox-offline", severity: "critical", title: "Proxmox node recovered", message: "The monitored Proxmox node is reachable again.", affectedResource: "Proxmox", status: "resolved", createdAt: ago({ days: 1, hours: 2 }), firstSeenAt: ago({ days: 1, hours: 2 }), lastSeenAt: ago({ days: 1, hours: 1, minutes: 42 }), occurrenceCount: 12, resolvedAt: ago({ days: 1, hours: 1, minutes: 42 }), failedChecks: ["HTTPS connection refused", "server monitor offline"], possibleCause: "The host rebooted after scheduled package updates.", suggestedNextSteps: ["Confirm the maintenance completed.", "Review boot logs if downtime was unexpected."] },
-  { id: "resolved-cpu-elevated", severity: "warning", title: "CPU usage returned to normal", message: "CPU usage remained above 80% during the backup window.", affectedResource: "homelab-core", status: "resolved", createdAt: ago({ days: 2, hours: 3 }), firstSeenAt: ago({ days: 2, hours: 3 }), lastSeenAt: ago({ days: 2, hours: 2, minutes: 36 }), occurrenceCount: 24, resolvedAt: ago({ days: 2, hours: 2, minutes: 36 }), failedChecks: ["CPU usage: 87.4%", "warning threshold: 80%"], possibleCause: "Restic compression and media indexing overlapped.", suggestedNextSteps: ["Stagger scheduled jobs.", "Limit backup CPU priority."] },
-  { id: "resolved-cloud-route", severity: "resolved", title: "Nextcloud route recovered", message: "The reverse proxy route is serving traffic normally.", affectedResource: "https://nc.muthu.eu", status: "resolved", createdAt: ago({ days: 4 }), firstSeenAt: ago({ days: 4 }), lastSeenAt: ago({ days: 3, hours: 23, minutes: 49 }), occurrenceCount: 4, resolvedAt: ago({ days: 3, hours: 23, minutes: 49 }), failedChecks: ["HTTP 504"], possibleCause: "Nextcloud was restarting after an application update.", suggestedNextSteps: ["No action required.", "Confirm future updates run inside the maintenance window."] }
+  { id: "resolved-compute-node", severity: "critical", title: "Compute node recovered", message: "The monitored compute node is reachable again.", affectedResource: "Compute node", status: "resolved", createdAt: ago({ days: 1, hours: 2 }), firstSeenAt: ago({ days: 1, hours: 2 }), lastSeenAt: ago({ days: 1, hours: 1, minutes: 42 }), occurrenceCount: 12, resolvedAt: ago({ days: 1, hours: 1, minutes: 42 }), failedChecks: ["HTTPS connection refused", "server monitor offline"], possibleCause: "The host rebooted after scheduled package updates.", suggestedNextSteps: ["Confirm the maintenance completed.", "Review boot logs if downtime was unexpected."] },
+  { id: "resolved-cpu-elevated", severity: "warning", title: "CPU usage returned to normal", message: "CPU usage remained above 80% during the backup window.", affectedResource: "demo-control-01", status: "resolved", createdAt: ago({ days: 2, hours: 3 }), firstSeenAt: ago({ days: 2, hours: 3 }), lastSeenAt: ago({ days: 2, hours: 2, minutes: 36 }), occurrenceCount: 24, resolvedAt: ago({ days: 2, hours: 2, minutes: 36 }), failedChecks: ["CPU usage: 87.4%", "warning threshold: 80%"], possibleCause: "Backup compression and media indexing overlapped.", suggestedNextSteps: ["Stagger scheduled jobs.", "Limit backup CPU priority."] },
+  { id: "resolved-cloud-route", severity: "resolved", title: "Cloud route recovered", message: "The reverse proxy route is serving traffic normally.", affectedResource: "https://cloud.demo.example", status: "resolved", createdAt: ago({ days: 4 }), firstSeenAt: ago({ days: 4 }), lastSeenAt: ago({ days: 3, hours: 23, minutes: 49 }), occurrenceCount: 4, resolvedAt: ago({ days: 3, hours: 23, minutes: 49 }), failedChecks: ["HTTP 504"], possibleCause: "The cloud service was restarting after an application update.", suggestedNextSteps: ["No action required.", "Confirm future updates run inside the maintenance window."] }
 ];
+
+export const demoUpdates: UpdateItem[] = [
+  { id: "home_assistant:core", sourceId: "home_assistant", sourceName: "Home Assistant", name: "Home Assistant Core", installedVersion: "2026.6.4", availableVersion: "2026.7.1", category: "core", status: "available", securityCritical: false, lastCheckedAt: now(), openUrl: "https://ha.demo.example/config/updates", releaseNotesUrl: "https://www.home-assistant.io/blog/" },
+  { id: "home_assistant:studio", sourceId: "home_assistant", sourceName: "Home Assistant", name: "Studio Code Server", installedVersion: "5.18.2", availableVersion: "5.19.0", category: "add-on", status: "available", securityCritical: false, lastCheckedAt: now(), openUrl: "https://ha.demo.example/config/updates", releaseNotesUrl: null },
+  { id: "home_assistant:zigbee", sourceId: "home_assistant", sourceName: "Home Assistant", name: "Zigbee Device Firmware", installedVersion: "1.0.8", availableVersion: "1.1.0", category: "firmware", status: "available", securityCritical: false, lastCheckedAt: now(), openUrl: "https://ha.demo.example/config/updates", releaseNotesUrl: null },
+  { id: "home_assistant:hacs", sourceId: "home_assistant", sourceName: "Home Assistant", name: "Energy Dashboard Integration", installedVersion: "2.4.0", availableVersion: "2.5.1", category: "integration", status: "available", securityCritical: false, lastCheckedAt: now(), openUrl: "https://ha.demo.example/config/updates", releaseNotesUrl: "https://github.com/home-assistant/core/releases" },
+  { id: "ubuntu:openssl", sourceId: "ubuntu", sourceName: "Ubuntu", name: "OpenSSL security update", installedVersion: "3.0.13-0ubuntu3.4", availableVersion: "3.0.13-0ubuntu3.5", category: "system", status: "available", securityCritical: true, lastCheckedAt: now(), openUrl: null, releaseNotesUrl: "https://ubuntu.com/security/notices" },
+  { id: "docker:traefik", sourceId: "docker", sourceName: "Docker", name: "Traefik container image", installedVersion: "v3.4.0", availableVersion: "v3.4.1", category: "container", status: "available", securityCritical: false, lastCheckedAt: now(), openUrl: "https://hub.docker.com/_/traefik", releaseNotesUrl: "https://github.com/traefik/traefik/releases" },
+  { id: "proxmox:ve", sourceId: "proxmox", sourceName: "Proxmox", name: "Proxmox VE packages", installedVersion: "8.4.1", availableVersion: "8.4.2", category: "system", status: "available", securityCritical: false, lastCheckedAt: now(), openUrl: "https://pve.demo.example", releaseNotesUrl: "https://pve.proxmox.com/wiki/Roadmap" },
+  { id: "firmware:gateway", sourceId: "firmware", sourceName: "Firmware", name: "Lab Gateway firmware", installedVersion: "8.00", availableVersion: "8.02", category: "firmware", status: "available", securityCritical: false, lastCheckedAt: now(), openUrl: "https://gateway.demo.example", releaseNotesUrl: null },
+  { id: "home_assistant:os", sourceId: "home_assistant", sourceName: "Home Assistant", name: "Home Assistant Operating System", installedVersion: "16.0", availableVersion: "16.0", category: "system", status: "up_to_date", securityCritical: false, lastCheckedAt: now(), openUrl: "https://ha.demo.example/config/updates", releaseNotesUrl: null },
+  { id: "docker:nextcloud", sourceId: "docker", sourceName: "Docker", name: "Nextcloud container image", installedVersion: "30-apache", availableVersion: "31-apache", category: "container", status: "installing", securityCritical: false, lastCheckedAt: now(), openUrl: "https://hub.docker.com/_/nextcloud", releaseNotesUrl: null },
+  { id: "firmware:sensor", sourceId: "firmware", sourceName: "Firmware", name: "Workshop sensor firmware", installedVersion: "1.7.2", availableVersion: null, category: "firmware", status: "unknown", securityCritical: false, lastCheckedAt: now(), openUrl: null, releaseNotesUrl: null }
+];
+
+export function getDemoUpdateCenter(): UpdateCenterSnapshot {
+  const available = demoUpdates.filter((update) => update.status === "available");
+  return {
+    updates: demoUpdates.map((update) => ({ ...update, lastCheckedAt: now() })),
+    sources: [
+      { id: "home_assistant", name: "Home Assistant", configured: true, connected: true, lastCheckedAt: now(), lastError: null },
+      { id: "ubuntu", name: "Ubuntu", configured: true, connected: true, lastCheckedAt: now(), lastError: null },
+      { id: "docker", name: "Docker", configured: true, connected: true, lastCheckedAt: now(), lastError: null },
+      { id: "proxmox", name: "Proxmox", configured: true, connected: true, lastCheckedAt: now(), lastError: null },
+      { id: "firmware", name: "Firmware", configured: true, connected: true, lastCheckedAt: now(), lastError: null }
+    ],
+    availableCount: available.length,
+    securityCriticalCount: available.filter((update) => update.securityCritical).length,
+    lastCheckedAt: now()
+  };
+}
 
 export const demoServerMonitors: MonitoredServerStatus[] = [
-  { id: "nas", name: "TrueNAS", backendUrl: "https://nas-node.muthu.eu", apiKeyPreview: "demo...nas", allowInsecureTls: false, status: "healthy", lastCheckedAt: now(), lastError: null },
-  { id: "proxmox", name: "Proxmox", backendUrl: "https://10.0.0.11:8006", apiKeyPreview: null, allowInsecureTls: true, status: "healthy", lastCheckedAt: now(), lastError: null },
-  { id: "backup-node", name: "Backup node", backendUrl: "http://10.0.0.31:3000", apiKeyPreview: "demo...bak", allowInsecureTls: false, status: "warning", lastCheckedAt: now(), lastError: "Metrics endpoint is responding slowly." },
-  { id: "lab-pi", name: "Lab Pi", backendUrl: "http://10.0.0.42:3000", apiKeyPreview: null, allowInsecureTls: false, status: "offline", lastCheckedAt: now(), lastError: "Connection timed out after 5 seconds." }
+  { id: "storage-node", name: "Storage node", backendUrl: "https://storage.demo.example", apiKeyPreview: "demo...storage", allowInsecureTls: false, status: "healthy", lastCheckedAt: now(), lastError: null },
+  { id: "compute-node", name: "Compute node", backendUrl: "https://198.51.100.11:8006", apiKeyPreview: null, allowInsecureTls: true, status: "healthy", lastCheckedAt: now(), lastError: null },
+  { id: "backup-node", name: "Backup node", backendUrl: "http://192.0.2.31:3000", apiKeyPreview: "demo...backup", allowInsecureTls: false, status: "warning", lastCheckedAt: now(), lastError: "Metrics endpoint is responding slowly." },
+  { id: "edge-lab", name: "Edge lab", backendUrl: "http://192.0.2.42:3000", apiKeyPreview: null, allowInsecureTls: false, status: "offline", lastCheckedAt: now(), lastError: "Connection timed out after 5 seconds." }
 ];
 
-export const demoOverview: Overview = {
-  status: "critical",
-  lastCheckedAt: now(),
-  serversOnline: 3,
-  serversTotal: 5,
-  containersRunning: 9,
-  containersTotal: 12,
-  domainsOnline: 5,
-  domainsTotal: 9,
-  criticalAlerts: 2,
-  warnings: 2
-};
+export function getDemoOverview(alerts: Alert[] = demoAlerts): Overview {
+  const activeAlerts = alerts.filter((alert) => alert.status === "active");
+  const criticalAlerts = activeAlerts.filter((alert) => alert.severity === "critical").length;
+  const warnings = activeAlerts.filter((alert) => alert.severity === "warning").length;
+  const activeDemoAgents = demoAgents.filter((agent) => agent.status !== "revoked");
+
+  return {
+    status: criticalAlerts > 0 ? "critical" : warnings > 0 ? "warning" : "healthy",
+    lastCheckedAt: now(),
+    serversOnline: demoServers.filter((server) => server.status === "healthy").length,
+    serversTotal: demoServers.length,
+    containersRunning: demoContainers.filter((container) => container.status === "running").length,
+    containersTotal: demoContainers.length,
+    domainsOnline: demoDomains.filter((domain) => domain.status === "healthy").length,
+    domainsTotal: demoDomains.length,
+    criticalAlerts,
+    warnings,
+    agentsOnline: activeDemoAgents.filter((agent) => agent.status === "online").length,
+    agentsTotal: activeDemoAgents.length
+  };
+}
