@@ -194,7 +194,7 @@ Legacy JSON monitor files may be imported once if they still exist, but SQLite i
 - Do not add restart, stop, delete, prune, reboot, exec, or volume actions.
 - Do not install updates or execute remote update commands from NodeGuard V1.
 - Do not hardcode private IPs, real API keys, passwords, or infrastructure secrets.
-- Do not commit `.env` files.
+- Do not commit `.env` files. (THIS IS VERY IMPORTANT)
 - Do not rewrite the whole frontend unnecessarily.
 - Do not build Kubernetes, SaaS billing, team accounts, SSH terminal, or enterprise features for v1.
 
@@ -206,3 +206,5 @@ Legacy JSON monitor files may be imported once if they still exist, but SQLite i
 - Server monitors check other NodeGuard backends or plain health URLs. Public sites and reverse proxies belong in Domains / Services.
 - Agent v0.1 buffers unsent reports in memory only; reports are lost on process restart.
 - Agent v0.1 runs as root in the packaged service so it can read protected configuration and Docker metadata. Docker socket access remains highly privileged and is not claimed to be least-privilege isolation.
+
+
