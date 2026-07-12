@@ -4499,18 +4499,23 @@ button:hover {
 
 /* Shared compact density system */
 :root {
-  --ng-density-page-x: 18px;
-  --ng-density-page-y: 12px;
-  --ng-density-section-gap: 12px;
-  --ng-density-panel-x: 12px;
-  --ng-density-panel-y: 12px;
-  --ng-density-header-height: 48px;
-  --ng-density-control-height: 36px;
-  --ng-density-row-height: 50px;
+  --ng-density-page-x: 14px;
+  --ng-density-page-y: 10px;
+  --ng-density-section-gap: 9px;
+  --ng-density-panel-x: 10px;
+  --ng-density-panel-y: 10px;
+  --ng-density-header-height: 44px;
+  --ng-density-control-height: 34px;
+  --ng-density-row-height: 46px;
+  --ng-action-bg: #24549b;
+  --ng-action-bg-hover: #2b62b0;
+  --ng-action-bg-active: #1c447f;
+  --ng-action-border: #376db8;
+  --ng-control-radius: 6px;
 }
 
 .app-shell {
-  grid-template-columns: 252px minmax(0, 1fr);
+  grid-template-columns: 238px minmax(0, 1fr);
 }
 
 .app-shell.sidebar-collapsed {
@@ -4518,24 +4523,24 @@ button:hover {
 }
 
 .sidebar {
-  height: calc(100vh - 24px);
-  margin: 12px 0 12px 12px;
-  padding: 12px;
+  height: calc(100vh - 20px);
+  margin: 10px 0 10px 10px;
+  padding: 10px;
 }
 
 .sidebar-top {
-  min-height: 48px;
+  min-height: 44px;
 }
 
 .brand {
   gap: 8px;
-  padding: 4px 2px 10px;
-  font-size: 17px;
+  padding: 2px 2px 8px;
+  font-size: 16px;
 }
 
 .brand-logo {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
 }
 
 .sidebar nav {
@@ -4543,19 +4548,19 @@ button:hover {
 }
 
 .sidebar button {
-  min-height: 40px;
-  gap: 9px;
-  padding-inline: 9px;
+  min-height: 38px;
+  gap: 8px;
+  padding-inline: 8px;
 }
 
 .workspace {
-  padding: var(--ng-density-page-y) var(--ng-density-page-x) 20px;
+  padding: var(--ng-density-page-y) var(--ng-density-page-x) 16px;
 }
 
 .workspace-topbar {
-  min-height: 50px;
+  min-height: 46px;
   margin-bottom: var(--ng-density-section-gap);
-  padding-inline: 14px;
+  padding-inline: 12px;
 }
 
 .topbar-title span {
@@ -4574,7 +4579,7 @@ button:hover {
 
 .panel-header {
   min-height: var(--ng-density-header-height);
-  padding-inline: 14px;
+  padding-inline: 12px;
 }
 
 .panel > :not(.panel-header) {
@@ -4586,14 +4591,14 @@ button:hover {
 }
 
 .hero-panel {
-  min-height: 136px;
-  gap: 12px;
-  padding: 17px 20px;
+  min-height: 116px;
+  gap: 8px;
+  padding: 13px 17px;
 }
 
 .hero-panel h1 {
-  margin: 5px 0;
-  font-size: 52px;
+  margin: 3px 0;
+  font-size: 46px;
 }
 
 .hero-main-issue {
@@ -4605,16 +4610,16 @@ button:hover {
 }
 
 .metric-grid {
-  gap: 10px;
+  gap: 8px;
 }
 
 .metric-card {
-  padding: 13px;
+  padding: 11px;
 }
 
 .metric-value {
-  margin: 5px 0 8px;
-  font-size: 48px;
+  margin: 3px 0 6px;
+  font-size: 44px;
 }
 
 .subdued-value {
@@ -4622,9 +4627,9 @@ button:hover {
 }
 
 .metric-indicator {
-  min-height: 70px;
-  gap: 8px;
-  padding: 8px;
+  min-height: 62px;
+  gap: 6px;
+  padding: 7px;
 }
 
 .metric-detail {
@@ -4641,12 +4646,12 @@ button:hover {
 }
 
 .two-col {
-  gap: 10px;
+  gap: 8px;
 }
 
 .root-cause,
 .diagnostic-panel {
-  padding: 12px;
+  padding: 10px;
 }
 
 .issue-list {
@@ -4654,13 +4659,13 @@ button:hover {
 }
 
 .issue-row {
-  min-height: 40px;
+  min-height: 36px;
 }
 
 .state-block {
-  min-height: 88px;
-  gap: 5px;
-  padding: 13px;
+  min-height: 72px;
+  gap: 4px;
+  padding: 10px;
 }
 
 .info-grid {
@@ -4668,9 +4673,9 @@ button:hover {
 }
 
 .info {
-  min-height: 58px;
+  min-height: 52px;
   gap: 3px;
-  padding: 10px;
+  padding: 9px;
 }
 
 .server-info-groups {
@@ -4722,12 +4727,14 @@ button:hover {
 }
 
 .settings-page .panel > .settings-content {
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
 }
 
 .settings-page .settings-description {
   line-height: 1.45;
+  width: 100%;
+  max-width: none;
 }
 
 .settings-control,
@@ -4736,12 +4743,12 @@ button:hover {
 }
 
 .settings-inline-action {
-  gap: 14px;
+  gap: 12px;
 }
 
 .integration-card {
-  gap: 10px;
-  padding: 13px;
+  gap: 8px;
+  padding: 11px;
 }
 
 .integration-heading,
@@ -4773,7 +4780,7 @@ button:hover {
 
 .update-summary-strip > div {
   gap: 3px;
-  padding: 12px 14px;
+  padding: 9px 12px;
 }
 
 .update-summary-strip strong {
@@ -4782,7 +4789,7 @@ button:hover {
 
 .updates-table th,
 .updates-table td {
-  padding: 9px 11px;
+  padding: 7px 9px;
 }
 
 .container-table-header,
@@ -4791,13 +4798,13 @@ button:hover {
 }
 
 .container-table-header {
-  min-height: 38px;
+  min-height: 34px;
   padding-inline: 10px;
 }
 
 .container-table-row {
-  min-height: 52px;
-  padding: 6px 10px;
+  min-height: 46px;
+  padding: 5px 9px;
 }
 
 .container-table-tools,
@@ -4808,17 +4815,14 @@ button:hover {
 }
 
 .container-filter,
-.container-filter select,
 .host-selector,
-.host-selector select,
-.agent-toolbar > label,
-.agent-toolbar select {
-  min-height: 36px;
+.agent-toolbar > label {
+  min-height: var(--ng-density-control-height);
 }
 
 .agents-table th,
 .agents-table td {
-  padding: 9px 11px;
+  padding: 7px 9px;
 }
 
 .agent-detail {
@@ -4836,7 +4840,7 @@ button:hover {
 }
 
 .domain-action-row {
-  padding-inline: 10px;
+  padding: 6px 9px;
 }
 
 .domain-compact-metrics {
@@ -4853,12 +4857,12 @@ button:hover {
 }
 
 .alert-view-tabs {
-  min-height: 44px;
+  min-height: 40px;
 }
 
 .alert-view-tabs button {
-  min-height: 40px;
-  padding-inline: 12px;
+  min-height: 36px;
+  padding-inline: 10px;
 }
 
 .alert-table-header,
@@ -4867,17 +4871,17 @@ button:hover {
 }
 
 .alert-table-header {
-  min-height: 38px;
+  min-height: 34px;
   padding-inline: 11px;
 }
 
 .panel .alert-table-row {
-  min-height: 52px;
-  padding: 7px 11px;
+  min-height: 46px;
+  padding: 6px 10px;
 }
 
 .alert-table-footer {
-  min-height: 42px;
+  min-height: 38px;
   gap: 12px;
 }
 
@@ -4909,24 +4913,24 @@ button:hover {
 }
 
 .modal-header {
-  min-height: 46px;
+  min-height: 42px;
   padding-inline: 12px;
 }
 
 .modal > :not(.modal-header) {
-  margin: 12px;
+  margin: 10px;
 }
 
 .modal-form,
 .confirmation-dialog {
-  gap: 12px;
+  gap: 10px;
 }
 
 .container-mobile-card,
 .agent-mobile-card,
 .update-mobile-card {
-  gap: 9px;
-  padding: 11px;
+  gap: 7px;
+  padding: 9px;
 }
 
 @media (max-width: 1100px) {
@@ -4950,17 +4954,17 @@ button:hover {
 
   .sidebar {
     height: auto;
-    margin: 8px;
-    padding: 10px;
+    margin: 7px;
+    padding: 8px;
   }
 
   .workspace {
-    padding: 8px 10px 14px;
+    padding: 7px 9px 12px;
   }
 
   .workspace-topbar {
-    min-height: 48px;
-    margin-bottom: 9px;
+    min-height: 44px;
+    margin-bottom: 8px;
   }
 
   .page-stack,
@@ -4971,7 +4975,7 @@ button:hover {
 
 @media (max-width: 760px) {
   :root {
-    --ng-density-section-gap: 10px;
+    --ng-density-section-gap: 8px;
     --ng-density-control-height: 44px;
   }
 
@@ -4980,15 +4984,11 @@ button:hover {
   .icon-button,
   .segmented button,
   .inline-form button,
-  .update-toolbar select,
   .integration-form input,
   .search-field,
   .container-filter,
-  .container-filter select,
   .host-selector,
-  .host-selector select,
-  .agent-toolbar > label,
-  .agent-toolbar select {
+  .agent-toolbar > label {
     min-height: 44px;
   }
 
@@ -4999,17 +4999,17 @@ button:hover {
 
   .panel-header {
     min-height: auto;
-    gap: 9px;
-    padding: 10px 12px;
+    gap: 7px;
+    padding: 8px 10px;
   }
 
   .panel > :not(.panel-header) {
-    margin: 10px;
+    margin: 8px;
   }
 
   .hero-panel {
     min-height: auto;
-    padding: 15px;
+    padding: 12px;
   }
 
   .hero-panel h1 {
@@ -5017,7 +5017,7 @@ button:hover {
   }
 
   .metric-card {
-    padding: 12px;
+    padding: 10px;
   }
 
   .metric-value {
@@ -5025,8 +5025,8 @@ button:hover {
   }
 
   .state-block {
-    min-height: 84px;
-    padding: 12px;
+    min-height: 68px;
+    padding: 9px;
   }
 
   .info {
@@ -5040,8 +5040,8 @@ button:hover {
   }
 
   .settings-page .panel > .settings-content {
-    gap: 11px;
-    padding: 12px;
+    gap: 9px;
+    padding: 10px;
   }
 
   .history-chart {
@@ -5221,5 +5221,764 @@ button:hover {
   .about-actions a,
   .about-actions button {
     width: 100%;
+  }
+}
+
+/* Agent installer and login control refinement */
+.login-card label.remember-option {
+  min-height: 28px;
+  margin: 11px 0 1px;
+  padding: 2px 0;
+  align-items: center;
+  line-height: 1.2;
+}
+
+.remember-option:hover input[type="checkbox"] {
+  border-color: rgba(56, 217, 255, 0.62);
+  background-color: rgba(56, 217, 255, 0.08);
+}
+
+.remember-option:active input[type="checkbox"] {
+  transform: scale(0.94);
+}
+
+.remember-option input[type="checkbox"]:disabled,
+.remember-option:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.login-card .remember-option + button[type="submit"] {
+  margin-top: 14px;
+}
+
+.agent-install-description {
+  color: var(--ng-muted);
+  line-height: 1.5;
+}
+
+.agent-install-form {
+  display: grid;
+  gap: 12px;
+}
+
+.agent-enrollment-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: end;
+  gap: 12px;
+}
+
+.agent-enrollment-form-row label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--ng-muted);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.agent-enrollment-form-row input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--ng-border);
+  border-radius: 6px;
+  outline: none;
+  color: var(--ng-text);
+  background: rgba(2, 6, 23, 0.72);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.agent-enrollment-form-row input:hover {
+  border-color: rgba(148, 163, 184, 0.42);
+}
+
+.agent-enrollment-form-row input:focus-visible {
+  border-color: rgba(56, 217, 255, 0.74);
+  box-shadow: 0 0 0 3px rgba(56, 217, 255, 0.12);
+}
+
+button.agent-generate-button,
+button.agent-view-button {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  appearance: none;
+  color: #fff;
+  background: #2563eb;
+  font-weight: 800;
+}
+
+button.agent-generate-button:hover:not(:disabled),
+button.agent-view-button:hover:not(:disabled) {
+  border-color: #60a5fa;
+  background: #1d4ed8;
+}
+
+button.agent-generate-button:active:not(:disabled),
+button.agent-view-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.985);
+}
+
+button.agent-generate-button:focus-visible,
+button.agent-view-button:focus-visible,
+.agent-command-actions .secondary-button:focus-visible,
+.agent-manual-install a:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(56, 217, 255, 0.16);
+}
+
+button.agent-generate-button:disabled,
+button.agent-view-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+  transform: none;
+}
+
+.agent-command-block {
+  gap: 12px;
+  padding: 14px;
+}
+
+.agent-command-heading {
+  display: flex !important;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.agent-command-heading > span:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.agent-command-heading small {
+  color: var(--ng-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.agent-command-heading > span:last-child {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid rgba(56, 217, 255, 0.26);
+  border-radius: 999px;
+  color: #a5e9ff;
+  background: rgba(56, 217, 255, 0.07);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.agent-command-heading > span:last-child.expired {
+  border-color: rgba(248, 113, 113, 0.36);
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.18);
+}
+
+.agent-command-block code {
+  max-width: 100%;
+  border-radius: 6px;
+  user-select: all;
+}
+
+.agent-installer-checklist {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 16px !important;
+}
+
+.agent-installer-checklist span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.agent-installer-checklist svg {
+  flex: 0 0 auto;
+  color: #4ade80;
+}
+
+.agent-command-actions {
+  display: flex !important;
+  justify-content: flex-end;
+  gap: 8px !important;
+}
+
+.agent-command-actions .secondary-button,
+.agent-manual-install a {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--ng-border-strong);
+  border-radius: 6px;
+  appearance: none;
+  color: var(--ng-text);
+  background: rgba(30, 41, 59, 0.78);
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.agent-command-actions .secondary-button:hover:not(:disabled),
+.agent-manual-install a:hover {
+  border-color: rgba(56, 217, 255, 0.52);
+  color: #fff;
+  background: rgba(56, 217, 255, 0.10);
+}
+
+.agent-command-actions .secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  transform: none;
+}
+
+.copy-state-icon {
+  display: inline-grid;
+  place-items: center;
+  animation: passwordToggleIn 170ms ease both;
+}
+
+.agent-manual-install {
+  border-top: 1px solid var(--ng-border);
+  padding-top: 10px;
+  color: var(--ng-muted);
+}
+
+.agent-manual-install summary {
+  width: fit-content;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #dbe7f7;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.agent-manual-install p {
+  margin: 9px 0;
+  color: var(--ng-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.agent-manual-install p code {
+  display: inline;
+  padding: 1px 4px;
+  border: 0;
+  background: rgba(2, 6, 23, 0.65);
+  white-space: normal;
+}
+
+.agent-manual-install a {
+  width: fit-content;
+  min-height: 32px;
+}
+
+.agent-enrollment-progress {
+  display: grid !important;
+  gap: 9px !important;
+  border-top: 1px solid var(--ng-border);
+  padding-top: 11px;
+}
+
+.agent-enrollment-progress > strong {
+  font-size: 13px;
+}
+
+.agent-enrollment-progress > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 16px;
+}
+
+.agent-enrollment-progress span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.agent-enrollment-progress span.complete {
+  color: #86efac;
+}
+
+.agent-enrollment-progress span.current {
+  color: #a5e9ff;
+}
+
+.agent-enrollment-progress.has-error > strong {
+  color: #fca5a5;
+}
+
+.progress-dot {
+  width: 7px;
+  height: 7px;
+  border: 1px solid #64748b;
+  border-radius: 50%;
+}
+
+.agent-view-button {
+  justify-self: end;
+}
+
+@media (max-width: 680px) {
+  .agent-enrollment-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-generate-button,
+  .agent-view-button,
+  .agent-command-actions .secondary-button,
+  .agent-command-actions a {
+    width: 100%;
+  }
+
+  .agent-command-heading,
+  .agent-command-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .agent-command-heading > span:last-child {
+    width: fit-content;
+  }
+
+  .agent-installer-checklist {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Shared select, action hierarchy, and dense dashboard refinements */
+.nodeguard-select {
+  position: relative;
+  min-width: 0;
+  color: var(--ng-text, #f8fafc);
+}
+
+.nodeguard-select--above {
+  display: grid;
+  gap: 4px;
+}
+
+.nodeguard-select.container-filter,
+.nodeguard-select.host-selector {
+  min-height: 0;
+  display: block;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: inherit;
+}
+
+.nodeguard-select.container-filter:focus-within {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.nodeguard-select-label {
+  color: var(--ng-muted, #94a3b8);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.nodeguard-select-trigger {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--ng-density-control-height, 34px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  border: 1px solid var(--ng-border, rgba(148, 163, 184, 0.18));
+  border-radius: var(--ng-control-radius, 6px);
+  appearance: none;
+  outline: none;
+  color: var(--ng-text, #f8fafc);
+  background: rgba(8, 15, 30, 0.92);
+  box-shadow: none;
+  font-size: 13px;
+  text-align: left;
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.nodeguard-select--inline .nodeguard-select-trigger {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding-left: 0;
+}
+
+.nodeguard-select-prefix {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  border-right: 1px solid var(--ng-border, rgba(148, 163, 184, 0.18));
+  color: var(--ng-muted, #94a3b8);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.nodeguard-select-value {
+  min-width: 0;
+  overflow: hidden;
+  color: #e7edf8;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nodeguard-select-trigger:hover:not(:disabled) {
+  border-color: rgba(56, 217, 255, 0.46);
+  background: rgba(14, 25, 45, 0.96);
+  transform: none;
+}
+
+.nodeguard-select-trigger:focus-visible,
+.nodeguard-select.is-open .nodeguard-select-trigger {
+  border-color: rgba(56, 217, 255, 0.74);
+  box-shadow: 0 0 0 3px rgba(56, 217, 255, 0.11);
+}
+
+.nodeguard-select-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.nodeguard-select-chevron {
+  color: #9fb0c8;
+  transition: transform 140ms ease;
+}
+
+.nodeguard-select.is-open .nodeguard-select-chevron {
+  transform: rotate(180deg);
+}
+
+.nodeguard-select-menu {
+  position: fixed;
+  z-index: 4000;
+  top: var(--select-menu-top);
+  left: var(--select-menu-left);
+  width: var(--select-menu-width);
+  max-height: var(--select-menu-max-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  border: 1px solid rgba(96, 125, 166, 0.38);
+  border-radius: 7px;
+  outline: none;
+  color: #e7edf8;
+  background: #0e182b;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.32);
+  animation: ngSelectMenuIn 110ms ease-out both;
+}
+
+.nodeguard-select-option {
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 5px;
+  color: #cbd5e1;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.nodeguard-select-option.is-active {
+  color: #f8fbff;
+  background: rgba(56, 189, 248, 0.11);
+  box-shadow: inset 2px 0 0 rgba(56, 217, 255, 0.52);
+}
+
+.nodeguard-select-option.is-selected {
+  color: #bfeeff;
+  background: rgba(36, 84, 155, 0.34);
+  font-weight: 750;
+}
+
+.nodeguard-select-option[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.nodeguard-select-option svg {
+  color: var(--ng-cyan, #38d9ff);
+}
+
+@keyframes ngSelectMenuIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+button.primary-button,
+button.modal-submit,
+.inline-form button.primary-button,
+.login-card button[type="submit"],
+button.agent-generate-button,
+button.agent-view-button,
+.panel-header button.primary-button,
+.button-row button.primary-button {
+  border-color: var(--ng-action-border);
+  color: #f8fbff;
+  background: var(--ng-action-bg);
+  box-shadow: none;
+}
+
+button.primary-button:hover:not(:disabled),
+button.modal-submit:hover:not(:disabled),
+.inline-form button.primary-button:hover:not(:disabled),
+.login-card button[type="submit"]:hover:not(:disabled),
+button.agent-generate-button:hover:not(:disabled),
+button.agent-view-button:hover:not(:disabled),
+.panel-header button.primary-button:hover:not(:disabled),
+.button-row button.primary-button:hover:not(:disabled) {
+  border-color: #4a7cca;
+  background: var(--ng-action-bg-hover);
+  box-shadow: none;
+  transform: none;
+}
+
+button.primary-button:active:not(:disabled),
+button.modal-submit:active:not(:disabled),
+.inline-form button.primary-button:active:not(:disabled),
+.login-card button[type="submit"]:active:not(:disabled),
+button.agent-generate-button:active:not(:disabled),
+button.agent-view-button:active:not(:disabled) {
+  border-color: #2e5c9d;
+  background: var(--ng-action-bg-active);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
+  transform: none;
+}
+
+button.secondary-button,
+.panel-header > button:not(.primary-button),
+.dashboard-panel-action,
+.button-row button.secondary-button {
+  border-color: var(--ng-border-strong, rgba(148, 163, 184, 0.28));
+  color: #e7edf8;
+  background: rgba(30, 41, 59, 0.72);
+  box-shadow: none;
+}
+
+button.secondary-button:hover:not(:disabled),
+.panel-header > button:not(.primary-button):hover:not(:disabled),
+.dashboard-panel-action:hover:not(:disabled),
+.button-row button.secondary-button:hover:not(:disabled) {
+  border-color: rgba(56, 217, 255, 0.46);
+  color: #f8fbff;
+  background: rgba(39, 55, 82, 0.9);
+  box-shadow: none;
+  transform: none;
+}
+
+button.primary-button:focus-visible,
+button.secondary-button:focus-visible,
+button.modal-submit:focus-visible,
+.login-card button[type="submit"]:focus-visible {
+  outline: 2px solid rgba(56, 217, 255, 0.82);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+button.primary-button:disabled,
+button.secondary-button:disabled,
+button.modal-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+.settings-page .settings-description {
+  width: 100%;
+  max-width: none;
+  overflow-wrap: anywhere;
+}
+
+.settings-page .about-content .settings-description {
+  max-width: min(100%, 1120px);
+}
+
+.agent-lifecycle-actions {
+  display: grid;
+  border-top: 1px solid var(--ng-border);
+}
+
+.agent-lifecycle-actions > div {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 0;
+}
+
+.agent-lifecycle-actions > div + div {
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.agent-lifecycle-actions span {
+  display: grid;
+  gap: 2px;
+}
+
+.agent-lifecycle-actions small {
+  color: var(--ng-muted);
+  line-height: 1.35;
+}
+
+.agent-lifecycle-actions button {
+  flex: 0 0 auto;
+}
+
+.danger-button.secondary-danger {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.12);
+}
+
+.agent-delete-confirmation {
+  gap: 9px;
+}
+
+.agent-delete-confirmation > p {
+  display: grid;
+  gap: 4px;
+}
+
+.agent-delete-name {
+  color: #f8fafc;
+  font-size: 15px;
+}
+
+.agent-delete-confirmation ul {
+  margin: -2px 0 2px;
+  padding-left: 22px;
+  color: #cbd5e1;
+  line-height: 1.55;
+}
+
+.agent-delete-warning {
+  display: flex !important;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px !important;
+  padding: 8px 10px;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: 6px;
+  color: #fecaca !important;
+  background: rgba(127, 29, 29, 0.12);
+}
+
+.agent-delete-field {
+  display: grid;
+  gap: 5px;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.agent-delete-field code {
+  width: fit-content;
+  display: inline-flex;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.18);
+}
+
+.agent-delete-field input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--ng-border-strong);
+  border-radius: 6px;
+  outline: none;
+  color: var(--ng-text);
+  background: rgba(2, 6, 23, 0.72);
+}
+
+.agent-delete-field input:focus-visible {
+  border-color: rgba(248, 113, 113, 0.72);
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.1);
+}
+
+.agents-table tbody tr,
+.container-table-row,
+.alert-table-row,
+.domain-action-row {
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+@media (max-width: 760px) {
+  .nodeguard-select-trigger,
+  .nodeguard-select-option {
+    min-height: 44px;
+  }
+
+  .nodeguard-select-menu {
+    max-width: calc(100vw - 16px);
+  }
+
+  .nodeguard-select,
+  .agent-status-filter,
+  .container-filter,
+  .host-selector {
+    width: 100%;
+  }
+
+  .agent-lifecycle-actions > div {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .agent-lifecycle-actions button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .agent-delete-confirmation > div {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .agent-delete-confirmation button,
+  .agent-delete-field input {
+    min-height: 44px;
+  }
+
+  .update-toolbar {
+    gap: 7px;
+  }
+
+  .domain-compact-metrics {
+    gap: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nodeguard-select-menu {
+    animation: none;
+  }
+
+  .nodeguard-select-chevron {
+    transition: none;
   }
 }

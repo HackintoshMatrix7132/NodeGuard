@@ -6,7 +6,9 @@ import {
   addServerMonitor,
   createAgentEnrollmentToken,
   createAgentRotationToken,
+  deleteAgent,
   getAgent,
+  getAgentEnrollmentProgress,
   getAgentEnrollmentTokens,
   getAgents,
   getAlert,
@@ -57,6 +59,7 @@ export const queryKeys = {
   agents: ["agents"] as const,
   agent: (id: string) => ["agents", id] as const,
   agentEnrollmentTokens: ["agents", "enrollment-tokens"] as const,
+  agentEnrollmentProgress: (id: string) => ["agents", "enrollment-tokens", id, "status"] as const,
   domains: ["domains"] as const,
   alerts: (status: "active" | "resolved" | "all" = "active") => ["alerts", status] as const,
   alert: (id: string) => ["alert", id] as const,
@@ -145,6 +148,20 @@ export function useAgentEnrollmentTokens() {
   });
 }
 
+export function useAgentEnrollmentProgress(id: string | null) {
+  const config = useConfig();
+  const demoMode = useSettingsStore((state) => state.demoMode);
+  return useQuery({
+    queryKey: [...queryKeys.agentEnrollmentProgress(id ?? ""), demoMode],
+    queryFn: () => demoMode
+      ? Promise.resolve({ id: id ?? "demo-enrollment", purpose: "enroll" as const, displayName: "Demo agent", expiresAt: new Date(Date.now() + 600000).toISOString(), state: "waiting" as const, agent: null })
+      : getAgentEnrollmentProgress(config, id ?? ""),
+    enabled: Boolean(id),
+    refetchInterval: (query) => ["online", "expired", "revoked"].includes(query.state.data?.state ?? "") ? false : 1500,
+    staleTime: 0
+  });
+}
+
 function invalidateAgentQueries(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
   void queryClient.invalidateQueries({ queryKey: queryKeys.servers });
@@ -159,7 +176,7 @@ export function useCreateAgentEnrollmentToken() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateAgentEnrollmentInput) => demoMode
-      ? Promise.resolve({ id: "demo-enrollment", displayName: input.displayName ?? null, purpose: "enroll" as const, agentId: null, expiresAt: new Date(Date.now() + 600000).toISOString(), createdAt: new Date().toISOString(), revokedAt: null, token: "ng_join_DEMO_REDACTED_TOKEN" })
+      ? Promise.reject(new Error("Agent enrollment is unavailable in Demo Mode."))
       : createAgentEnrollmentToken(config, input),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.agentEnrollmentTokens })
   });
@@ -195,7 +212,7 @@ export function useCreateAgentRotationToken() {
   const demoMode = useSettingsStore((state) => state.demoMode);
   return useMutation({
     mutationFn: (id: string) => demoMode
-      ? Promise.resolve({ id: "demo-rotation", displayName: demoAgentDetails[id]?.displayName ?? "Demo agent", purpose: "rotate" as const, agentId: id, expiresAt: new Date(Date.now() + 600000).toISOString(), createdAt: new Date().toISOString(), revokedAt: null, token: "ng_rotate_DEMO_REDACTED_TOKEN" })
+      ? Promise.reject(new Error("Credential rotation is unavailable in Demo Mode."))
       : createAgentRotationToken(config, id)
   });
 }
@@ -207,6 +224,21 @@ export function useRevokeAgent() {
   return useMutation({
     mutationFn: (id: string) => demoMode ? Promise.resolve({ revoked: Boolean(id) }) : revokeAgent(config, id),
     onSuccess: () => invalidateAgentQueries(queryClient)
+  });
+}
+
+export function useDeleteAgent() {
+  const config = useConfig();
+  const demoMode = useSettingsStore((state) => state.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => demoMode
+      ? Promise.reject(new Error("Agent deletion is unavailable in Demo Mode."))
+      : deleteAgent(config, id),
+    onSuccess: (_result, id) => {
+      queryClient.removeQueries({ queryKey: queryKeys.agent(id) });
+      invalidateAgentQueries(queryClient);
+    }
   });
 }
 

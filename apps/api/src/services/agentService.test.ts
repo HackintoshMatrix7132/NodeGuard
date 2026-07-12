@@ -26,14 +26,24 @@ test("agent enrollment, ingestion, rotation, and revocation lifecycle", async (c
     const enrollment = agentService.createAgentEnrollmentToken("Expired agent");
     getDatabase().prepare("UPDATE agent_enrollment_tokens SET expires_at = ? WHERE id = ?")
       .run(new Date(Date.now() - 1000).toISOString(), enrollment.id);
+    assert.equal(agentService.getAgentEnrollmentProgress(enrollment.id)?.state, "expired");
     assert.throws(() => registration(enrollment.token), (error: unknown) =>
       error instanceof agentService.AgentServiceError && error.code === "invalid_enrollment_token");
+  });
+
+  await context.test("revoked enrollment progress never exposes a secret", () => {
+    const enrollment = agentService.createAgentEnrollmentToken("Revoked enrollment");
+    assert.equal(agentService.revokeEnrollmentToken(enrollment.id).revoked, true);
+    const progress = agentService.getAgentEnrollmentProgress(enrollment.id);
+    assert.equal(progress?.state, "revoked");
+    assert.equal("token" in (progress ?? {}), false);
   });
 
   let agentId = "";
   let credential = "";
   await context.test("a token creates one uniquely authenticated agent and is single use", () => {
     const enrollment = agentService.createAgentEnrollmentToken("Docker main");
+    assert.equal(agentService.getAgentEnrollmentProgress(enrollment.id)?.state, "waiting");
     const registered = registration(enrollment.token);
     agentId = registered.agentId;
     credential = registered.credential;
@@ -42,6 +52,11 @@ test("agent enrollment, ingestion, rotation, and revocation lifecycle", async (c
     assert.equal(agentService.authenticateAgent(agentId, "wrong"), null);
     assert.throws(() => registration(enrollment.token), (error: unknown) =>
       error instanceof agentService.AgentServiceError && error.code === "invalid_enrollment_token");
+    const registrationProgress = agentService.getAgentEnrollmentProgress(enrollment.id);
+    assert.equal(registrationProgress?.state, "registered");
+    assert.equal(registrationProgress?.agent?.id, agentId);
+    assert.equal("token" in (registrationProgress ?? {}), false);
+    assert.equal("credential" in (registrationProgress?.agent ?? {}), false);
     const stored = getDatabase().prepare("SELECT credential_hash FROM agents WHERE id = ?").get(agentId) as { credential_hash: string };
     assert.notEqual(stored.credential_hash, credential);
   });
@@ -51,6 +66,8 @@ test("agent enrollment, ingestion, rotation, and revocation lifecycle", async (c
     assert.equal(agentService.recordAgentHeartbeat(agentId, {
       agentId, agentVersion: "0.1.0", processUptimeSeconds: 30, timestamp
     }).ok, true);
+    const enrollmentId = (getDatabase().prepare("SELECT id FROM agent_enrollment_tokens WHERE agent_id = ? AND purpose = 'enroll'").get(agentId) as { id: string }).id;
+    assert.equal(agentService.getAgentEnrollmentProgress(enrollmentId)?.state, "online");
     agentService.recordAgentInventory(agentId, {
       timestamp,
       hostname: "docker-main",
@@ -141,5 +158,68 @@ test("agent enrollment, ingestion, rotation, and revocation lifecycle", async (c
     assert.equal(agentService.revokeAgent(agentId).revoked, true);
     assert.throws(() => agentService.authenticateAgent(agentId, credential), (error: unknown) =>
       error instanceof agentService.AgentServiceError && error.code === "agent_revoked");
+  });
+
+  await context.test("deleting a revoked agent removes only its owned data", () => {
+    const unrelatedEnrollment = agentService.createAgentEnrollmentToken("Unrelated agent");
+    const unrelated = registration(unrelatedEnrollment.token, "unrelated-host");
+    const timestamp = new Date().toISOString();
+    const agentAlertId = `agent-${agentId}-offline`;
+    const containerAlertId = `agent-container-${agentId}-abcdef1234567890`;
+    const unrelatedAlertId = `agent-${unrelated.agentId}-offline`;
+    const insertAlert = getDatabase().prepare(`
+      INSERT INTO alert_history (
+        id, severity, title, message, affected_resource, status, created_at, first_seen_at,
+        last_seen_at, resolved_at, occurrence_count, failed_checks, possible_cause, suggested_next_steps
+      ) VALUES (?, 'warning', 'Agent test alert', 'Test', 'Agent', 'resolved', ?, ?, ?, ?, 1, '[]', NULL, '[]')
+    `);
+    insertAlert.run(agentAlertId, timestamp, timestamp, timestamp, timestamp);
+    insertAlert.run(containerAlertId, timestamp, timestamp, timestamp, timestamp);
+    insertAlert.run(unrelatedAlertId, timestamp, timestamp, timestamp, timestamp);
+    getDatabase().prepare("INSERT INTO alert_deletions (id, deleted_at) VALUES (?, ?)").run(agentAlertId, timestamp);
+
+    assert.deepEqual(agentService.deleteAgent(agentId), { deleted: true });
+    assert.equal(agentService.getAgent(agentId), null);
+    assert.equal(agentService.authenticateAgent(agentId, credential), null);
+    for (const table of ["agent_metrics", "agent_containers", "agent_enrollment_tokens"]) {
+      const row = getDatabase().prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE agent_id = ?`).get(agentId) as { count: number };
+      assert.equal(row.count, 0, `${table} should be deleted`);
+    }
+    assert.equal((getDatabase().prepare("SELECT COUNT(*) AS count FROM metric_history WHERE server_id = ?").get(agentId) as { count: number }).count, 0);
+    assert.equal((getDatabase().prepare("SELECT COUNT(*) AS count FROM alert_history WHERE id IN (?, ?)").get(agentAlertId, containerAlertId) as { count: number }).count, 0);
+    assert.equal((getDatabase().prepare("SELECT COUNT(*) AS count FROM alert_deletions WHERE id = ?").get(agentAlertId) as { count: number }).count, 0);
+    assert.equal(agentService.getAgent(unrelated.agentId)?.displayName, "Unrelated agent");
+    assert.equal((getDatabase().prepare("SELECT COUNT(*) AS count FROM agent_enrollment_tokens WHERE agent_id = ?").get(unrelated.agentId) as { count: number }).count, 1);
+    assert.equal((getDatabase().prepare("SELECT COUNT(*) AS count FROM alert_history WHERE id = ?").get(unrelatedAlertId) as { count: number }).count, 1);
+    assert.throws(() => agentService.deleteAgent(agentId), (error: unknown) =>
+      error instanceof agentService.AgentServiceError && error.code === "agent_not_found" && error.status === 404);
+
+    assert.deepEqual(agentService.deleteAgent(unrelated.agentId), { deleted: true });
+    assert.equal(agentService.authenticateAgent(unrelated.agentId, unrelated.credential), null);
+  });
+
+  await context.test("a failed deletion rolls back credential invalidation and data removal", () => {
+    const enrollment = agentService.createAgentEnrollmentToken("Rollback agent");
+    const registered = registration(enrollment.token, "rollback-host");
+    const database = getDatabase();
+    database.exec(`
+      CREATE TRIGGER prevent_test_agent_delete
+      BEFORE DELETE ON agents
+      WHEN OLD.id = '${registered.agentId}'
+      BEGIN
+        SELECT RAISE(ABORT, 'simulated deletion failure');
+      END;
+    `);
+
+    try {
+      assert.throws(() => agentService.deleteAgent(registered.agentId), /simulated deletion failure/);
+    } finally {
+      database.exec("DROP TRIGGER prevent_test_agent_delete");
+    }
+
+    const stored = database.prepare("SELECT revoked_at FROM agents WHERE id = ?").get(registered.agentId) as { revoked_at: string | null };
+    assert.equal(stored.revoked_at, null);
+    assert.equal(agentService.authenticateAgent(registered.agentId, registered.credential)?.id, registered.agentId);
+    assert.deepEqual(agentService.deleteAgent(registered.agentId), { deleted: true });
   });
 });

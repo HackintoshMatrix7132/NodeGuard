@@ -4,7 +4,9 @@ import { requireOwner } from "../middleware/auth.js";
 import {
   AgentServiceError,
   createAgentEnrollmentToken,
+  deleteAgent,
   getAgent,
+  getAgentEnrollmentProgress,
   listActiveEnrollmentTokens,
   listAgents,
   renameAgent,
@@ -49,6 +51,16 @@ agentsRouter.delete("/enrollment-tokens/:tokenId", (request, response) => {
     : { error: "enrollment_token_not_found", message: "Active enrollment token not found." });
 });
 
+agentsRouter.get("/enrollment-tokens/:tokenId/status", (request, response) => {
+  response.setHeader("Cache-Control", "no-store");
+  const progress = getAgentEnrollmentProgress(request.params.tokenId);
+  if (!progress) {
+    response.status(404).json({ error: "enrollment_token_not_found", message: "Enrollment token not found." });
+    return;
+  }
+  response.json(progress);
+});
+
 agentsRouter.get("/:agentId", (request, response) => {
   const agent = getAgent(request.params.agentId);
   if (!agent) {
@@ -86,4 +98,12 @@ agentsRouter.post("/:agentId/revoke", (request, response) => {
   response.status(result.revoked ? 200 : 404).json(result.revoked
     ? result
     : { error: "agent_not_found", message: "Active agent not found." });
+});
+
+agentsRouter.delete("/:agentId", (request, response, next) => {
+  try {
+    response.json(deleteAgent(request.params.agentId));
+  } catch (error) {
+    if (!sendServiceError(error, response)) next(error);
+  }
 });

@@ -14,23 +14,42 @@ make build-linux-arm64
 
 Build metadata can be supplied with `VERSION`, `COMMIT`, and `DATE`. Binaries are written to `agent/bin/`, which is ignored by Git.
 
-## Install
+## One-command install
 
-The repository installer only installs a binary that you have already built or independently verified. It does not download or execute remote code.
+Open **Agents → Add Agent** in NodeGuard and copy the generated command:
 
 ```bash
-cd agent
-make build
-sudo ./install.sh
+curl -fsSL https://nodeguard.muthu.eu/install-agent.sh | sudo bash -s -- \
+  --server https://nodeguard.muthu.eu \
+  --token ng_join_REDACTED \
+  --name docker-main
+```
+
+The script is served by the NodeGuard deployment at `/install-agent.sh`. It detects the distribution and `amd64`/`arm64` architecture, downloads the matching release artifact over HTTPS, verifies the SHA-256 value from `checksums.txt`, registers the host once, installs systemd, starts the service, and waits up to 90 seconds for the first heartbeat.
+
+Supported installer flags:
+
+```txt
+--server URL
+--token TOKEN
+--name NAME
+--version VERSION
+--yes
+--verbose
+--no-color
+--help
 ```
 
 The installer changes only:
 
 - `/usr/local/bin/nodeguard-agent`
 - `/etc/nodeguard-agent/` with mode `0700`
+- `/etc/nodeguard-agent/config.json` with mode `0600`
 - `/etc/systemd/system/nodeguard-agent.service`
 
-NodeGuard does not currently publish `https://nodeguard.muthu.eu/install.sh`; do not use that URL until a signed release pipeline is implemented.
+It does not install packages, change the firewall, disable TLS verification, or expose credentials. The downloaded binary is rejected before installation if checksum verification fails. Existing configuration and credentials are always preserved.
+
+For offline or source-based installation, see [`docs/MANUAL_INSTALL.md`](docs/MANUAL_INSTALL.md).
 
 ## Register
 
@@ -108,11 +127,21 @@ The agent does not expose shell, exec, restart, stop, kill, delete, pull, packag
 ## Uninstall
 
 ```bash
-sudo systemctl disable --now nodeguard-agent
-sudo rm -f /etc/systemd/system/nodeguard-agent.service
-sudo systemctl daemon-reload
-sudo rm -f /usr/local/bin/nodeguard-agent
-sudo rm -rf /etc/nodeguard-agent
+sudo nodeguard-agent uninstall
 ```
 
-Revoke the agent from NodeGuard before or immediately after uninstalling it.
+This stops and disables the service, removes the unit and binary, and preserves `/etc/nodeguard-agent` so the host can be reinstalled without generating a duplicate registration.
+
+To delete local configuration and the unique Agent credential:
+
+```bash
+sudo nodeguard-agent uninstall --purge
+```
+
+Purging requires an explicit confirmation. For unattended removal, `--purge --yes` is available. Uninstallation never deletes the Agent record from NodeGuard; revoke it from the Agents page separately.
+
+Additional guides:
+
+- [`docs/UPGRADE.md`](docs/UPGRADE.md)
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)
+- [`docs/SECURITY.md`](docs/SECURITY.md)

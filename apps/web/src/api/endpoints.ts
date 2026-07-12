@@ -1,4 +1,4 @@
-import type { AgentDetail, AgentEnrollmentToken, AgentSummary, Alert, AuthSession, Container, CreateAgentEnrollmentInput, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, CreatedAgentEnrollmentToken, DockerSnapshot, DomainCheck, HomeAssistantSettings, HomeAssistantSettingsInput, LoginInput, MetricHistory, MetricHistoryRange, MetricSnapshot, MonitoredServerStatus, Overview, ServerListItem, Server, UpdateCenterSnapshot } from "../types/nodeguard";
+import type { AgentDetail, AgentEnrollmentProgress, AgentEnrollmentToken, AgentSummary, Alert, AuthSession, Container, CreateAgentEnrollmentInput, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, CreatedAgentEnrollmentToken, DockerSnapshot, DomainCheck, HomeAssistantSettings, HomeAssistantSettingsInput, LoginInput, MetricHistory, MetricHistoryRange, MetricSnapshot, MonitoredServerStatus, Overview, ServerListItem, Server, UpdateCenterSnapshot } from "../types/nodeguard";
 import type { ApiConfig } from "./client";
 import { apiFetch } from "./client";
 
@@ -75,6 +75,10 @@ export function getAgentEnrollmentTokens(config: ApiConfig) {
   return apiFetch<{ tokens: AgentEnrollmentToken[] }>(config, "/api/agents/enrollment-tokens");
 }
 
+export function getAgentEnrollmentProgress(config: ApiConfig, id: string) {
+  return apiFetch<AgentEnrollmentProgress>(config, `/api/agents/enrollment-tokens/${id}/status`);
+}
+
 export function createAgentEnrollmentToken(config: ApiConfig, input: CreateAgentEnrollmentInput) {
   return apiFetch<CreatedAgentEnrollmentToken>(config, "/api/agents/enrollment-tokens", {
     method: "POST",
@@ -99,6 +103,10 @@ export function createAgentRotationToken(config: ApiConfig, id: string) {
 
 export function revokeAgent(config: ApiConfig, id: string) {
   return apiFetch<{ revoked: boolean }>(config, `/api/agents/${id}/revoke`, { method: "POST" });
+}
+
+export function deleteAgent(config: ApiConfig, id: string) {
+  return apiFetch<{ deleted: boolean }>(config, `/api/agents/${id}`, { method: "DELETE" });
 }
 
 export function addContainerMonitor(config: ApiConfig, input: CreateContainerMonitorInput) {

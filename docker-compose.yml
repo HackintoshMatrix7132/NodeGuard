@@ -10,6 +10,9 @@ services:
       PORT: 3000
       DATABASE_URL: file:/data/nodeguard.sqlite
       WEB_DIST_DIR: apps/web/dist
+      AGENT_INSTALLER_PATH: agent/install-agent.sh
+      AGENT_RELEASE_DIR: agent-releases
+      AGENT_RELEASE_VERSION: ${AGENT_RELEASE_VERSION:-0.1.0}
       TRUST_PROXY: "1"
       NODEGUARD_ADMIN_USERNAME: ${NODEGUARD_ADMIN_USERNAME:-admin}
       NODEGUARD_ADMIN_PASSWORD: ${NODEGUARD_ADMIN_PASSWORD:?Set NODEGUARD_ADMIN_PASSWORD in the root .env file}

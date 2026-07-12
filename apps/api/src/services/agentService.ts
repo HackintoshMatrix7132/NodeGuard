@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 
 import { env } from "../config/env.js";
-import type { AgentContainerInput, AgentDetail, AgentDockerInput, AgentEnrollmentToken, AgentHeartbeatInput, AgentInventoryInput, AgentMetricSampleInput, AgentMetricsInput, AgentRegistrationInput, AgentRegistrationResponse, AgentStatus, AgentSummary, Container, ContainerHealth, ContainerStatus, DockerSnapshot, MetricSnapshot, Server } from "../types/nodeguard.js";
+import type { AgentContainerInput, AgentDetail, AgentDockerInput, AgentEnrollmentProgress, AgentEnrollmentToken, AgentHeartbeatInput, AgentInventoryInput, AgentMetricSampleInput, AgentMetricsInput, AgentRegistrationInput, AgentRegistrationResponse, AgentStatus, AgentSummary, Container, ContainerHealth, ContainerStatus, DockerSnapshot, MetricSnapshot, Server } from "../types/nodeguard.js";
 import { getDatabase } from "./database.js";
 import { recordMetricSnapshot } from "./metricHistoryService.js";
 
@@ -237,6 +237,35 @@ export function listActiveEnrollmentTokens() {
   `).all(nowIso()) as EnrollmentRow[]).map(enrollmentToPublic);
 }
 
+export function getAgentEnrollmentProgress(id: string): AgentEnrollmentProgress | null {
+  const enrollment = database.prepare("SELECT * FROM agent_enrollment_tokens WHERE id = ?").get(id) as EnrollmentRow | undefined;
+  if (!enrollment) return null;
+
+  const agent = enrollment.agent_id ? getAgentRow(enrollment.agent_id) : undefined;
+  const publicAgent = agent ? {
+    id: agent.id,
+    displayName: agent.display_name,
+    status: calculateAgentStatus(agent.last_seen_at, agent.revoked_at),
+    lastSeenAt: agent.last_seen_at
+  } : null;
+
+  let state: AgentEnrollmentProgress["state"] = "waiting";
+  if (enrollment.revoked_at) state = "revoked";
+  else if (!enrollment.used_at && Date.parse(enrollment.expires_at) <= Date.now()) state = "expired";
+  else if (enrollment.used_at && publicAgent?.status === "online") state = "online";
+  else if (enrollment.used_at && publicAgent?.lastSeenAt) state = "connected";
+  else if (enrollment.used_at) state = "registered";
+
+  return {
+    id: enrollment.id,
+    purpose: enrollment.purpose,
+    displayName: enrollment.display_name,
+    expiresAt: enrollment.expires_at,
+    state,
+    agent: publicAgent
+  };
+}
+
 export function revokeEnrollmentToken(id: string) {
   const result = database.prepare(`
     UPDATE agent_enrollment_tokens SET revoked_at = ?
@@ -280,16 +309,17 @@ export function registerAgent(input: AgentRegistrationInput): AgentRegistrationR
         WHERE id = ?
       `).run(displayName, input.hostname, input.agentVersion, input.osName ?? existing.os_name, input.osVersion ?? existing.os_version,
         input.kernel ?? existing.kernel, input.architecture ?? existing.architecture, credentialHash, timestamp, timestamp, agentId);
-      return;
+    } else {
+      database.prepare(`
+        INSERT INTO agents (
+          id, display_name, hostname, status, agent_version, os_name, os_version, kernel, architecture,
+          credential_hash, registered_at, last_seen_at, created_at, updated_at
+        ) VALUES (?, ?, ?, 'offline', ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+      `).run(agentId, displayName, input.hostname, input.agentVersion, input.osName ?? null, input.osVersion ?? null,
+        input.kernel ?? null, input.architecture ?? null, credentialHash, timestamp, timestamp, timestamp);
     }
 
-    database.prepare(`
-      INSERT INTO agents (
-        id, display_name, hostname, status, agent_version, os_name, os_version, kernel, architecture,
-        credential_hash, registered_at, last_seen_at, created_at, updated_at
-      ) VALUES (?, ?, ?, 'online', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(agentId, displayName, input.hostname, input.agentVersion, input.osName ?? null, input.osVersion ?? null,
-      input.kernel ?? null, input.architecture ?? null, credentialHash, timestamp, timestamp, timestamp, timestamp);
+    database.prepare("UPDATE agent_enrollment_tokens SET agent_id = ? WHERE id = ?").run(agentId, enrollment.id);
   });
   consume();
 
@@ -532,6 +562,34 @@ export function revokeAgent(agentId: string) {
     return result.changes > 0;
   });
   return { revoked: revoke() };
+}
+
+export function deleteAgent(agentId: string) {
+  const remove = database.transaction(() => {
+    const agent = getAgentRow(agentId);
+    if (!agent) throw new AgentServiceError("agent_not_found", "Agent not found.", 404);
+
+    const timestamp = nowIso();
+    const invalidCredentialHash = hashSecret(`deleted-${crypto.randomBytes(32).toString("base64url")}`);
+    const invalidated = database.prepare(`
+      UPDATE agents
+      SET status = 'revoked', revoked_at = COALESCE(revoked_at, ?), credential_hash = ?, updated_at = ?
+      WHERE id = ?
+    `).run(timestamp, invalidCredentialHash, timestamp, agentId);
+    if (invalidated.changes !== 1) throw new AgentServiceError("agent_not_found", "Agent not found.", 404);
+
+    database.prepare("DELETE FROM metric_history WHERE server_id = ?").run(agentId);
+    database.prepare("DELETE FROM alert_history WHERE id LIKE ? OR id LIKE ?")
+      .run(`agent-${agentId}-%`, `agent-container-${agentId}-%`);
+    database.prepare("DELETE FROM alert_deletions WHERE id LIKE ? OR id LIKE ?")
+      .run(`agent-${agentId}-%`, `agent-container-${agentId}-%`);
+
+    const deleted = database.prepare("DELETE FROM agents WHERE id = ?").run(agentId);
+    if (deleted.changes !== 1) throw new AgentServiceError("agent_not_found", "Agent not found.", 404);
+    return { deleted: true as const };
+  });
+
+  return remove();
 }
 
 export function listAgentServers(): Server[] {

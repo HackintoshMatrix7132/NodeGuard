@@ -1,14 +1,16 @@
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Bell, Boxes, ChevronDown, ChevronLeft, ChevronRight, Copy, ExternalLink, Eye, EyeOff, Gauge, Globe2, Github, Heart, KeyRound, LogOut, PackageOpen, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RadioTower, RefreshCcw, Search, Server, Settings, ShieldAlert, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Bell, Boxes, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, Eye, EyeOff, FileText, Gauge, Globe2, Github, Heart, KeyRound, LoaderCircle, LogOut, PackageOpen, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RadioTower, RefreshCcw, Search, Server, Settings, ShieldAlert, ShieldCheck, Trash2, X } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 
 import { getDefaultBackendUrl, normalizeBackendUrl } from "./api/client";
 import { getCurrentSession, logout as logoutSession } from "./api/endpoints";
 import { normalizeApiError } from "./api/errors";
+import { NodeGuardSelect } from "./components/NodeGuardSelect";
 import {
   useAddContainerMonitor,
   useAddDomain,
   useAddServerMonitor,
   useAgent,
+  useAgentEnrollmentProgress,
   useAgentEnrollmentTokens,
   useAgents,
   useAlert,
@@ -20,6 +22,7 @@ import {
   useOverview,
   useCreateAgentEnrollmentToken,
   useCreateAgentRotationToken,
+  useDeleteAgent,
   useRefreshUpdates,
   useRemoveAlert,
   useRemoveContainerMonitor,
@@ -43,7 +46,7 @@ import {
   useLogin
 } from "./hooks/useNodeGuardQueries";
 import { useSettingsStore } from "./store/settingsStore";
-import type { AgentStatus, AgentSummary, Alert, Container, ContainerMonitorStatus, CreatedAgentEnrollmentToken, DomainCheck, HealthStatus, HomeAssistantSettingsInput, MetricHistory, MetricHistoryPoint, MetricHistoryRange, MetricHistorySummary, MonitoredServerStatus, Server as NodeGuardServer, UpdateCategory, UpdateItem, UpdateStatus } from "./types/nodeguard";
+import type { AgentEnrollmentProgress, AgentStatus, AgentSummary, Alert, Container, ContainerMonitorStatus, CreatedAgentEnrollmentToken, DomainCheck, HealthStatus, HomeAssistantSettingsInput, MetricHistory, MetricHistoryPoint, MetricHistoryRange, MetricHistorySummary, MonitoredServerStatus, Server as NodeGuardServer, UpdateCategory, UpdateItem, UpdateStatus } from "./types/nodeguard";
 import { getContainerImageRepositoryUrl } from "./utils/containerImage";
 import { formatBytes, formatDateTime, formatPercentage, formatRelativeTime, formatResponseTime, formatUptime } from "./utils/format";
 import { getStatusLabel, getStatusTone } from "./utils/status";
@@ -344,13 +347,63 @@ function maskSensitiveUrl(value: string, hide: boolean) {
   }
 }
 
-function Modal({ title, children, onClose, isClosing = false }: { title: string; children: React.ReactNode; onClose: () => void; isClosing?: boolean }) {
+function Modal({ title, children, onClose, isClosing = false, closeDisabled = false, descriptionId }: { title: string; children: React.ReactNode; onClose: () => void; isClosing?: boolean; closeDisabled?: boolean; descriptionId?: string }) {
+  const modalRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  const closeDisabledRef = useRef(closeDisabled);
+  const titleId = `modal-title-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    closeDisabledRef.current = closeDisabled;
+  }, [closeDisabled, onClose]);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const modal = modalRef.current;
+    const focusableSelector = 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+    const firstFocusable = modal?.querySelector<HTMLElement>("[data-autofocus]")
+      ?? modal?.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled)')
+      ?? modal?.querySelector<HTMLElement>(focusableSelector);
+    window.requestAnimationFrame(() => firstFocusable?.focus());
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !closeDisabledRef.current) {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab" || !modal) return;
+      const focusable = [...modal.querySelectorAll<HTMLElement>(focusableSelector)].filter((element) => !element.hasAttribute("disabled"));
+      if (focusable.length === 0) {
+        event.preventDefault();
+        modal.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, []);
+
   return (
     <div className={`modal-backdrop ${isClosing ? "is-closing" : ""}`} role="presentation">
-      <section className="modal" role="dialog" aria-modal="true" aria-label={title}>
+      <section ref={modalRef} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} tabIndex={-1}>
         <div className="modal-header">
-          <h2>{title}</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Close dialog"><X size={15} /></button>
+          <h2 id={titleId}>{title}</h2>
+          <button className="modal-close" type="button" onClick={onClose} disabled={closeDisabled} aria-label="Close dialog"><X size={15} /></button>
         </div>
         {children}
       </section>
@@ -764,12 +817,14 @@ function ServerPage() {
       <Panel title={server.data.name} action={(
         <div className="host-selector-actions">
           {serverHosts.length > 1 ? (
-            <label className="host-selector">
-              <span>Host</span>
-              <select value={selectedHostId} onChange={(event) => { setSelectedHostId(event.target.value); setSelectedResource(null); }}>
-                {serverHosts.map((host) => <option key={host.id} value={host.id}>{host.name}</option>)}
-              </select>
-            </label>
+            <NodeGuardSelect
+              className="host-selector"
+              label="Host"
+              labelPosition="inline"
+              value={selectedHostId}
+              options={serverHosts.map((host) => ({ value: host.id, label: host.name }))}
+              onChange={(value) => { setSelectedHostId(value); setSelectedResource(null); }}
+            />
           ) : null}
           <StatusPill status={server.data.status} />
         </div>
@@ -867,7 +922,7 @@ function ServerPage() {
           />
         </div>
       ) : null}
-      <Panel title="Monitored servers" action={<button onClick={openAddMonitor}><Plus size={16} /> Add server</button>}>
+      <Panel title="Monitored servers" action={<button className="primary-button" onClick={openAddMonitor}><Plus size={16} /> Add server</button>}>
         {actionError ? <div className="form-error">{actionError}</div> : null}
         {successMessage ? <SuccessNotice key={successMessage} message={successMessage} onDismiss={setSuccessMessage} /> : null}
         {serverMonitors.isLoading ? <StateBlock title="Loading monitors" message="Checking configured server monitors." /> : null}
@@ -1343,35 +1398,44 @@ function ContainersPage({ initialHostId, onHostFilterApplied }: { initialHostId?
               <Search size={16} />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search containers" aria-label="Search containers" />
             </div>
-            <label className="container-filter">
-              <span>State</span>
-              <select value={stateFilter} onChange={(event) => setStateFilter(event.target.value as "all" | Container["status"])}>
-                <option value="all">All states</option>
-                <option value="running">Running</option>
-                <option value="restarting">Restarting</option>
-                <option value="stopped">Stopped</option>
-                <option value="exited">Exited</option>
-              </select>
-            </label>
+            <NodeGuardSelect
+              className="container-filter"
+              label="State"
+              labelPosition="inline"
+              value={stateFilter}
+              options={[
+                { value: "all", label: "All states" },
+                { value: "running", label: "Running" },
+                { value: "restarting", label: "Restarting" },
+                { value: "stopped", label: "Stopped" },
+                { value: "exited", label: "Exited" }
+              ]}
+              onChange={(value) => setStateFilter(value as "all" | Container["status"])}
+            />
             {containerHosts.length > 1 ? (
-              <label className="container-filter">
-                <span>Host</span>
-                <select value={hostFilter} onChange={(event) => { setHostFilter(event.target.value); setSelected(null); setSelectedServerId(null); }}>
-                  <option value="all">All hosts</option>
-                  {containerHosts.map((host) => <option key={host.id} value={host.id}>{host.name}</option>)}
-                </select>
-              </label>
+              <NodeGuardSelect
+                className="container-filter container-host-filter"
+                label="Host"
+                labelPosition="inline"
+                value={hostFilter}
+                options={[{ value: "all", label: "All hosts" }, ...containerHosts.map((host) => ({ value: host.id, label: host.name }))]}
+                onChange={(value) => { setHostFilter(value); setSelected(null); setSelectedServerId(null); }}
+              />
             ) : null}
-            <label className="container-filter">
-              <span>Health</span>
-              <select value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as "all" | Container["health"])}>
-                <option value="all">All health</option>
-                <option value="healthy">Healthy</option>
-                <option value="unhealthy">Unhealthy</option>
-                <option value="starting">Starting</option>
-                <option value="none">No healthcheck</option>
-              </select>
-            </label>
+            <NodeGuardSelect
+              className="container-filter"
+              label="Health"
+              labelPosition="inline"
+              value={healthFilter}
+              options={[
+                { value: "all", label: "All health" },
+                { value: "healthy", label: "Healthy" },
+                { value: "unhealthy", label: "Unhealthy" },
+                { value: "starting", label: "Starting" },
+                { value: "none", label: "No healthcheck" }
+              ]}
+              onChange={(value) => setHealthFilter(value as "all" | Container["health"])}
+            />
             <button className="icon-only" onClick={() => containers.refetch()} disabled={containers.isFetching} aria-label="Refresh containers" title="Refresh containers">
               <RefreshCcw className={containers.isFetching ? "is-spinning" : ""} size={15} />
             </button>
@@ -1427,7 +1491,7 @@ function ContainersPage({ initialHostId, onHostFilterApplied }: { initialHostId?
             Container name or ID
             <input value={containerRef} onChange={(event) => setContainerRef(event.target.value)} placeholder="vaultwarden" />
           </label>
-          <button type="submit" disabled={addContainerMonitor.isPending}>
+          <button className="primary-button" type="submit" disabled={addContainerMonitor.isPending}>
             <Plus size={16} />
             Add container
           </button>
@@ -1586,7 +1650,7 @@ function DomainsPage() {
   if (!domains.data) return <StateBlock title="Domains unavailable" message={normalizeApiError(domains.error).message} />;
   return (
     <div className="page-stack">
-      <Panel title="Domains / services" action={<div className="button-row"><button onClick={() => domains.refetch()}><RefreshCcw size={16} /> Check now</button><button onClick={openAddDomain}><Plus size={16} /> Add domain</button></div>}>
+      <Panel title="Domains / services" action={<div className="button-row"><button className="secondary-button" onClick={() => domains.refetch()}><RefreshCcw size={16} /> Check now</button><button className="primary-button" onClick={openAddDomain}><Plus size={16} /> Add domain</button></div>}>
         {actionError ? <div className="form-error">{actionError}</div> : null}
         {successMessage ? <SuccessNotice key={successMessage} message={successMessage} onDismiss={setSuccessMessage} /> : null}
         {domains.data.length === 0 ? (
@@ -1826,12 +1890,14 @@ function AlertsPage() {
           <span>
             {filteredAlerts.length === 0 ? "0" : `${pageStart + 1}-${Math.min(pageStart + pageSize, filteredAlerts.length)}`} of {filteredAlerts.length}
           </span>
-          <label>
-            Rows
-            <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
-              {[10, 25, 50].map((value) => <option value={value} key={value}>{value}</option>)}
-            </select>
-          </label>
+          <NodeGuardSelect
+            className="alert-page-size"
+            label="Rows"
+            labelPosition="inline"
+            value={String(pageSize)}
+            options={[10, 25, 50].map((value) => ({ value: String(value), label: String(value) }))}
+            onChange={(value) => setPageSize(Number(value))}
+          />
           <div className="alert-pagination">
             <button className="icon-only" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={visiblePage === 1} aria-label="Previous alert page">
               <ChevronLeft size={15} />
@@ -1944,12 +2010,12 @@ function UpdatesPage() {
       </section>
       {message ? <div className={`stale-notice ${refreshUpdates.isError ? "" : "success"}`}>{message}</div> : null}
       {updates.data.sources.filter((item) => item.lastError).map((item) => <div className="stale-notice" key={item.id}><strong>{item.name}:</strong> {item.lastError}</div>)}
-      <Panel title="Update Center" action={<button onClick={refresh} disabled={refreshUpdates.isPending}><RefreshCcw size={16} /> {refreshUpdates.isPending ? "Checking..." : "Check now"}</button>}>
+      <Panel title="Update Center" action={<button className="secondary-button" onClick={refresh} disabled={refreshUpdates.isPending}><RefreshCcw size={16} /> {refreshUpdates.isPending ? "Checking..." : "Check now"}</button>}>
         <div className="update-toolbar">
           <label className="search-field"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search updates" aria-label="Search updates" /></label>
-          <label><span>Source</span><select value={source} onChange={(event) => setSource(event.target.value)}><option value="all">All sources</option>{updates.data.sources.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-          <label><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">All categories</option>{categories.map((item) => <option value={item} key={item}>{updateCategoryLabel(item)}</option>)}</select></label>
-          <label><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option><option value="available">Available</option><option value="up_to_date">Up to date</option><option value="installing">Installing</option><option value="unknown">Unknown</option></select></label>
+          <NodeGuardSelect label="Source" value={source} options={[{ value: "all", label: "All sources" }, ...updates.data.sources.map((item) => ({ value: item.id, label: item.name }))]} onChange={setSource} />
+          <NodeGuardSelect label="Category" value={category} options={[{ value: "all", label: "All categories" }, ...categories.map((item) => ({ value: item, label: updateCategoryLabel(item) }))]} onChange={setCategory} />
+          <NodeGuardSelect label="Status" value={status} options={[{ value: "all", label: "All statuses" }, { value: "available", label: "Available" }, { value: "up_to_date", label: "Up to date" }, { value: "installing", label: "Installing" }, { value: "unknown", label: "Unknown" }]} onChange={setStatus} />
         </div>
         {items.length === 0 ? <StateBlock title="No matching updates" message={updates.data.updates.length ? "Adjust the search or filters." : "Configure Home Assistant in Settings to discover updates."} /> : (
           <>
@@ -2063,7 +2129,7 @@ function SettingsPage() {
 
   return (
     <div className="page-stack settings-page">
-      <Panel title={demoMode ? "Session" : "Connection"} action={!demoMode ? <button onClick={testConnection}><RefreshCcw size={16} /> Test connection</button> : undefined}>
+      <Panel title={demoMode ? "Session" : "Connection"} action={!demoMode ? <button className="secondary-button" onClick={testConnection}><RefreshCcw size={16} /> Test connection</button> : undefined}>
         <div className="settings-content">
           <p className="muted settings-description">{demoMode ? "This account is restricted to isolated fictional Demo Mode data." : "View and verify the active NodeGuard session."}</p>
           <div className="info-grid">
@@ -2584,16 +2650,95 @@ function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-function RegistrationCommand({ enrollment, serverUrl, onCopy }: { enrollment: CreatedAgentEnrollmentToken; serverUrl: string; onCopy: (command: string) => void }) {
-  const command = `sudo nodeguard-agent register --server ${shellQuote(serverUrl)} --token ${shellQuote(enrollment.token)}${enrollment.displayName ? ` --name ${shellQuote(enrollment.displayName)}` : ""}`;
+function enrollmentCountdown(expiresAt: string, now: number) {
+  const seconds = Math.max(0, Math.ceil((Date.parse(expiresAt) - now) / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return seconds === 0 ? "Expired" : `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
+
+function EnrollmentProgress({ progress }: { progress: AgentEnrollmentProgress | undefined }) {
+  const state = progress?.state ?? "waiting";
+  const registered = ["registered", "connected", "online"].includes(state);
+  const connected = ["connected", "online"].includes(state);
+  const online = state === "online";
+  const terminalError = state === "expired" || state === "revoked";
+  const steps = [
+    { label: "Agent registered", complete: registered, current: state === "waiting" || state === "registered" },
+    { label: "Agent connected", complete: connected, current: state === "connected" },
+    { label: "Online", complete: online, current: state === "online" }
+  ];
+
+  return (
+    <div className={`agent-enrollment-progress ${terminalError ? "has-error" : ""}`} aria-live="polite">
+      <strong>{terminalError ? `Enrollment ${state}` : state === "waiting" ? "Waiting for Agent..." : online ? "Agent is online" : "Connecting Agent..."}</strong>
+      <div>{steps.map((step) => <span key={step.label} className={step.complete ? "complete" : step.current ? "current" : ""}>{step.complete ? <Check size={13} /> : step.current && !online ? <LoaderCircle className="is-spinning" size={13} /> : <span className="progress-dot" />}{step.label}</span>)}</div>
+    </div>
+  );
+}
+
+function RegistrationCommand({ enrollment, serverUrl, progress, onCopyError, onViewAgent }: {
+  enrollment: CreatedAgentEnrollmentToken;
+  serverUrl: string;
+  progress?: AgentEnrollmentProgress;
+  onCopyError: (message: string) => void;
+  onViewAgent?: (agentId: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const copyTimer = useRef<number | null>(null);
+  const isRotation = enrollment.purpose === "rotate";
+  const command = isRotation
+    ? `sudo nodeguard-agent register --server ${shellQuote(serverUrl)} --token ${shellQuote(enrollment.token)}${enrollment.displayName ? ` --name ${shellQuote(enrollment.displayName)}` : ""}`
+    : `curl -fsSL ${shellQuote(`${serverUrl}/install-agent.sh`)} | sudo bash -s -- --server ${shellQuote(serverUrl)} --token ${shellQuote(enrollment.token)}${enrollment.displayName ? ` --name ${shellQuote(enrollment.displayName)}` : ""}`;
+  const countdown = enrollmentCountdown(enrollment.expiresAt, now);
+  const expired = countdown === "Expired" || progress?.state === "expired" || progress?.state === "revoked";
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => () => {
+    if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+  }, []);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+      copyTimer.current = window.setTimeout(() => setCopied(false), 2200);
+    } catch {
+      onCopyError("The browser could not copy the installation command.");
+    }
+  };
+
   return (
     <div className="agent-command-block">
-      <div>
-        <strong>{enrollment.purpose === "rotate" ? "Rotate this agent credential" : "Register the Linux host"}</strong>
-        <span>Expires {formatDateTime(enrollment.expiresAt)} · usable once</span>
+      <div className="agent-command-heading">
+        <span><strong>{isRotation ? "Rotate this agent credential" : "Installation command"}</strong><small>{isRotation ? "Run once on the registered host." : "Run this command on the Linux host you want to monitor."}</small></span>
+        <span className={expired ? "expired" : ""}>{expired ? "Expired" : `Expires in ${countdown}`}</span>
       </div>
       <code>{command}</code>
-      <button type="button" onClick={() => onCopy(command)}><Copy size={15} /> Copy command</button>
+      {!isRotation ? <div className="agent-installer-checklist">
+        <span><Check size={13} /> Download the correct Agent</span>
+        <span><ShieldCheck size={13} /> Verify the binary</span>
+        <span><KeyRound size={13} /> Register the host</span>
+        <span><FileText size={13} /> Install the system service</span>
+        <span><RadioTower size={13} /> Start monitoring automatically</span>
+      </div> : null}
+      <div className="agent-command-actions">
+        <button className="secondary-button" type="button" onClick={() => void copy()} disabled={expired}><span key={copied ? "copied" : "copy"} className="copy-state-icon">{copied ? <Check size={15} /> : <Copy size={15} />}</span>{copied ? "Copied" : "Copy command"}</button>
+        {!isRotation ? <a className="secondary-button" href={`${serverUrl}/install-agent.sh`} target="_blank" rel="noreferrer"><FileText size={15} /> View installation script</a> : null}
+      </div>
+      {!isRotation ? <details className="agent-manual-install">
+        <summary><Download size={14} /> Manual installation</summary>
+        <p>Download the matching release binary and <code>checksums.txt</code>, verify SHA-256, install the binary at <code>/usr/local/bin/nodeguard-agent</code>, then register it with this one-time token.</p>
+        <a href="https://github.com/HackintoshMatrix7132/NodeGuard/tree/main/agent" target="_blank" rel="noreferrer">Open the manual installation guide <ExternalLink size={13} /></a>
+      </details> : null}
+      {!isRotation ? <EnrollmentProgress progress={progress} /> : null}
+      {progress?.state === "online" && progress.agent && onViewAgent ? <button className="primary-button agent-view-button" type="button" onClick={() => onViewAgent(progress.agent!.id)}><RadioTower size={15} /> View online Agent</button> : null}
     </div>
   );
 }
@@ -2634,20 +2779,24 @@ function AgentsPage({ onOpenContainers }: { onOpenContainers: (agentId: string) 
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | AgentStatus>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [modal, setModal] = useState<"add" | "rename" | "rotate" | "revoke" | null>(null);
+  const [modal, setModal] = useState<"add" | "rename" | "rotate" | "revoke" | "delete" | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [enrollment, setEnrollment] = useState<CreatedAgentEnrollmentToken | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const agents = useAgents();
   const detail = useAgent(selectedId);
+  const enrollmentProgress = useAgentEnrollmentProgress(enrollment?.purpose === "enroll" ? enrollment.id : null);
   const enrollmentTokens = useAgentEnrollmentTokens();
   const createEnrollment = useCreateAgentEnrollmentToken();
   const revokeEnrollment = useRevokeAgentEnrollmentToken();
   const renameAgent = useRenameAgent();
   const createRotation = useCreateAgentRotationToken();
   const revokeAgent = useRevokeAgent();
+  const deleteAgentMutation = useDeleteAgent();
   const backendConfig = useSettingsStore((state) => state.backendConfig);
+  const demoMode = useSettingsStore((state) => state.demoMode);
   const serverUrl = backendConfig?.backendUrl ?? window.location.origin;
   const visibleAgents = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -2655,15 +2804,13 @@ function AgentsPage({ onOpenContainers }: { onOpenContainers: (agentId: string) 
       !normalized || [agent.displayName, agent.hostname, agent.osName, agent.agentVersion].filter(Boolean).join(" ").toLowerCase().includes(normalized));
   }, [agents.data, query, statusFilter]);
 
-  const closeModal = () => {
+  const closeModal = (force = false) => {
+    if (deleteAgentMutation.isPending && !force) return;
     setModal(null);
     setEnrollment(null);
     setDisplayName("");
+    setDeleteConfirmation("");
     setFormError(null);
-  };
-
-  const copyCommand = (command: string) => {
-    void navigator.clipboard.writeText(command).then(() => setSuccessMessage("Registration command copied to the clipboard.")).catch(() => setFormError("The browser could not copy the command."));
   };
 
   const generateEnrollment = async (event: React.FormEvent) => {
@@ -2707,9 +2854,27 @@ function AgentsPage({ onOpenContainers }: { onOpenContainers: (agentId: string) 
       await revokeAgent.mutateAsync(selectedId);
       setSuccessMessage(`${detail.data?.displayName ?? "Agent"} was successfully revoked.`);
       setSelectedId(null);
-      closeModal();
+      closeModal(true);
     } catch (error) {
       setFormError(normalizeApiError(error).message);
+    }
+  };
+
+  const confirmDelete = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedId || deleteConfirmation !== "DELETE" || deleteAgentMutation.isPending) return;
+    const agentName = detail.data?.displayName ?? "Agent";
+    setFormError(null);
+    try {
+      await deleteAgentMutation.mutateAsync(selectedId);
+      setSelectedId(null);
+      setSuccessMessage(`${agentName} was deleted successfully.`);
+      closeModal(true);
+    } catch (error) {
+      const apiError = normalizeApiError(error);
+      setFormError(apiError.code === "agent_not_found"
+        ? "Agent not found. It may already have been deleted."
+        : "Unable to delete the Agent. No changes were completed. Please try again.");
     }
   };
 
@@ -2719,9 +2884,16 @@ function AgentsPage({ onOpenContainers }: { onOpenContainers: (agentId: string) 
       <Panel title="Linux agents" action={(
         <div className="agent-toolbar">
           <div className="search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search agents" aria-label="Search agents" /></div>
-          <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "all" | AgentStatus)}><option value="all">All statuses</option><option value="online">Online</option><option value="stale">Stale</option><option value="offline">Offline</option><option value="revoked">Revoked</option></select></label>
+          <NodeGuardSelect
+            className="agent-status-filter"
+            label="Status"
+            labelPosition="inline"
+            value={statusFilter}
+            options={[{ value: "all", label: "All statuses" }, { value: "online", label: "Online" }, { value: "stale", label: "Stale" }, { value: "offline", label: "Offline" }, { value: "revoked", label: "Revoked" }]}
+            onChange={(value) => setStatusFilter(value as "all" | AgentStatus)}
+          />
           <button className="icon-only" onClick={() => agents.refetch()} disabled={agents.isFetching} title="Refresh agents" aria-label="Refresh agents"><RefreshCcw className={agents.isFetching ? "is-spinning" : ""} size={15} /></button>
-          <button className="primary-button" onClick={() => { setModal("add"); setDisplayName(""); setEnrollment(null); }}><Plus size={16} /> Add agent</button>
+          {!demoMode ? <button className="primary-button" onClick={() => { setModal("add"); setDisplayName(""); setEnrollment(null); }}><Plus size={16} /> Add agent</button> : null}
         </div>
       )}>
         {agents.isLoading ? <StateBlock title="Loading agents" message="Reading registered Linux hosts." /> : null}
@@ -2747,18 +2919,28 @@ function AgentsPage({ onOpenContainers }: { onOpenContainers: (agentId: string) 
               <div className="agent-detail-actions">
                 <button onClick={() => onOpenContainers(detail.data.id)}><Boxes size={15} /> View host containers</button>
                 <button onClick={() => void navigator.clipboard.writeText(detail.data.id).then(() => setSuccessMessage("Agent ID copied to the clipboard.")).catch(() => setFormError("The browser could not copy the agent ID."))}><Copy size={15} /> Copy agent ID</button>
-                <button onClick={() => { setDisplayName(detail.data.displayName); setModal("rename"); }}><Pencil size={15} /> Rename</button>
-                <button onClick={() => void startRotation()}><KeyRound size={15} /> Rotate credential</button>
-                {detail.data.status !== "revoked" ? <button className="danger-button" onClick={() => setModal("revoke")}><Trash2 size={15} /> Revoke agent</button> : null}
+                {!demoMode ? <button onClick={() => { setDisplayName(detail.data.displayName); setModal("rename"); }}><Pencil size={15} /> Rename</button> : null}
+                {!demoMode ? <button onClick={() => void startRotation()}><KeyRound size={15} /> Rotate credential</button> : null}
               </div>
+              {!demoMode ? <div className="agent-lifecycle-actions" aria-label="Agent access and deletion actions">
+                <div>
+                  <span><strong>Revoke</strong><small>Disable this Agent's access while preserving its data and history.</small></span>
+                  {detail.data.status !== "revoked" ? <button className="danger-button secondary-danger" onClick={() => { setFormError(null); setModal("revoke"); }}><ShieldAlert size={15} /> Revoke agent</button> : <AgentStatusPill status="revoked" />}
+                </div>
+                <div>
+                  <span><strong>Delete</strong><small>Permanently remove this Agent and its stored data.</small></span>
+                  <button className="danger-button" onClick={() => { setFormError(null); setDeleteConfirmation(""); setModal("delete"); }}><Trash2 size={15} /> Delete Agent</button>
+                </div>
+              </div> : null}
             </div>
           ) : null}
         </Panel>
       ) : null}
-      {modal === "add" ? <Modal title="Add NodeGuard Agent" onClose={closeModal}><form className="modal-form" onSubmit={generateEnrollment}><label>Display name (optional)<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Docker main" /></label>{enrollment ? <RegistrationCommand enrollment={enrollment} serverUrl={serverUrl} onCopy={copyCommand} /> : <button className="modal-submit" type="submit" disabled={createEnrollment.isPending}>Generate enrollment token</button>}</form>{formError ? <div className="form-error">{formError}</div> : null}{(enrollmentTokens.data?.tokens.length ?? 0) > 0 ? <div className="active-enrollments"><strong>Active enrollment tokens</strong>{enrollmentTokens.data?.tokens.map((token) => <div key={token.id}><span>{token.displayName ?? "Unnamed agent"} · expires {formatDateTime(token.expiresAt)}</span><button className="icon-only danger-button" onClick={() => revokeEnrollment.mutate(token.id)} title="Revoke enrollment token" aria-label="Revoke enrollment token"><Trash2 size={14} /></button></div>)}</div> : null}</Modal> : null}
+      {modal === "add" ? <Modal title="Install NodeGuard Agent" onClose={closeModal}><p className="agent-install-description">Run this command on the Linux host you want to monitor.</p><form className="modal-form agent-install-form" onSubmit={generateEnrollment}>{enrollment ? <RegistrationCommand enrollment={enrollment} serverUrl={serverUrl} progress={enrollmentProgress.data} onCopyError={setFormError} onViewAgent={(agentId) => { setSelectedId(agentId); closeModal(); }} /> : <div className="agent-enrollment-form-row"><label>Display name (optional)<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Docker main" maxLength={120} /></label><button className="primary-button agent-generate-button" type="submit" disabled={createEnrollment.isPending} aria-busy={createEnrollment.isPending}>{createEnrollment.isPending ? <LoaderCircle className="is-spinning" size={16} /> : <KeyRound size={16} />}{createEnrollment.isPending ? "Generating..." : "Generate enrollment token"}</button></div>}</form>{formError ? <div className="form-error">{formError}</div> : null}{(enrollmentTokens.data?.tokens.length ?? 0) > 0 ? <div className="active-enrollments"><strong>Active enrollment tokens</strong>{enrollmentTokens.data?.tokens.map((token) => <div key={token.id}><span>{token.displayName ?? "Unnamed agent"} · expires {formatDateTime(token.expiresAt)}</span><button className="icon-only danger-button" onClick={() => revokeEnrollment.mutate(token.id)} title="Revoke enrollment token" aria-label="Revoke enrollment token"><Trash2 size={14} /></button></div>)}</div> : null}</Modal> : null}
       {modal === "rename" ? <Modal title="Rename agent" onClose={closeModal}><form className="modal-form" onSubmit={saveRename}><label>Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required maxLength={120} /></label><button className="modal-submit" disabled={renameAgent.isPending}>Save name</button></form>{formError ? <div className="form-error">{formError}</div> : null}</Modal> : null}
-      {modal === "rotate" ? <Modal title="Rotate agent credential" onClose={closeModal}>{createRotation.isPending ? <StateBlock title="Creating rotation token" message="Preparing a single-use credential rotation command." /> : null}{enrollment ? <RegistrationCommand enrollment={enrollment} serverUrl={serverUrl} onCopy={copyCommand} /> : null}{formError ? <div className="form-error">{formError}</div> : null}</Modal> : null}
-      {modal === "revoke" ? <Modal title="Revoke agent" onClose={closeModal}><div className="confirmation-dialog"><p>Revoke <strong>{detail.data?.displayName}</strong>? Its credential will stop working immediately. Existing history remains available.</p><div><button onClick={closeModal}>Cancel</button><button className="danger-button" onClick={() => void confirmRevoke()} disabled={revokeAgent.isPending}>Revoke agent</button></div></div>{formError ? <div className="form-error">{formError}</div> : null}</Modal> : null}
+      {modal === "rotate" ? <Modal title="Rotate agent credential" onClose={closeModal}>{createRotation.isPending ? <StateBlock title="Creating rotation token" message="Preparing a single-use credential rotation command." /> : null}{enrollment ? <RegistrationCommand enrollment={enrollment} serverUrl={serverUrl} onCopyError={setFormError} /> : null}{formError ? <div className="form-error">{formError}</div> : null}</Modal> : null}
+      {modal === "revoke" ? <Modal title="Revoke agent" onClose={() => closeModal()} closeDisabled={revokeAgent.isPending}><div className="confirmation-dialog"><p>Revoke <strong>{detail.data?.displayName}</strong>? Its credential will stop working immediately.</p><p>Revoking disables this Agent's access but keeps its data and history. It does not uninstall the Agent from the remote Linux host.</p><div><button type="button" onClick={() => closeModal()} disabled={revokeAgent.isPending}>Cancel</button><button className="danger-button" type="button" onClick={() => void confirmRevoke()} disabled={revokeAgent.isPending} aria-busy={revokeAgent.isPending}>{revokeAgent.isPending ? <LoaderCircle className="is-spinning" size={15} /> : <ShieldAlert size={15} />}{revokeAgent.isPending ? "Revoking..." : "Revoke agent"}</button></div></div>{formError ? <div className="form-error">{formError}</div> : null}</Modal> : null}
+      {modal === "delete" ? <Modal title="Delete Agent" onClose={() => closeModal()} closeDisabled={deleteAgentMutation.isPending} descriptionId="delete-agent-description"><form className="confirmation-dialog agent-delete-confirmation" onSubmit={confirmDelete}><p id="delete-agent-description">Permanently delete this Agent and its stored monitoring data from NodeGuard.</p><p>You are about to permanently delete:<strong className="agent-delete-name">{detail.data?.displayName ?? "Agent"}</strong></p><p>This will permanently remove:</p><ul><li>Agent registration</li><li>Stored credentials</li><li>Heartbeat and metrics history</li><li>Host and Docker inventory</li><li>Related Agent monitoring data</li></ul>{detail.data?.status !== "revoked" ? <p className="agent-delete-warning"><ShieldAlert size={16} /> The Agent credential will be invalidated as part of deletion.</p> : null}<p>Deleting the Agent from NodeGuard does not uninstall the NodeGuard Agent from the remote Linux host.</p><p><strong>This action cannot be undone.</strong></p><label className="agent-delete-field">Type <code>DELETE</code> to confirm<input data-autofocus value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" spellCheck={false} disabled={deleteAgentMutation.isPending} /></label><div><button type="button" onClick={() => closeModal()} disabled={deleteAgentMutation.isPending}>Cancel</button><button className="danger-button" type="submit" disabled={deleteConfirmation !== "DELETE" || deleteAgentMutation.isPending} aria-busy={deleteAgentMutation.isPending}>{deleteAgentMutation.isPending ? <LoaderCircle className="is-spinning" size={15} /> : <Trash2 size={15} />}{deleteAgentMutation.isPending ? "Deleting..." : "Delete Agent"}</button></div></form>{formError ? <div className="form-error" role="alert">{formError}</div> : null}</Modal> : null}
     </div>
   );
 }

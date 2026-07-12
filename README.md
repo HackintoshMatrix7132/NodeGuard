@@ -22,7 +22,7 @@ The project is designed for a real self-hosted deployment at `nodeguard.muthu.eu
 - Dashboard overview with overall status, main issue, active issues, real status breakdowns, recent alerts, and domain reachability.
 - Server page with clickable CPU, RAM, disk, and swap summaries plus persistent per-resource history across 1-hour to 30-day ranges.
 - NodeGuard Agent v0.1 for secure outbound-only Linux and Docker monitoring across multiple hosts, with one-time enrollment, per-agent credentials, heartbeats, bounded retry buffering, and systemd packaging.
-- Agents page with online/stale/offline status, host inventory, resources, Docker summary, enrollment commands, rename, credential rotation, and revocation.
+- Agents page with online/stale/offline status, host inventory, resources, Docker summary, enrollment commands, rename, credential rotation, revocation, and separately confirmed permanent deletion.
 - Monitored server support for internal NodeGuard backends or health URLs.
 - Per-monitor self-signed HTTPS option for internal services such as Proxmox.
 - Docker containers page with a searchable, filterable, sortable read-only table for runtime state, Docker health, Compose/Swarm stack, image, container IP, published ports, uptime, responsive mobile cards, detail inspection, limited log preview, and monitored container checks.
@@ -195,6 +195,9 @@ ALLOWED_ORIGINS=https://nodeguard.muthu.eu
 DATABASE_URL=file:/data/nodeguard.sqlite
 TRUST_PROXY=true
 WEB_DIST_DIR=apps/web/dist
+AGENT_INSTALLER_PATH=agent/install-agent.sh
+AGENT_RELEASE_DIR=agent-releases
+AGENT_RELEASE_VERSION=0.1.0
 MONITORED_DOMAINS=https://bit.muthu.eu,https://cloud.muthu.eu,https://status.muthu.eu
 ```
 
@@ -284,6 +287,11 @@ Public:
 
 ```txt
 GET /health
+GET /install-agent.sh
+GET /agent/releases/latest/version
+GET /agent/releases/:version/nodeguard-agent-linux-amd64
+GET /agent/releases/:version/nodeguard-agent-linux-arm64
+GET /agent/releases/:version/checksums.txt
 ```
 
 Auth endpoints:
@@ -337,11 +345,15 @@ GET /api/agents
 GET /api/agents/:id
 PUT /api/agents/:id
 GET /api/agents/enrollment-tokens
+GET /api/agents/enrollment-tokens/:id/status
 POST /api/agents/enrollment-tokens
 DELETE /api/agents/enrollment-tokens/:id
 POST /api/agents/:id/rotate-credential
 POST /api/agents/:id/revoke
+DELETE /api/agents/:id
 ```
+
+Revoking an agent immediately blocks its credential but preserves the registration and monitoring history. Deleting an agent is a distinct owner-only action that invalidates the credential and transactionally removes its registration, metrics history, Docker inventory, enrollment records, and agent-owned alerts. Neither action uninstalls software or runs commands on the remote host.
 
 The Go agent uses a separate machine API and a unique bearer credential:
 
@@ -356,17 +368,19 @@ POST /api/agent/docker
 
 ## NodeGuard Agent Quick Start
 
-See [`agent/README.md`](agent/README.md) for complete build, installation, registration, systemd, troubleshooting, uninstallation, buffering, and Docker-socket security guidance.
+See [`agent/README.md`](agent/README.md) for complete installation, registration, upgrade, systemd, troubleshooting, uninstallation, buffering, and Docker-socket security guidance.
 
-Build and install on the Linux host:
+Open **Agents → Add Agent** and copy the generated one-command installer:
 
 ```bash
-cd agent
-make test vet build
-sudo ./install.sh
+curl -fsSL https://nodeguard.muthu.eu/install-agent.sh | sudo bash -s -- \
+  --server https://nodeguard.muthu.eu \
+  --token ng_join_REDACTED
 ```
 
-In NodeGuard, open **Agents**, choose **Add agent**, and copy the short-lived registration command. After registration:
+The installer detects the Linux distribution and amd64/arm64 architecture, downloads the matching release from the NodeGuard instance, verifies SHA-256, registers once, installs systemd, starts the service, and waits for the first heartbeat. It never prints the enrollment token or long-term credential.
+
+After installation:
 
 ```bash
 sudo systemctl enable --now nodeguard-agent
@@ -375,6 +389,8 @@ sudo journalctl -u nodeguard-agent -f
 ```
 
 Enrollment tokens expire after 10 minutes by default and are invalid after one use. Every agent receives a different long-term credential, stored only in root-owned mode-`0600` configuration and as a hash in NodeGuard. Credential rotation and revocation are available from the agent detail view.
+
+Running the installer again upgrades the binary safely while preserving `/etc/nodeguard-agent/config.json`; it does not register a duplicate host. Use `sudo nodeguard-agent uninstall` to remove the service and binary while preserving configuration, or `sudo nodeguard-agent uninstall --purge` to remove configuration after explicit confirmation.
 
 Agent v0.1 is strictly read-only. It has no inbound listener, remote shell, command execution, package/update installation, reboot, or Docker lifecycle endpoints. Reports buffered during outages are kept only in a bounded in-memory queue (100 reports, 15 minutes), so a process restart discards unsent reports.
 

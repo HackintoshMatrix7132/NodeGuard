@@ -17,11 +17,25 @@ import (
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/logging"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/model"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/runner"
+	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/uninstall"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/version"
 )
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "Usage: nodeguard-agent <register|run|status|version> [options]")
+	fmt.Fprintln(os.Stderr, "Usage: nodeguard-agent <register|run|status|uninstall|version> [options]")
+}
+
+func uninstallAgent(args []string) error {
+	flags := flag.NewFlagSet("uninstall", flag.ContinueOnError)
+	purge := flags.Bool("purge", false, "remove protected local configuration and credentials")
+	yes := flags.Bool("yes", false, "confirm configuration removal without prompting")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if os.Geteuid() != 0 {
+		return errors.New("uninstall must be run as root")
+	}
+	return uninstall.Execute(uninstall.Options{Purge: *purge, AssumeYes: *yes}, os.Stdin, os.Stdout, uninstall.ExecRunner{})
 }
 
 func register(args []string) error {
@@ -128,6 +142,8 @@ func main() {
 		err = run(os.Args[2:])
 	case "status":
 		err = status(os.Args[2:])
+	case "uninstall":
+		err = uninstallAgent(os.Args[2:])
 	case "version":
 		fmt.Printf("nodeguard-agent %s (%s, %s)\n", version.Version, version.Commit, version.Date)
 		return

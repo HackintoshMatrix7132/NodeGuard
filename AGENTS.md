@@ -83,6 +83,9 @@ Public:
 
 ```txt
 GET /health
+GET /install-agent.sh
+GET /agent/releases/latest/version
+GET /agent/releases/:version/:asset
 ```
 
 Protected:
@@ -128,11 +131,15 @@ GET /api/agents
 GET /api/agents/:id
 PUT /api/agents/:id
 GET /api/agents/enrollment-tokens
+GET /api/agents/enrollment-tokens/:id/status
 POST /api/agents/enrollment-tokens
 DELETE /api/agents/enrollment-tokens/:id
 POST /api/agents/:id/rotate-credential
 POST /api/agents/:id/revoke
+DELETE /api/agents/:id
 ```
+
+Revocation invalidates an agent credential while preserving its registration and history. Permanent deletion is a separate owner-only transaction that invalidates the credential and removes only data owned by that agent; it never uninstalls or executes commands on the remote host.
 
 Dedicated agent authentication:
 
@@ -206,5 +213,3 @@ Legacy JSON monitor files may be imported once if they still exist, but SQLite i
 - Server monitors check other NodeGuard backends or plain health URLs. Public sites and reverse proxies belong in Domains / Services.
 - Agent v0.1 buffers unsent reports in memory only; reports are lost on process restart.
 - Agent v0.1 runs as root in the packaged service so it can read protected configuration and Docker metadata. Docker socket access remains highly privileged and is not claimed to be least-privilege isolation.
-
-

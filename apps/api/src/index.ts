@@ -10,6 +10,7 @@ import { isRequestOriginAllowed } from "./config/cors.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { requireAuthenticated, requireLiveDataAccess } from "./middleware/auth.js";
 import { agentIngestRouter } from "./routes/agentIngest.js";
+import { agentDownloadsRouter } from "./routes/agentDownloads.js";
 import { agentsRouter } from "./routes/agents.js";
 import { authRouter } from "./routes/auth.js";
 import { alertsRouter } from "./routes/alerts.js";
@@ -56,6 +57,7 @@ app.use(cors((request, callback) => {
 }));
 
 app.use("/health", healthRouter);
+app.use(agentDownloadsRouter);
 app.use("/api", rateLimit({
   windowMs: env.rateLimitWindowMs,
   limit: env.rateLimitMax,
@@ -90,7 +92,7 @@ app.use("/api/checks", checksRouter);
 if (existsSync(path.join(webDistPath, "index.html"))) {
   app.use(express.static(webDistPath));
   app.get("*", (request, response, next) => {
-    if (request.path.startsWith("/api") || request.path === "/health") {
+    if (request.path.startsWith("/api") || request.path.startsWith("/agent/releases") || request.path === "/health" || request.path === "/install-agent.sh") {
       next();
       return;
     }

@@ -6,7 +6,7 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 BINARY=${NODEGUARD_AGENT_BINARY:-"$SCRIPT_DIR/bin/nodeguard-agent"}
 SERVICE=${NODEGUARD_AGENT_SERVICE:-"$SCRIPT_DIR/packaging/nodeguard-agent.service"}
 

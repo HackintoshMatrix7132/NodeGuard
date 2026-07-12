@@ -66,6 +66,20 @@ export type CreatedAgentEnrollmentToken = AgentEnrollmentToken & {
   token: string;
 };
 
+export type AgentEnrollmentProgress = {
+  id: string;
+  purpose: "enroll" | "rotate";
+  displayName: string | null;
+  expiresAt: string;
+  state: "waiting" | "registered" | "connected" | "online" | "expired" | "revoked";
+  agent: {
+    id: string;
+    displayName: string;
+    status: AgentStatus;
+    lastSeenAt: string | null;
+  } | null;
+};
+
 export type CreateAgentEnrollmentInput = {
   displayName?: string;
 };
