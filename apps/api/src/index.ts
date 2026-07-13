@@ -24,6 +24,8 @@ import { updatesRouter } from "./routes/updates.js";
 import { cleanupExpiredSessions, ensureAdminUser } from "./services/authService.js";
 import { startMetricHistorySampler } from "./services/metricHistoryService.js";
 import { startUpdateRefreshScheduler } from "./services/updateService.js";
+import proxmoxRouter from "./routes/proxmox.js";
+import { startProxmoxSyncScheduler } from "./services/proxmoxService.js";
 
 const app = express();
 const webDistPath = path.resolve(process.cwd(), env.webDistDir);
@@ -86,6 +88,7 @@ app.use("/api/servers", serversRouter);
 app.use("/api/containers", containersRouter);
 app.use("/api/domains", domainsRouter);
 app.use("/api/updates", updatesRouter);
+app.use("/api/proxmox", proxmoxRouter);
 app.use("/api/alerts", alertsRouter);
 app.use("/api/checks", checksRouter);
 
@@ -102,6 +105,8 @@ if (existsSync(path.join(webDistPath, "index.html"))) {
 }
 
 app.use(errorHandler);
+
+startProxmoxSyncScheduler();
 
 app.listen(env.port, () => {
   console.log(`NodeGuard API listening on http://localhost:${env.port}`);

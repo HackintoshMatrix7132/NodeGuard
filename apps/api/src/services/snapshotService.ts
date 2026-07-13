@@ -8,6 +8,7 @@ import { getDomainChecks } from "./domainCheckService.js";
 import { listMonitoredServerStatuses } from "./serverMonitorService.js";
 import { getSystemSnapshot } from "./systemMetrics.js";
 import { getUpdateAlerts } from "./updateService.js";
+import { getProxmoxAlerts, getProxmoxSnapshot } from "./proxmoxService.js";
 
 function worstStatus(statuses: HealthStatus[]): HealthStatus {
   if (statuses.includes("critical") || statuses.includes("offline")) {
@@ -141,7 +142,8 @@ export async function getMonitoringSnapshot(): Promise<MonitoringSnapshot> {
       updateAlert.checkedAt
     ));
   }
-  const recordedAlerts = recordAlertSnapshot(alerts);
+  const recordedAlerts = [...alerts, ...getProxmoxAlerts()];
+  recordAlertSnapshot(recordedAlerts);
   const runningContainers = docker.containers.filter((container) => container.status === "running").length;
   const localRunningContainers = localDocker.containers.filter((container) => container.status === "running").length;
   const criticalAlerts = recordedAlerts.filter((item) => item.severity === "critical").length;

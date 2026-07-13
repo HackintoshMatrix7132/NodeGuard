@@ -1,0 +1,870 @@
+.proxmox-page {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.proxmox-panel,
+.proxmox-settings-section,
+.proxmox-dashboard-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border, #263247);
+  border-radius: 0.5rem;
+  background: var(--panel, #111a2d);
+}
+
+.proxmox-panel__header,
+.proxmox-settings-section__header {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--border, #263247);
+  background: rgba(7, 13, 26, 0.32);
+}
+
+.proxmox-panel__title,
+.proxmox-settings-section__header h3,
+.proxmox-dialog__header h2 {
+  margin: 0;
+  color: var(--text, #f4f7fb);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.proxmox-panel__actions,
+.proxmox-settings-row__actions,
+.proxmox-dialog__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.proxmox-panel__body,
+.proxmox-settings-section__body {
+  padding: 0.75rem 0.875rem;
+}
+
+.proxmox-integration-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.proxmox-integration-heading__icon {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(47, 211, 255, 0.2);
+  border-radius: 0.45rem;
+  color: #39d2f4;
+  background: rgba(25, 148, 186, 0.13);
+}
+
+.proxmox-integration-heading p,
+.proxmox-form-intro,
+.proxmox-settings-row__identity p,
+.proxmox-connection-row__identity p,
+.proxmox-empty p {
+  margin: 0.2rem 0 0;
+  color: var(--muted, #94a3b8);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.proxmox-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.625rem;
+}
+
+.proxmox-summary-card {
+  position: relative;
+  min-width: 0;
+  padding: 0.75rem;
+  overflow: hidden;
+  border: 1px solid var(--border, #263247);
+  border-top: 2px solid #4385e8;
+  border-radius: 0.45rem;
+  background: rgba(23, 34, 55, 0.82);
+}
+
+.proxmox-summary-card--cyan {
+  border-top-color: #35c9ee;
+}
+
+.proxmox-summary-card--green {
+  border-top-color: #4ade80;
+}
+
+.proxmox-summary-card--blue {
+  border-top-color: #5a84f4;
+}
+
+.proxmox-summary-card__label,
+.proxmox-dashboard-card__label {
+  color: var(--muted, #94a3b8);
+  font-size: 0.76rem;
+  line-height: 1.25;
+}
+
+.proxmox-summary-card__value,
+.proxmox-dashboard-card__value {
+  margin-top: 0.2rem;
+  color: var(--text, #f4f7fb);
+  font-size: clamp(1.65rem, 2.5vw, 2.35rem);
+  font-weight: 750;
+  line-height: 1;
+}
+
+.proxmox-summary-card__detail,
+.proxmox-dashboard-card__details {
+  margin-top: 0.45rem;
+  color: var(--muted, #94a3b8);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.proxmox-status {
+  display: inline-flex;
+  min-height: 1.6rem;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid #475569;
+  border-radius: 999px;
+  color: #cbd5e1;
+  background: rgba(51, 65, 85, 0.28);
+  font-size: 0.71rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.proxmox-status--online,
+.proxmox-status--available,
+.proxmox-status--ok,
+.proxmox-status--healthy,
+.proxmox-status--enabled {
+  border-color: rgba(74, 222, 128, 0.7);
+  color: #86efac;
+  background: rgba(22, 101, 52, 0.2);
+}
+
+.proxmox-status--warning,
+.proxmox-status--stale,
+.proxmox-status--pending {
+  border-color: rgba(251, 191, 36, 0.72);
+  color: #fde047;
+  background: rgba(133, 77, 14, 0.18);
+}
+
+.proxmox-status--critical,
+.proxmox-status--offline,
+.proxmox-status--unavailable,
+.proxmox-status--error {
+  border-color: rgba(248, 113, 113, 0.72);
+  color: #fda4af;
+  background: rgba(127, 29, 29, 0.2);
+}
+
+.proxmox-status--disabled,
+.proxmox-status--unknown,
+.proxmox-status--stopped {
+  border-color: #536176;
+  color: #b6c2d2;
+  background: rgba(51, 65, 85, 0.23);
+}
+
+.proxmox-status__dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: 0 0 0.42rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.proxmox-last-sync {
+  color: var(--muted, #94a3b8);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.proxmox-filter-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) repeat(2, minmax(9rem, 0.28fr));
+  gap: 0.5rem;
+  margin-bottom: 0.625rem;
+}
+
+.proxmox-filter-row input,
+.proxmox-form-grid input,
+.proxmox-form-grid textarea,
+.proxmox-delete-dialog input {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.35rem;
+  box-sizing: border-box;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border, #2b3850);
+  border-radius: 0.4rem;
+  outline: none;
+  color: var(--text, #f4f7fb);
+  background: #081122;
+  font: inherit;
+  font-size: 0.84rem;
+}
+
+.proxmox-filter-row input:hover,
+.proxmox-form-grid input:hover,
+.proxmox-form-grid textarea:hover,
+.proxmox-delete-dialog input:hover {
+  border-color: #3f526f;
+}
+
+.proxmox-filter-row input:focus-visible,
+.proxmox-form-grid input:focus-visible,
+.proxmox-form-grid textarea:focus-visible,
+.proxmox-delete-dialog input:focus-visible {
+  border-color: #2eb5e8;
+  box-shadow: 0 0 0 2px rgba(46, 181, 232, 0.18);
+}
+
+.proxmox-form-grid textarea {
+  min-height: 5.5rem;
+  resize: vertical;
+}
+
+.proxmox-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.proxmox-form-grid label,
+.proxmox-delete-dialog label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  color: var(--muted, #a5b2c7);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.proxmox-form-grid__wide {
+  grid-column: 1 / -1;
+}
+
+.proxmox-checkbox-row,
+.proxmox-checkbox {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--text, #f4f7fb);
+  font-size: 0.83rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.proxmox-checkbox input,
+.proxmox-checkbox-row input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: #2f78dd;
+}
+
+.proxmox-button,
+.proxmox-icon-button {
+  appearance: none;
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  box-sizing: border-box;
+  border: 1px solid #34445e;
+  border-radius: 0.4rem;
+  color: var(--text, #f4f7fb);
+  background: #172237;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease,
+    transform 100ms ease;
+}
+
+.proxmox-button {
+  padding: 0.45rem 0.75rem;
+}
+
+.proxmox-icon-button {
+  width: 2.25rem;
+  flex: 0 0 2.25rem;
+  padding: 0;
+}
+
+.proxmox-button:hover,
+.proxmox-icon-button:hover {
+  border-color: #49617f;
+  background: #1c2a43;
+}
+
+.proxmox-button:active,
+.proxmox-icon-button:active {
+  transform: translateY(1px);
+  background: #121d30;
+}
+
+.proxmox-button:focus-visible,
+.proxmox-icon-button:focus-visible {
+  outline: 2px solid #35c9ee;
+  outline-offset: 2px;
+}
+
+.proxmox-button:disabled,
+.proxmox-icon-button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.proxmox-button--primary {
+  border-color: #3678d7;
+  color: #fff;
+  background: #2868c7;
+}
+
+.proxmox-button--primary:hover {
+  border-color: #4b91ed;
+  background: #3277d7;
+}
+
+.proxmox-button--secondary {
+  border-color: #3a4960;
+  background: #182235;
+}
+
+.proxmox-button--danger,
+.proxmox-icon-button--danger {
+  border-color: rgba(244, 63, 94, 0.58);
+  color: #fecdd3;
+  background: rgba(127, 29, 29, 0.18);
+}
+
+.proxmox-button--danger:hover,
+.proxmox-icon-button--danger:hover {
+  border-color: rgba(251, 113, 133, 0.82);
+  background: rgba(159, 18, 57, 0.26);
+}
+
+.proxmox-table-wrap {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--border, #263247);
+  border-radius: 0.45rem;
+  background: rgba(7, 13, 26, 0.22);
+}
+
+.proxmox-table {
+  width: 100%;
+  min-width: 48rem;
+  border-collapse: collapse;
+  color: var(--text, #e7edf7);
+  font-size: 0.79rem;
+}
+
+.proxmox-table th {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--border, #263247);
+  color: var(--muted, #9cabc1);
+  background: #0a1325;
+  font-size: 0.67rem;
+  font-weight: 750;
+  letter-spacing: 0.025em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.proxmox-table td {
+  padding: 0.56rem 0.65rem;
+  border-bottom: 1px solid rgba(38, 50, 71, 0.8);
+  vertical-align: middle;
+}
+
+.proxmox-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.proxmox-table tbody tr:hover {
+  background: rgba(39, 90, 143, 0.09);
+}
+
+.proxmox-resource-cell {
+  display: grid;
+  gap: 0.16rem;
+  min-width: 0;
+}
+
+.proxmox-resource-cell strong {
+  overflow: hidden;
+  color: var(--text, #f4f7fb);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proxmox-resource-cell span {
+  color: var(--muted, #94a3b8);
+  font-size: 0.72rem;
+}
+
+.proxmox-progress {
+  width: min(8rem, 100%);
+  height: 0.35rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #1f2b3e;
+}
+
+.proxmox-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #39c4e7;
+}
+
+.proxmox-settings-list,
+.proxmox-connection-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.proxmox-settings-row,
+.proxmox-connection-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.3fr) minmax(10rem, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem;
+  border: 1px solid var(--border, #263247);
+  border-radius: 0.45rem;
+  background: rgba(8, 17, 34, 0.48);
+}
+
+.proxmox-settings-row__identity,
+.proxmox-connection-row__identity {
+  min-width: 0;
+}
+
+.proxmox-settings-row__identity strong,
+.proxmox-connection-row__identity strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text, #f4f7fb);
+  font-size: 0.86rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proxmox-settings-row__counts,
+.proxmox-connection-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--muted, #94a3b8);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.proxmox-empty,
+.proxmox-loading {
+  display: grid;
+  min-height: 7rem;
+  place-items: center;
+  align-content: center;
+  gap: 0.45rem;
+  padding: 1rem;
+  border: 1px dashed #2d3c54;
+  border-radius: 0.45rem;
+  color: var(--muted, #94a3b8);
+  text-align: center;
+}
+
+.proxmox-empty__icon {
+  color: #9aabc1;
+}
+
+.proxmox-empty strong,
+.proxmox-loading strong {
+  color: var(--text, #e7edf7);
+  font-size: 0.88rem;
+}
+
+.proxmox-notice {
+  margin-bottom: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #3b4d65;
+  border-radius: 0.4rem;
+  color: #dbe7f6;
+  background: rgba(30, 58, 91, 0.22);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.proxmox-notice--success {
+  border-color: rgba(74, 222, 128, 0.5);
+  color: #bbf7d0;
+  background: rgba(20, 83, 45, 0.22);
+}
+
+.proxmox-notice--error {
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.22);
+}
+
+.proxmox-dialog-backdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  overflow-y: auto;
+  background: rgba(2, 6, 16, 0.76);
+  backdrop-filter: blur(5px);
+  animation: proxmox-fade-in 150ms ease-out;
+}
+
+.proxmox-dialog {
+  width: min(43rem, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  border: 1px solid #31415a;
+  border-radius: 0.55rem;
+  background: #111a2d;
+  box-shadow: 0 24px 75px rgba(0, 0, 0, 0.48);
+  animation: proxmox-dialog-in 170ms ease-out;
+}
+
+.proxmox-dialog__header {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid var(--border, #263247);
+}
+
+.proxmox-dialog > form,
+.proxmox-delete-dialog {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.85rem;
+}
+
+.proxmox-dialog__actions {
+  margin-top: 0.15rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border, #263247);
+}
+
+.proxmox-delete-dialog ul {
+  margin: 0;
+  padding-left: 1.15rem;
+  color: var(--muted, #a5b2c7);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.proxmox-delete-dialog p {
+  margin: 0;
+  color: var(--muted, #a5b2c7);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.proxmox-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border: 1px solid var(--border, #263247);
+  border-radius: 0.45rem;
+  background: #0a1325;
+}
+
+.proxmox-segmented button {
+  appearance: none;
+  min-height: 1.9rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 0.32rem;
+  color: var(--muted, #a5b2c7);
+  background: transparent;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.proxmox-segmented button[aria-pressed="true"],
+.proxmox-segmented button:hover {
+  border-color: rgba(47, 211, 255, 0.35);
+  color: #dff8ff;
+  background: rgba(25, 128, 172, 0.2);
+}
+
+.proxmox-dashboard-card {
+  display: grid;
+  gap: 0.55rem;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0.75rem;
+  border-top: 2px solid #35c9ee;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.proxmox-dashboard-card:hover {
+  border-color: #3ba4d4;
+  background: #152238;
+}
+
+.proxmox-dashboard-card:focus-visible {
+  outline: 2px solid #35c9ee;
+  outline-offset: 2px;
+}
+
+.proxmox-dashboard-card__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.proxmox-spin {
+  animation: proxmox-spin 850ms linear infinite;
+}
+
+@keyframes proxmox-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes proxmox-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes proxmox-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.45rem) scale(0.985);
+  }
+}
+
+@media (max-width: 1100px) {
+  .proxmox-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .proxmox-settings-row,
+  .proxmox-connection-row {
+    grid-template-columns: minmax(12rem, 1fr) auto;
+  }
+
+  .proxmox-settings-row__counts,
+  .proxmox-connection-row__meta {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .proxmox-page {
+    gap: 0.625rem;
+  }
+
+  .proxmox-panel__header,
+  .proxmox-settings-section__header {
+    align-items: flex-start;
+    padding: 0.65rem 0.75rem;
+  }
+
+  .proxmox-panel__body,
+  .proxmox-settings-section__body {
+    padding: 0.65rem 0.75rem;
+  }
+
+  .proxmox-filter-row,
+  .proxmox-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .proxmox-form-grid__wide {
+    grid-column: auto;
+  }
+
+  .proxmox-settings-row,
+  .proxmox-connection-row {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+  }
+
+  .proxmox-settings-row__counts,
+  .proxmox-connection-row__meta {
+    grid-column: auto;
+    grid-row: auto;
+    flex-wrap: wrap;
+  }
+
+  .proxmox-settings-row__actions,
+  .proxmox-dialog__actions {
+    justify-content: stretch;
+  }
+
+  .proxmox-settings-row__actions .proxmox-button,
+  .proxmox-dialog__actions .proxmox-button {
+    flex: 1 1 8rem;
+  }
+
+  .proxmox-button,
+  .proxmox-icon-button {
+    min-height: 2.75rem;
+  }
+
+  .proxmox-icon-button {
+    width: 2.75rem;
+    flex-basis: 2.75rem;
+  }
+
+  .proxmox-table-wrap {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+
+  .proxmox-table {
+    display: block;
+    min-width: 0;
+  }
+
+  .proxmox-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .proxmox-table tbody,
+  .proxmox-table tr,
+  .proxmox-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .proxmox-table tbody {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .proxmox-table tr {
+    padding: 0.65rem;
+    border: 1px solid var(--border, #263247);
+    border-radius: 0.45rem;
+    background: rgba(8, 17, 34, 0.5);
+  }
+
+  .proxmox-table td {
+    display: grid;
+    grid-template-columns: minmax(6rem, 0.7fr) minmax(0, 1.3fr);
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.34rem 0;
+    border: 0;
+    text-align: right;
+  }
+
+  .proxmox-table td::before {
+    content: attr(data-label);
+    color: var(--muted, #94a3b8);
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .proxmox-table td > * {
+    justify-self: end;
+  }
+
+  .proxmox-resource-cell {
+    text-align: right;
+  }
+
+  .proxmox-dialog-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .proxmox-dialog {
+    width: 100%;
+    max-height: 92vh;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0.7rem 0.7rem 0 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .proxmox-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .proxmox-panel__actions {
+    width: 100%;
+  }
+
+  .proxmox-panel__header {
+    flex-wrap: wrap;
+  }
+
+  .proxmox-panel__actions .proxmox-button {
+    flex: 1 1 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .proxmox-dialog,
+  .proxmox-dialog-backdrop,
+  .proxmox-button,
+  .proxmox-icon-button,
+  .proxmox-dashboard-card {
+    animation: none;
+    transition: none;
+  }
+}

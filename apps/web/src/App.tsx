@@ -1,10 +1,11 @@
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Bell, Boxes, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, Eye, EyeOff, FileText, Gauge, Globe2, Github, Heart, KeyRound, LoaderCircle, LogOut, PackageOpen, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RadioTower, RefreshCcw, Search, Server, Settings, ShieldAlert, ShieldCheck, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Bell, Boxes, Check, ChevronDown, ChevronLeft, ChevronRight, CloudCog, Copy, Download, ExternalLink, Eye, EyeOff, FileText, Gauge, Globe2, Github, Heart, KeyRound, LoaderCircle, LogOut, PackageOpen, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RadioTower, RefreshCcw, Search, Server, Settings, ShieldAlert, ShieldCheck, Trash2, X } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 
 import { getDefaultBackendUrl, normalizeBackendUrl } from "./api/client";
 import { getCurrentSession, logout as logoutSession } from "./api/endpoints";
 import { normalizeApiError } from "./api/errors";
 import { NodeGuardSelect } from "./components/NodeGuardSelect";
+import { ProxmoxDashboardCard, ProxmoxPage, ProxmoxSettingsPanel } from "./components/ProxmoxIntegration";
 import {
   useAddContainerMonitor,
   useAddDomain,
@@ -51,7 +52,7 @@ import { getContainerImageRepositoryUrl } from "./utils/containerImage";
 import { formatBytes, formatDateTime, formatPercentage, formatRelativeTime, formatResponseTime, formatUptime } from "./utils/format";
 import { getStatusLabel, getStatusTone } from "./utils/status";
 
-type View = "dashboard" | "server" | "agents" | "containers" | "domains" | "updates" | "alerts" | "settings";
+type View = "dashboard" | "server" | "proxmox" | "agents" | "containers" | "domains" | "updates" | "alerts" | "settings";
 type MetricTone = "blue" | "green" | "orange" | "red" | "purple";
 type BreakdownItem = { label: string; value: string; tone?: MetricTone };
 type HistoricalResource = "cpu" | "memory" | "disk" | "swap";
@@ -634,6 +635,7 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
             { label: "Sources", value: String(updates.data?.sources.filter((source) => source.configured).length ?? 0), tone: "green" }
           ]} />}
         />
+        <ProxmoxDashboardCard onOpen={() => setView("proxmox")} />
       </div>
       <div className="two-col">
         <Panel title="Recent alerts" action={<button className="dashboard-panel-action" onClick={() => setView("alerts")}>View all</button>}>
@@ -2153,6 +2155,7 @@ function SettingsPage() {
           </div>
         </div>
       </Panel>
+      {!demoMode ? <ProxmoxSettingsPanel /> : null}
       {!demoMode ? <Panel title="Update sources">
         <div className="settings-content">
           <p className="muted settings-description">Connect read-only update sources. Credentials are encrypted and stored only by the NodeGuard backend.</p>
@@ -2977,6 +2980,7 @@ export function App() {
   const nav = [
     ["dashboard", Gauge, "Dashboard"],
     ["server", Server, "Server"],
+    ["proxmox", CloudCog, "Proxmox"],
     ["agents", RadioTower, "Agents"],
     ["containers", Boxes, "Containers"],
     ["domains", Globe2, "Domains"],
@@ -3030,6 +3034,7 @@ export function App() {
         </header>
         {view === "dashboard" && <Dashboard setView={setView} />}
         {view === "server" && <ServerPage />}
+        {view === "proxmox" && <ProxmoxPage />}
         {view === "agents" && <AgentsPage onOpenContainers={(agentId) => { setContainerHostFilter(agentId); setView("containers"); }} />}
         {view === "containers" && <ContainersPage initialHostId={containerHostFilter} onHostFilterApplied={() => setContainerHostFilter(null)} />}
         {view === "domains" && <DomainsPage />}
