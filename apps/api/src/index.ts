@@ -23,7 +23,6 @@ import { serversRouter } from "./routes/servers.js";
 import { updatesRouter } from "./routes/updates.js";
 import { cleanupExpiredSessions, ensureAdminUser } from "./services/authService.js";
 import { startMetricHistorySampler } from "./services/metricHistoryService.js";
-import { startUpdateRefreshScheduler } from "./services/updateService.js";
 import proxmoxRouter from "./routes/proxmox.js";
 import { startProxmoxSyncScheduler } from "./services/proxmoxService.js";
 
@@ -33,7 +32,6 @@ const webDistPath = path.resolve(process.cwd(), env.webDistDir);
 ensureAdminUser();
 cleanupExpiredSessions();
 startMetricHistorySampler();
-startUpdateRefreshScheduler();
 
 app.set("trust proxy", env.trustProxy);
 app.use(helmet({
@@ -81,6 +79,10 @@ app.use("/api/agent", rateLimit({
 }));
 app.use("/api/agent", agentIngestRouter);
 app.use("/api", requireAuthenticated);
+// Proxmox exposes a read-only fictional snapshot to Demo Mode. Mutation routes
+// enforce live access inside the router, so mount it before the global live-only
+// guard without weakening settings or sync protections.
+app.use("/api/proxmox", proxmoxRouter);
 app.use("/api", requireLiveDataAccess);
 app.use("/api/agents", agentsRouter);
 app.use("/api/overview", overviewRouter);
@@ -88,7 +90,6 @@ app.use("/api/servers", serversRouter);
 app.use("/api/containers", containersRouter);
 app.use("/api/domains", domainsRouter);
 app.use("/api/updates", updatesRouter);
-app.use("/api/proxmox", proxmoxRouter);
 app.use("/api/alerts", alertsRouter);
 app.use("/api/checks", checksRouter);
 

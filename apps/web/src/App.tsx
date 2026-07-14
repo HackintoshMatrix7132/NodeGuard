@@ -1,10 +1,12 @@
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Bell, Boxes, Check, ChevronDown, ChevronLeft, ChevronRight, CloudCog, Copy, Download, ExternalLink, Eye, EyeOff, FileText, Gauge, Globe2, Github, Heart, KeyRound, LoaderCircle, LogOut, PackageOpen, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RadioTower, RefreshCcw, Search, Server, Settings, ShieldAlert, ShieldCheck, Trash2, X } from "lucide-react";
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Bell, Boxes, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, Eye, EyeOff, FileText, Gauge, Globe2, Github, Heart, KeyRound, LoaderCircle, LogOut, PackageOpen, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RadioTower, RefreshCcw, Search, Server, Settings, ShieldAlert, ShieldCheck, Trash2, X } from "lucide-react";
+import { type CSSProperties, type TransitionEvent, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { getDefaultBackendUrl, normalizeBackendUrl } from "./api/client";
 import { getCurrentSession, logout as logoutSession } from "./api/endpoints";
 import { normalizeApiError } from "./api/errors";
 import { NodeGuardSelect } from "./components/NodeGuardSelect";
+import { ProxmoxIcon } from "./components/ProxmoxIcon";
 import { ProxmoxDashboardCard, ProxmoxPage, ProxmoxSettingsPanel } from "./components/ProxmoxIntegration";
 import { appConfig } from "./config/appConfig";
 import {
@@ -20,12 +22,11 @@ import {
   useContainer,
   useContainers,
   useDomains,
-  useHomeAssistantSettings,
+  useMachineUpdates,
   useOverview,
   useCreateAgentEnrollmentToken,
   useCreateAgentRotationToken,
   useDeleteAgent,
-  useRefreshUpdates,
   useRemoveAlert,
   useRemoveContainerMonitor,
   useRemoveDomain,
@@ -39,8 +40,6 @@ import {
   useServerMetricHistory,
   useServerMetrics,
   useServerMonitors,
-  useSaveHomeAssistantSettings,
-  useTestHomeAssistantConnection,
   useUpdateContainerMonitor,
   useUpdateDomain,
   useUpdateServerMonitor,
@@ -48,7 +47,7 @@ import {
   useLogin
 } from "./hooks/useNodeGuardQueries";
 import { useSettingsStore } from "./store/settingsStore";
-import type { AgentEnrollmentProgress, AgentStatus, AgentSummary, Alert, Container, ContainerMonitorStatus, CreatedAgentEnrollmentToken, DomainCheck, HealthStatus, HomeAssistantSettingsInput, MetricHistory, MetricHistoryPoint, MetricHistoryRange, MetricHistorySummary, MonitoredServerStatus, Server as NodeGuardServer, UpdateCategory, UpdateItem, UpdateStatus } from "./types/nodeguard";
+import type { AgentEnrollmentProgress, AgentStatus, AgentSummary, Alert, Container, ContainerMonitorStatus, CreatedAgentEnrollmentToken, DomainCheck, HealthStatus, MachinePackageUpdate, MachineUpdateSummary, MetricHistory, MetricHistoryPoint, MetricHistoryRange, MetricHistorySummary, MonitoredServerStatus, Server as NodeGuardServer } from "./types/nodeguard";
 import { getContainerImageRepositoryUrl } from "./utils/containerImage";
 import { formatBytes, formatDateTime, formatPercentage, formatRelativeTime, formatResponseTime, formatUptime } from "./utils/format";
 import { getStatusLabel, getStatusTone } from "./utils/status";
@@ -200,10 +199,13 @@ function MetricDiagnostic({ rows }: { rows: BreakdownItem[] }) {
   );
 }
 
-function StateBlock({ title, message }: { title: string; message: string }) {
+type StateBlockTone = "empty" | "loading" | "error";
+
+function StateBlock({ title, message, tone = "empty", icon }: { title: string; message: string; tone?: StateBlockTone; icon?: React.ReactNode }) {
+  const Icon = tone === "loading" ? LoaderCircle : tone === "error" ? AlertTriangle : PackageOpen;
   return (
-    <div className="state-block">
-      <AlertTriangle size={18} />
+    <div className={`state-block state-block--${tone}`} role={tone === "error" ? "alert" : "status"} aria-live={tone === "loading" ? "polite" : undefined}>
+      {icon ?? <Icon className={tone === "loading" ? "is-spinning" : undefined} size={18} aria-hidden="true" />}
       <strong>{title}</strong>
       <span>{message}</span>
     </div>
@@ -213,7 +215,7 @@ function StateBlock({ title, message }: { title: string; message: string }) {
 function StaleNotice({ isError, dataUpdatedAt }: { isError: boolean; dataUpdatedAt: number }) {
   if (!isError || !dataUpdatedAt) return null;
   if (Date.now() - dataUpdatedAt < 15000) return null;
-  return <div className="stale-notice">Showing last known status from {formatDateTime(new Date(dataUpdatedAt).toISOString())}. Live refresh failed.</div>;
+  return <div className="stale-notice" role="status">Showing last known status from {formatDateTime(new Date(dataUpdatedAt).toISOString())}. Live refresh failed.</div>;
 }
 
 function SuccessNotice({ message, onDismiss }: { message: string; onDismiss: (value: null) => void }) {
@@ -343,7 +345,7 @@ function maskSensitiveUrl(value: string, hide: boolean) {
   if (!hide) return value;
   try {
     const parsed = new URL(value);
-    return `${parsed.protocol}//${parsed.hostname.includes(".") ? "service.muthu.eu" : "10.x.x.x"}${parsed.port ? `:${parsed.port}` : ""}`;
+    return `${parsed.protocol}//${parsed.hostname.includes(".") ? "service.example.com" : "10.x.x.x"}${parsed.port ? `:${parsed.port}` : ""}`;
   } catch {
     return "hidden";
   }
@@ -363,6 +365,13 @@ function Modal({ title, children, onClose, isClosing = false, closeDisabled = fa
   useEffect(() => {
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const modal = modalRef.current;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
     const focusableSelector = 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
     const firstFocusable = modal?.querySelector<HTMLElement>("[data-autofocus]")
       ?? modal?.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled)')
@@ -396,12 +405,23 @@ function Modal({ title, children, onClose, isClosing = false, closeDisabled = fa
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      previouslyFocused?.focus();
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.paddingRight = previousBodyPaddingRight;
+      window.requestAnimationFrame(() => {
+        if (previouslyFocused?.isConnected) previouslyFocused.focus();
+        else document.getElementById("main-content")?.focus();
+      });
     };
   }, []);
 
-  return (
-    <div className={`modal-backdrop ${isClosing ? "is-closing" : ""}`} role="presentation">
+  return createPortal(
+    <div
+      className={`modal-backdrop ${isClosing ? "is-closing" : ""}`}
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !closeDisabled) onClose();
+      }}
+    >
       <section ref={modalRef} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} tabIndex={-1}>
         <div className="modal-header">
           <h2 id={titleId}>{title}</h2>
@@ -409,7 +429,28 @@ function Modal({ title, children, onClose, isClosing = false, closeDisabled = fa
         </div>
         {children}
       </section>
-    </div>
+    </div>,
+    document.body
+  );
+}
+
+function DeleteConfirmationDialog({ title, resource, description, confirmLabel, busy, error, onClose, onConfirm }: { title: string; resource: string; description: string; confirmLabel: string; busy: boolean; error?: string | null; onClose: () => void; onConfirm: () => void }) {
+  return (
+    <Modal title={title} onClose={onClose} closeDisabled={busy}>
+      <div className="confirmation-dialog compact-confirmation">
+        <p>{description}</p>
+        <p className="confirmation-resource"><strong>{resource}</strong></p>
+        <p>This action cannot be undone.</p>
+        {error ? <div className="form-error" role="alert">{error}</div> : null}
+        <div>
+          <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="danger-button" type="button" onClick={onConfirm} disabled={busy} aria-busy={busy}>
+            {busy ? <LoaderCircle className="is-spinning" size={15} /> : <Trash2 size={15} />}
+            {busy ? "Deleting…" : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -460,10 +501,10 @@ function ConnectScreen() {
           <span className="demo-login-icon"><KeyRound size={17} /></span>
           <span><strong>Demo Mode</strong><small>Login with <code>demo</code> / <code>demo</code></small></span>
         </aside>
-        {error ? <div className="login-error"><strong>Sign in failed</strong><span>{error}</span></div> : null}
+        {error ? <div className="login-error" id="login-error" role="alert"><strong>Sign in failed</strong><span>{error}</span></div> : null}
         <label>
           Username
-          <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" placeholder="Username" />
+          <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" placeholder="Username" aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : undefined} />
         </label>
         <label>
           Password
@@ -474,6 +515,8 @@ function ConnectScreen() {
               type={showPassword ? "text" : "password"}
               autoComplete="current-password"
               placeholder="Enter password"
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? "login-error" : undefined}
             />
             <button
               type="button"
@@ -499,7 +542,7 @@ function ConnectScreen() {
 }
 
 function Dashboard({ setView }: { setView: (view: View) => void }) {
-  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+  const [refreshMessage, setRefreshMessage] = useState<{ text: string; tone: "success" | "error" } | null>(null);
   const overview = useOverview();
   const server = useServer("local-node");
   const containers = useContainers();
@@ -519,55 +562,111 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
   const containersRunning = overview.data?.containersRunning ?? 0;
   const containersTotal = overview.data?.containersTotal ?? 0;
   const containersStopped = Math.max(containersTotal - containersRunning, 0);
+  const serversNeedAttention = Math.max(
+    (overview.data?.serversTotal ?? 0) - (overview.data?.serversOnline ?? 0),
+    0,
+  );
+  const serverTone: MetricTone = !server.data || !overview.data?.serversTotal
+    ? "blue"
+    : overview.data.serversOnline === overview.data.serversTotal
+      ? "green"
+      : overview.data.serversOnline === 0
+        ? "red"
+        : "orange";
+  const serverDetail = server.data
+    ? `${server.data.hostname} · ${statusTrend(server.data.status)}`
+    : server.isError
+      ? "Machine details unavailable"
+      : "Checking machine details";
   const activeCriticalAlerts = allAlerts.filter((alert) => alert.status === "active" && alert.severity === "critical").length;
   const activeWarningAlerts = allAlerts.filter((alert) => alert.status === "active" && alert.severity === "warning").length;
-  const domainTone: MetricTone = offlineDomains > 0 ? "red" : warningDomains > 0 ? "orange" : "green";
+  const domainTone: MetricTone = domains.data
+    ? offlineDomains > 0 ? "red" : warningDomains > 0 ? "orange" : "green"
+    : overview.data && overview.data.domainsOnline < overview.data.domainsTotal ? "orange" : "blue";
   const alertTone: MetricTone = overview.data?.criticalAlerts ? "red" : overview.data?.warnings ? "orange" : "green";
+  const alertDataUnavailable = !alerts.data;
+  const domainDataUnavailable = !domains.data;
+  const updateDataUnavailable = !updates.data;
+  const lastKnownUpdateAt = updates.data?.machines.reduce<string | null>((latest, machine) => {
+    const retainedAt = machine.lastSuccessfulAt && (machine.agentStatus !== "online" || machine.status !== "ok")
+      ? machine.lastSuccessfulAt
+      : null;
+    return retainedAt && (!latest || retainedAt > latest) ? retainedAt : latest;
+  }, null) ?? null;
+  const updateDetail = updates.data?.lastCheckedAt
+    ? `Last checked ${formatRelativeTime(updates.data.lastCheckedAt)}`
+    : updateDataUnavailable
+      ? "Update inventory unavailable"
+      : lastKnownUpdateAt
+        ? `No current reports · last known ${formatRelativeTime(lastKnownUpdateAt)}`
+        : updates.data.machines.length > 0
+          ? "No current Agent reports"
+          : "Waiting for Agent update inventory";
+  const updateTone: MetricTone = updateDataUnavailable || !updates.data.reportingMachineCount
+    ? "blue"
+    : updates.data.securityCriticalCount > 0
+      ? "orange"
+      : updates.data.availableCount > 0
+        ? "blue"
+        : "green";
+  const staleSupplementalSections = [
+    server.isError && server.data ? "server" : null,
+    alerts.isError && alerts.data ? "alerts" : null,
+    containers.isError && containers.data ? "containers" : null,
+    domains.isError && domains.data ? "domains" : null,
+    updates.isError && updates.data ? "updates" : null,
+  ].filter((section): section is string => Boolean(section));
 
   const refresh = async () => {
     setRefreshMessage(null);
     try {
       await runChecks.mutateAsync();
-      setRefreshMessage(`Refresh successful at ${formatDateTime(new Date().toISOString())}`);
+      setRefreshMessage({ text: `Refresh successful at ${formatDateTime(new Date().toISOString())}`, tone: "success" });
     } catch (error) {
-      setRefreshMessage(normalizeApiError(error).message);
+      setRefreshMessage({ text: normalizeApiError(error).message, tone: "error" });
     }
   };
 
-  if (overview.isLoading) return <StateBlock title="Loading dashboard" message="Reading live backend checks." />;
-  if (!overview.data) return <StateBlock title="Dashboard unavailable" message={normalizeApiError(overview.error).message} />;
+  if (overview.isLoading) return <StateBlock tone="loading" title="Loading dashboard" message="Reading live backend checks." />;
+  if (!overview.data) return <StateBlock tone="error" title="Dashboard unavailable" message={normalizeApiError(overview.error).message} />;
 
   return (
     <div className="page-stack">
       <StaleNotice isError={overview.isError} dataUpdatedAt={overview.dataUpdatedAt} />
+      {staleSupplementalSections.length > 0 ? (
+        <div className="stale-notice" role="status">
+          {staleSupplementalSections.join(", ")} could not refresh. Showing the last available data.
+        </div>
+      ) : null}
       <section className={`hero-panel ${getStatusTone(overview.data.status)}`}>
         <div>
           <span className="eyebrow">NodeGuard</span>
-          <h1>{getStatusLabel(overview.data.status)}</h1>
-          <p className="hero-summary">{summarizeIssues(healthAlerts)}</p>
-          {healthAlerts.length > 0 ? <p className="hero-main-issue"><span>Main issue</span>{mainIssue(healthAlerts)}</p> : null}
+          <div className="hero-status" role="status" aria-live="polite">{getStatusLabel(overview.data.status)}</div>
+          <p className="hero-summary">{alerts.data ? summarizeIssues(healthAlerts) : overview.data.criticalAlerts || overview.data.warnings ? `${countLabel(overview.data.criticalAlerts + overview.data.warnings, "issue")} need attention.` : "No active issues detected."}</p>
+          {alerts.data && healthAlerts.length > 0 ? <p className="hero-main-issue"><span>Main issue</span>{mainIssue(healthAlerts)}</p> : null}
           <small>Last checked {formatDateTime(overview.data.lastCheckedAt)} · Live refresh every {refreshIntervalSeconds}s</small>
         </div>
         <button className="icon-button" onClick={refresh} disabled={runChecks.isPending}><RefreshCcw size={17} /> {runChecks.isPending ? "Refreshing..." : "Refresh"}</button>
       </section>
-      {refreshMessage ? <div className="stale-notice success">{refreshMessage}</div> : null}
+      {refreshMessage ? <div className={`stale-notice ${refreshMessage.tone === "success" ? "success" : ""}`} role={refreshMessage.tone === "error" ? "alert" : "status"}>{refreshMessage.text}</div> : null}
       <Panel title="Active issues" action={<button className="dashboard-panel-action" onClick={() => setView("alerts")}>View details</button>}>
-        {healthAlerts.length === 0 ? <StateBlock title="No active issues" message="All monitored checks are currently healthy." /> : (
+        {alerts.isLoading && !alerts.data ? <StateBlock tone="loading" title="Loading active issues" message="Reading the latest alert state." /> : alerts.isError && !alerts.data ? <StateBlock tone="error" title="Active issues unavailable" message={normalizeApiError(alerts.error).message} /> : healthAlerts.length === 0 ? <StateBlock icon={<ShieldCheck size={18} aria-hidden="true" />} title="No active issues" message="All monitored checks are currently healthy." /> : (
           <div className="issue-list">
             {healthAlerts.slice(0, 3).map((alert) => <button className="issue-row" key={alert.id} onClick={() => setView("alerts")}><StatusPill status={alert.severity} /><span>{alert.title}</span></button>)}
           </div>
         )}
       </Panel>
-      <div className="metric-grid">
+      <div className="metric-grid dashboard-metric-grid">
         <MetricCard
-          label="Servers online"
+          label="Machines online"
           value={`${overview.data.serversOnline}/${overview.data.serversTotal}`}
-          detail={`${server.data?.hostname ?? "local-node"} · ${statusTrend(server.data?.status ?? "unknown")}`}
-          tone="green"
+          detail={serverDetail}
+          tone={serverTone}
           onClick={() => setView("server")}
-          indicator={<MetricMeter value={percentage(overview.data.serversOnline, overview.data.serversTotal)} tone="green" label="Reachability" rows={[
+          subdued={!server.data}
+          indicator={<MetricMeter value={percentage(overview.data.serversOnline, overview.data.serversTotal)} tone={serverTone} label="Reachability" rows={[
             { label: "Online", value: String(overview.data.serversOnline), tone: "green" },
-            { label: "Needs attention", value: String(Math.max(overview.data.serversTotal - overview.data.serversOnline, 0)), tone: overview.data.serversOnline === overview.data.serversTotal ? "green" : "red" }
+            { label: "Needs attention", value: String(serversNeedAttention), tone: serversNeedAttention === 0 ? "green" : overview.data.serversOnline === 0 ? "red" : "orange" }
           ]} />}
         />
         <MetricCard
@@ -603,10 +702,13 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
         <MetricCard
           label="Domains online"
           value={`${overview.data.domainsOnline}/${overview.data.domainsTotal}`}
-          detail={`${domainItems.length} services configured · SSL checked`}
+          detail={domains.data ? `${domainItems.length} services configured · SSL checked` : "Detailed domain checks unavailable"}
           tone={domainTone}
           onClick={() => setView("domains")}
-          indicator={<MetricMeter value={percentage(overview.data.domainsOnline, overview.data.domainsTotal)} tone={domainTone} label="Reachable services" rows={[
+          indicator={domainDataUnavailable ? <MetricDiagnostic rows={[
+            { label: "Domain details", value: domains.isLoading ? "Checking" : "Unavailable", tone: domains.isError ? "red" : "blue" },
+            { label: "Overview total", value: String(overview.data.domainsTotal), tone: "blue" }
+          ]} /> : <MetricMeter value={percentage(overview.data.domainsOnline, overview.data.domainsTotal)} tone={domainTone} label="Reachable services" rows={[
             { label: "Healthy", value: String(healthyDomains), tone: "green" },
             { label: "Warnings", value: String(warningDomains), tone: warningDomains > 0 ? "orange" : "green" },
             { label: "Offline", value: String(offlineDomains), tone: offlineDomains > 0 ? "red" : "green" }
@@ -619,31 +721,32 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
           tone={alertTone}
           onClick={() => setView("alerts")}
           indicator={<MetricDiagnostic rows={[
-            { label: "Critical", value: String(activeCriticalAlerts), tone: activeCriticalAlerts > 0 ? "red" : "green" },
-            { label: "Warning", value: String(activeWarningAlerts), tone: activeWarningAlerts > 0 ? "orange" : "green" },
-            { label: "Active total", value: String(allAlerts.length), tone: allAlerts.length > 0 ? "red" : "green" }
+            { label: "Critical", value: String(alertDataUnavailable ? overview.data.criticalAlerts : activeCriticalAlerts), tone: (alertDataUnavailable ? overview.data.criticalAlerts : activeCriticalAlerts) > 0 ? "red" : "green" },
+            { label: "Warning", value: String(alertDataUnavailable ? overview.data.warnings : activeWarningAlerts), tone: (alertDataUnavailable ? overview.data.warnings : activeWarningAlerts) > 0 ? "orange" : "green" },
+            { label: "Active total", value: alertDataUnavailable ? "Unavailable" : String(allAlerts.length), tone: alertDataUnavailable ? "orange" : allAlerts.length > 0 ? "red" : "green" }
           ]} />}
         />
         <MetricCard
           label="Updates"
-          value={String(updates.data?.availableCount ?? 0)}
-          detail={updates.data?.lastCheckedAt ? `Last checked ${formatRelativeTime(updates.data.lastCheckedAt)}` : "Configure an update source"}
-          tone={(updates.data?.securityCriticalCount ?? 0) > 0 ? "orange" : "blue"}
+          value={updateDataUnavailable ? updates.isLoading ? "Checking" : "Unavailable" : String(updates.data.availableCount)}
+          detail={updateDetail}
+          tone={updateTone}
           onClick={() => setView("updates")}
+          subdued={updateDataUnavailable || !updates.data?.reportingMachineCount}
           indicator={<MetricDiagnostic rows={[
-            { label: "Available", value: String(updates.data?.availableCount ?? 0), tone: (updates.data?.availableCount ?? 0) > 0 ? "blue" : "green" },
-            { label: "Security-critical", value: String(updates.data?.securityCriticalCount ?? 0), tone: (updates.data?.securityCriticalCount ?? 0) > 0 ? "orange" : "green" },
-            { label: "Sources", value: String(updates.data?.sources.filter((source) => source.configured).length ?? 0), tone: "green" }
+            { label: "Available", value: updateDataUnavailable ? "Unavailable" : String(updates.data.availableCount), tone: updateDataUnavailable ? "orange" : updates.data.availableCount > 0 ? "blue" : "green" },
+            { label: "Security-critical", value: updateDataUnavailable ? "Unavailable" : String(updates.data.securityCriticalCount), tone: updateDataUnavailable ? "orange" : updates.data.securityCriticalCount > 0 ? "orange" : "green" },
+            { label: "Machines", value: updateDataUnavailable ? "Unavailable" : String(updates.data.reportingMachineCount), tone: updateDataUnavailable ? "orange" : updates.data.reportingMachineCount > 0 ? "green" : "blue" }
           ]} />}
         />
         <ProxmoxDashboardCard onOpen={() => setView("proxmox")} />
       </div>
       <div className="two-col">
         <Panel title="Recent alerts" action={<button className="dashboard-panel-action" onClick={() => setView("alerts")}>View all</button>} className={activeAlerts.length === 0 ? "recent-alerts-card" : undefined}>
-          {activeAlerts.length === 0 ? <div className="recent-alerts-body"><StateBlock title="No alerts" message="No active alerts were generated." /></div> : activeAlerts.map((alert) => <AlertRow key={alert.id} alert={alert} />)}
+          {alerts.isLoading && !alerts.data ? <div className="recent-alerts-body"><StateBlock tone="loading" title="Loading alerts" message="Reading recent alerts." /></div> : alerts.isError && !alerts.data ? <div className="recent-alerts-body"><StateBlock tone="error" title="Recent alerts unavailable" message={normalizeApiError(alerts.error).message} /></div> : activeAlerts.length === 0 ? <div className="recent-alerts-body"><StateBlock icon={<Bell size={18} aria-hidden="true" />} title="No alerts" message="No active alerts were generated." /></div> : activeAlerts.map((alert) => <AlertRow key={alert.id} alert={alert} />)}
         </Panel>
         <Panel title="Domain reachability" action={<button className="dashboard-panel-action" onClick={() => setView("domains")}>Open</button>}>
-          {(domains.data ?? []).slice(0, 4).map((domain) => <DomainRow key={domain.id} domain={domain} />)}
+          {domains.isLoading && !domains.data ? <StateBlock tone="loading" title="Loading domains" message="Reading recent reachability checks." /> : domains.isError && !domains.data ? <StateBlock tone="error" title="Domain reachability unavailable" message={normalizeApiError(domains.error).message} /> : domainItems.length === 0 ? <StateBlock icon={<Globe2 size={18} aria-hidden="true" />} title="No domains configured" message="Add a domain or service to begin reachability monitoring." /> : domainItems.slice(0, 4).map((domain) => <DomainRow key={domain.id} domain={domain} />)}
         </Panel>
       </div>
     </div>
@@ -684,6 +787,7 @@ function ServerPage() {
   const [duplicatingMonitor, setDuplicatingMonitor] = useState<MonitoredServerStatus | null>(null);
   const [isMonitorModalOpen, setIsMonitorModalOpen] = useState(false);
   const [isMonitorModalClosing, setIsMonitorModalClosing] = useState(false);
+  const [removingMonitor, setRemovingMonitor] = useState<MonitoredServerStatus | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -807,13 +911,14 @@ function ServerPage() {
     try {
       await removeServerMonitor.mutateAsync(monitor.id);
       setSuccessMessage(`${monitor.name} was successfully deleted.`);
+      setRemovingMonitor(null);
     } catch (error) {
       setActionError(normalizeApiError(error).message);
     }
   };
 
-  if (server.isLoading || metrics.isLoading) return <StateBlock title="Loading server" message="Reading system metrics." />;
-  if (!server.data || !metrics.data) return <StateBlock title="Server unavailable" message={normalizeApiError(server.error ?? metrics.error).message} />;
+  if (server.isLoading || metrics.isLoading) return <StateBlock tone="loading" title="Loading machine" message="Reading system metrics." />;
+  if (!server.data || !metrics.data) return <StateBlock tone="error" title="Machine unavailable" message={normalizeApiError(server.error ?? metrics.error).message} />;
   return (
     <div className="page-stack">
       <StaleNotice isError={server.isError || metrics.isError} dataUpdatedAt={Math.max(server.dataUpdatedAt, metrics.dataUpdatedAt)} />
@@ -925,12 +1030,11 @@ function ServerPage() {
           />
         </div>
       ) : null}
-      <Panel title="Monitored servers" action={<button className="primary-button" onClick={openAddMonitor}><Plus size={16} /> Add server</button>}>
-        {actionError ? <div className="form-error">{actionError}</div> : null}
+      <Panel title="Monitored machines" action={<button className="primary-button" onClick={openAddMonitor}><Plus size={16} /> Add machine</button>}>
+        {actionError ? <div className="form-error" role="alert">{actionError}</div> : null}
         {successMessage ? <SuccessNotice key={successMessage} message={successMessage} onDismiss={setSuccessMessage} /> : null}
-        {serverMonitors.isLoading ? <StateBlock title="Loading monitors" message="Checking configured server monitors." /> : null}
-        {(serverMonitors.data ?? []).length === 0 ? (
-          <StateBlock title="No extra servers" message="Add another NodeGuard backend to monitor host-level health from this dashboard." />
+        {serverMonitors.isLoading && !serverMonitors.data ? <StateBlock tone="loading" title="Loading monitors" message="Checking configured machine monitors." /> : serverMonitors.isError && !serverMonitors.data ? <StateBlock tone="error" title="Machine monitors unavailable" message={normalizeApiError(serverMonitors.error).message} /> : (serverMonitors.data ?? []).length === 0 ? (
+          <StateBlock icon={<Server size={18} aria-hidden="true" />} title="No extra machines" message="Add another NodeGuard backend to monitor machine-level health from this dashboard." />
         ) : (
           <div className="monitor-list">
             {(serverMonitors.data ?? []).map((monitor) => (
@@ -939,22 +1043,22 @@ function ServerPage() {
                 monitor={monitor}
                 onDuplicate={() => duplicateMonitor(monitor)}
                 onEdit={() => editMonitor(monitor)}
-                onRemove={() => void removeMonitor(monitor)}
+                onRemove={() => { setActionError(null); setRemovingMonitor(monitor); }}
               />
             ))}
           </div>
         )}
       </Panel>
       {isMonitorModalOpen ? (
-        <Modal title={editingMonitor ? "Edit monitored server" : duplicatingMonitor ? "Duplicate monitored server" : "Add monitored server"} onClose={closeMonitorModal} isClosing={isMonitorModalClosing}>
+        <Modal title={editingMonitor ? "Edit monitored machine" : duplicatingMonitor ? "Duplicate monitored machine" : "Add monitored machine"} onClose={closeMonitorModal} isClosing={isMonitorModalClosing}>
           <form className="inline-form modal-form" onSubmit={saveMonitor}>
           <label>
             Display name
-            <input value={monitorName} onChange={(event) => setMonitorName(event.target.value)} placeholder="Homelab node" />
+            <input value={monitorName} onChange={(event) => setMonitorName(event.target.value)} placeholder="Homelab node" aria-invalid={Boolean(formError)} aria-describedby={formError ? "server-monitor-error" : undefined} />
           </label>
           <label>
             Backend URL
-            <input value={monitorUrl} onChange={(event) => setMonitorUrl(event.target.value)} placeholder="http://192.168.1.20:3000" />
+            <input value={monitorUrl} onChange={(event) => setMonitorUrl(event.target.value)} placeholder="http://192.168.1.20:3000" aria-invalid={Boolean(formError)} aria-describedby={formError ? "server-monitor-error" : undefined} />
           </label>
           <label>
             API key
@@ -963,6 +1067,8 @@ function ServerPage() {
               onChange={(event) => setMonitorApiKey(event.target.value)}
               type="password"
               placeholder={editingMonitor ? "Leave blank to keep current key" : duplicatingMonitor?.apiKeyPreview ? "Re-enter key for this copy" : "Optional for /health only"}
+              aria-invalid={Boolean(formError)}
+              aria-describedby={formError ? "server-monitor-error" : undefined}
             />
           </label>
           <label className="checkbox-label">
@@ -974,12 +1080,22 @@ function ServerPage() {
             Allow self-signed HTTPS
           </label>
           <button className="modal-submit" type="submit" disabled={addServerMonitor.isPending || updateServerMonitor.isPending}>
-            {editingMonitor ? "Save edits" : duplicatingMonitor ? "Create duplicate" : "Add server"}
+            {editingMonitor ? "Save edits" : duplicatingMonitor ? "Create duplicate" : "Add machine"}
           </button>
         </form>
-        {formError ? <div className="form-error">{formError}</div> : null}
+        {formError ? <div className="form-error" id="server-monitor-error" role="alert">{formError}</div> : null}
         </Modal>
       ) : null}
+      {removingMonitor ? <DeleteConfirmationDialog
+        title="Delete monitored machine"
+        resource={removingMonitor.name}
+        description="Delete this machine monitor and its saved connection metadata from NodeGuard? The remote machine is not changed."
+        confirmLabel="Delete monitor"
+        busy={removeServerMonitor.isPending}
+        error={actionError}
+        onClose={() => { setRemovingMonitor(null); setActionError(null); }}
+        onConfirm={() => void removeMonitor(removingMonitor)}
+      /> : null}
     </div>
   );
 }
@@ -1019,11 +1135,11 @@ function ResourceHistory({ resource, range, onRangeChange, history, isLoading, e
         </div>
       )}
     >
-      {isLoading ? <StateBlock title="Loading resource history" message={`Reading persisted ${config.title.toLowerCase()} samples.`} /> : null}
-      {!isLoading && error && !history ? <StateBlock title="History unavailable" message={normalizeApiError(error).message} /> : null}
+      {isLoading ? <StateBlock tone="loading" title="Loading resource history" message={`Reading persisted ${config.title.toLowerCase()} samples.`} /> : null}
+      {!isLoading && error && !history ? <StateBlock tone="error" title="History unavailable" message={normalizeApiError(error).message} /> : null}
       {!isLoading && error && history ? <div className="stale-notice">Showing the last available resource history. Live history refresh failed.</div> : null}
       {!isLoading && history && history.points.length === 0 ? (
-        <StateBlock title="No historical samples yet" message="NodeGuard has started collecting metrics. History will appear as samples are recorded." />
+        <StateBlock icon={<FileText size={18} aria-hidden="true" />} title="No historical samples yet" message="NodeGuard has started collecting metrics. History will appear as samples are recorded." />
       ) : null}
       {!isLoading && history && history.points.length > 0 ? (
         <div className="history-chart-grid">
@@ -1113,7 +1229,7 @@ function MetricHistoryChart({ title, metricKey, tone, history, summary }: { titl
         </div>
       </div>
       {points.length === 0 ? (
-        <StateBlock title={`${title} unavailable`} message="This metric was unavailable in the selected period." />
+        <StateBlock tone="error" title={`${title} unavailable`} message="This metric was unavailable in the selected period." />
       ) : (
         <div className="history-chart-wrap">
           <svg
@@ -1194,6 +1310,8 @@ function ContainersPage({ initialHostId, onHostFilterApplied }: { initialHostId?
   const [editContainerRef, setEditContainerRef] = useState("");
   const [isMonitorModalOpen, setIsMonitorModalOpen] = useState(false);
   const [isMonitorModalClosing, setIsMonitorModalClosing] = useState(false);
+  const [removingContainerMonitor, setRemovingContainerMonitor] = useState<ContainerMonitorStatus | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [editFormError, setEditFormError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -1376,19 +1494,20 @@ function ContainersPage({ initialHostId, onHostFilterApplied }: { initialHostId?
   };
 
   const removeMonitor = async (monitor: ContainerMonitorStatus) => {
-    setFormError(null);
+    setDeleteError(null);
     setSuccessMessage(null);
 
     try {
       await removeContainerMonitor.mutateAsync(monitor.id);
       setSuccessMessage(`${monitor.name} was successfully deleted.`);
+      setRemovingContainerMonitor(null);
     } catch (error) {
-      setFormError(normalizeApiError(error).message);
+      setDeleteError(normalizeApiError(error).message);
     }
   };
 
-  if (containers.isLoading) return <StateBlock title="Loading containers" message="Reading Docker status." />;
-  if (!containers.data) return <StateBlock title="Docker unavailable" message={normalizeApiError(containers.error).message} />;
+  if (containers.isLoading) return <StateBlock tone="loading" title="Loading containers" message="Reading Docker status." />;
+  if (!containers.data) return <StateBlock tone="error" title="Docker unavailable" message={normalizeApiError(containers.error).message} />;
   return (
     <div className="page-stack">
       <StaleNotice isError={containers.isError} dataUpdatedAt={containers.dataUpdatedAt} />
@@ -1445,8 +1564,39 @@ function ContainersPage({ initialHostId, onHostFilterApplied }: { initialHostId?
           </div>
         )}
       >
-        {filtered.length === 0 ? <StateBlock title="No containers found" message={containers.data.dockerAvailable ? "No containers matched the current search and filters." : "Docker data is currently unavailable. Check Docker access on the backend."} /> : (
+        {filtered.length === 0 ? <StateBlock icon={<Boxes size={18} aria-hidden="true" />} title="No containers found" message={containers.data.dockerAvailable ? "No containers matched the current search and filters." : "Docker data is currently unavailable. Check Docker access on the backend."} /> : (
           <div className="container-results">
+            <div className="container-card-sort" aria-label="Container card sorting">
+              <NodeGuardSelect
+                className="container-filter"
+                label="Sort by"
+                labelPosition="inline"
+                value={sortKey}
+                options={[
+                  { value: "name", label: "Name" },
+                  { value: "state", label: "State" },
+                  { value: "health", label: "Health" },
+                  { value: "stack", label: "Stack" },
+                  { value: "image", label: "Image" },
+                  { value: "ipAddress", label: "IP address" },
+                  { value: "publishedPorts", label: "Published ports" },
+                  { value: "uptime", label: "Uptime" },
+                ]}
+                onChange={(value) => {
+                  if (value !== sortKey) setSortDirection("asc");
+                  setSortKey(value as ContainerSortKey);
+                }}
+              />
+              <button
+                className="icon-only"
+                onClick={() => setSortDirection((direction) => direction === "asc" ? "desc" : "asc")}
+                aria-label={`Sort ${sortDirection === "asc" ? "descending" : "ascending"}`}
+                title={`Sort ${sortDirection === "asc" ? "descending" : "ascending"}`}
+                type="button"
+              >
+                {sortDirection === "asc" ? <ArrowUp size={15} /> : <ArrowDown size={15} />}
+              </button>
+            </div>
             <div className="container-table-scroll">
               <div className="container-table" role="table" aria-label="Docker containers">
                 <ContainerTableHeader sortKey={sortKey} sortDirection={sortDirection} onSort={changeSort} />
@@ -1477,8 +1627,8 @@ function ContainersPage({ initialHostId, onHostFilterApplied }: { initialHostId?
         <div ref={containerDetailRef} className={`container-detail-collapse ${isContainerDetailClosing ? "is-closing" : ""}`}>
           <div className="container-detail-target">
             <Panel title={container.data?.name ?? "Container detail"} action={<span className="read-only-label">Read-only details</span>}>
-              {container.isLoading ? <StateBlock title="Loading detail" message="Reading container inspection data." /> : null}
-              {container.isError ? <StateBlock title="Container detail unavailable" message={normalizeApiError(container.error).message} /> : null}
+              {container.isLoading ? <StateBlock tone="loading" title="Loading detail" message="Reading container inspection data." /> : null}
+              {container.isError ? <StateBlock tone="error" title="Container detail unavailable" message={normalizeApiError(container.error).message} /> : null}
               {container.data ? <ContainerDetail container={container.data} /> : null}
             </Panel>
           </div>
@@ -1488,21 +1638,21 @@ function ContainersPage({ initialHostId, onHostFilterApplied }: { initialHostId?
         <form className="inline-form compact-form" onSubmit={saveMonitor}>
           <label>
             Display name
-            <input value={monitorName} onChange={(event) => setMonitorName(event.target.value)} placeholder="Vaultwarden" />
+            <input value={monitorName} onChange={(event) => setMonitorName(event.target.value)} placeholder="Vaultwarden" aria-invalid={Boolean(formError)} aria-describedby={formError ? "container-monitor-error" : undefined} />
           </label>
           <label>
             Container name or ID
-            <input value={containerRef} onChange={(event) => setContainerRef(event.target.value)} placeholder="vaultwarden" />
+            <input value={containerRef} onChange={(event) => setContainerRef(event.target.value)} placeholder="vaultwarden" aria-invalid={Boolean(formError)} aria-describedby={formError ? "container-monitor-error" : undefined} />
           </label>
           <button className="primary-button" type="submit" disabled={addContainerMonitor.isPending}>
             <Plus size={16} />
             Add container
           </button>
         </form>
-        {formError ? <div className="form-error">{formError}</div> : null}
+        {formError ? <div className="form-error" id="container-monitor-error" role="alert">{formError}</div> : null}
         {successMessage ? <SuccessNotice key={successMessage} message={successMessage} onDismiss={setSuccessMessage} /> : null}
         {(containers.data.containerMonitors ?? []).length === 0 ? (
-          <StateBlock title="No monitored containers" message="Add container names or IDs that should be present and running." />
+          <StateBlock icon={<Boxes size={18} aria-hidden="true" />} title="No monitored containers" message="Add container names or IDs that should be present and running." />
         ) : (
           <div className="monitor-list">
             {containers.data.containerMonitors.map((monitor) => (
@@ -1511,7 +1661,7 @@ function ContainersPage({ initialHostId, onHostFilterApplied }: { initialHostId?
                 monitor={monitor}
                 onDuplicate={() => duplicateMonitor(monitor)}
                 onEdit={() => editMonitor(monitor)}
-                onRemove={() => void removeMonitor(monitor)}
+                onRemove={() => { setDeleteError(null); setRemovingContainerMonitor(monitor); }}
               />
             ))}
           </div>
@@ -1522,19 +1672,29 @@ function ContainersPage({ initialHostId, onHostFilterApplied }: { initialHostId?
           <form className="inline-form modal-form" onSubmit={saveMonitorEdits}>
             <label>
               Display name
-              <input value={editMonitorName} onChange={(event) => setEditMonitorName(event.target.value)} placeholder="Vaultwarden" />
+              <input value={editMonitorName} onChange={(event) => setEditMonitorName(event.target.value)} placeholder="Vaultwarden" aria-invalid={Boolean(editFormError)} aria-describedby={editFormError ? "container-monitor-edit-error" : undefined} />
             </label>
             <label>
               Container name or ID
-              <input value={editContainerRef} onChange={(event) => setEditContainerRef(event.target.value)} placeholder="vaultwarden" />
+              <input value={editContainerRef} onChange={(event) => setEditContainerRef(event.target.value)} placeholder="vaultwarden" aria-invalid={Boolean(editFormError)} aria-describedby={editFormError ? "container-monitor-edit-error" : undefined} />
             </label>
             <button className="modal-submit" type="submit" disabled={updateContainerMonitor.isPending || addContainerMonitor.isPending}>
               {editingMonitor ? "Save edits" : "Create duplicate"}
             </button>
           </form>
-          {editFormError ? <div className="form-error">{editFormError}</div> : null}
+          {editFormError ? <div className="form-error" id="container-monitor-edit-error" role="alert">{editFormError}</div> : null}
         </Modal>
       ) : null}
+      {removingContainerMonitor ? <DeleteConfirmationDialog
+        title="Delete monitored container"
+        resource={removingContainerMonitor.name}
+        description="Delete this expected-container monitor from NodeGuard? The Docker container itself is not changed."
+        confirmLabel="Delete monitor"
+        busy={removeContainerMonitor.isPending}
+        error={deleteError}
+        onClose={() => { setRemovingContainerMonitor(null); setDeleteError(null); }}
+        onConfirm={() => void removeMonitor(removingContainerMonitor)}
+      /> : null}
     </div>
   );
 }
@@ -1545,6 +1705,7 @@ function DomainsPage() {
   const [expectedStatusCodes, setExpectedStatusCodes] = useState("200,301,302,401");
   const [editingDomain, setEditingDomain] = useState<DomainCheck | null>(null);
   const [duplicatingDomain, setDuplicatingDomain] = useState<DomainCheck | null>(null);
+  const [removingDomain, setRemovingDomain] = useState<DomainCheck | null>(null);
   const [isDomainModalOpen, setIsDomainModalOpen] = useState(false);
   const [isDomainModalClosing, setIsDomainModalClosing] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -1644,20 +1805,21 @@ function DomainsPage() {
     try {
       await removeDomain.mutateAsync(domain.id);
       setSuccessMessage(`${fullDomainUrl(domain)} was successfully deleted.`);
+      setRemovingDomain(null);
     } catch (error) {
       setActionError(normalizeApiError(error).message);
     }
   };
 
-  if (domains.isLoading) return <StateBlock title="Loading domains" message="Checking configured domains." />;
-  if (!domains.data) return <StateBlock title="Domains unavailable" message={normalizeApiError(domains.error).message} />;
+  if (domains.isLoading) return <StateBlock tone="loading" title="Loading domains" message="Checking configured domains." />;
+  if (!domains.data) return <StateBlock tone="error" title="Domains unavailable" message={normalizeApiError(domains.error).message} />;
   return (
     <div className="page-stack">
       <Panel title="Domains / services" action={<div className="button-row"><button className="secondary-button" onClick={() => domains.refetch()}><RefreshCcw size={16} /> Check now</button><button className="primary-button" onClick={openAddDomain}><Plus size={16} /> Add domain</button></div>}>
-        {actionError ? <div className="form-error">{actionError}</div> : null}
+        {actionError ? <div className="form-error" role="alert">{actionError}</div> : null}
         {successMessage ? <SuccessNotice key={successMessage} message={successMessage} onDismiss={setSuccessMessage} /> : null}
         {domains.data.length === 0 ? (
-          <StateBlock title="No services configured" message="Add a public domain, internal URL, or set MONITORED_DOMAINS in the backend environment." />
+          <StateBlock icon={<Globe2 size={18} aria-hidden="true" />} title="No services configured" message="Add a public domain, internal URL, or set MONITORED_DOMAINS in the backend environment." />
         ) : (
           <div className="domain-list">
             {domains.data.map((domain) => (
@@ -1667,7 +1829,7 @@ function DomainsPage() {
                 onCheck={() => domains.refetch()}
                 onDuplicate={domain.editable ? () => duplicateDomain(domain) : undefined}
                 onEdit={domain.editable ? () => editDomain(domain) : undefined}
-                onRemove={domain.editable ? () => void removeStoredDomain(domain) : undefined}
+                onRemove={domain.editable ? () => { setActionError(null); setRemovingDomain(domain); } : undefined}
               />
             ))}
           </div>
@@ -1678,7 +1840,7 @@ function DomainsPage() {
           <form className="inline-form modal-form" onSubmit={saveDomain}>
             <label>
               Domain URL
-              <input value={domainValue} onChange={(event) => setDomainValue(event.target.value)} placeholder="https://bit.muthu.eu" />
+              <input value={domainValue} onChange={(event) => setDomainValue(event.target.value)} placeholder="https://status.example.com" />
             </label>
             <label>
               Path
@@ -1693,9 +1855,19 @@ function DomainsPage() {
               {editingDomain ? "Save edits" : duplicatingDomain ? "Create duplicate" : "Add domain"}
             </button>
           </form>
-          {formError ? <div className="form-error">{formError}</div> : null}
+          {formError ? <div className="form-error" role="alert">{formError}</div> : null}
         </Modal>
       ) : null}
+      {removingDomain ? <DeleteConfirmationDialog
+        title="Delete domain monitor"
+        resource={fullDomainUrl(removingDomain)}
+        description="Delete this domain or service monitor and its stored check history from NodeGuard? The remote service is not changed."
+        confirmLabel="Delete monitor"
+        busy={removeDomain.isPending}
+        error={actionError}
+        onClose={() => { setRemovingDomain(null); setActionError(null); }}
+        onConfirm={() => void removeStoredDomain(removingDomain)}
+      /> : null}
     </div>
   );
 }
@@ -1711,6 +1883,37 @@ function alertSource(alert: Alert) {
   return "NodeGuard";
 }
 
+function AlertMobileCard({ item, selected, onToggle, onDelete, deleting }: { item: Alert; selected: boolean; onToggle: () => void; onDelete: () => void; deleting: boolean }) {
+  return (
+    <article className={`alert-mobile-card ${selected ? "selected" : ""}`}>
+      <div className="alert-mobile-heading">
+        <strong>{item.title}</strong>
+        <StatusPill status={item.severity} />
+      </div>
+      <div className="alert-mobile-state-row">
+        <span className={`alert-state ${item.status}`}>{item.status === "active" ? "Active" : "Resolved"}</span>
+        <span>{alertSource(item)}</span>
+      </div>
+      <p>{item.message}</p>
+      <dl className="alert-mobile-meta">
+        <div><dt>Instance</dt><dd>{item.affectedResource}</dd></div>
+        <div><dt>Started</dt><dd><time dateTime={item.firstSeenAt}>{formatDateTime(item.firstSeenAt)}</time></dd></div>
+        <div><dt>Last updated</dt><dd><time dateTime={item.lastSeenAt} title={formatDateTime(item.lastSeenAt)}>{formatRelativeTime(item.lastSeenAt)}</time></dd></div>
+      </dl>
+      <div className="alert-mobile-actions">
+        <button className="secondary-button" onClick={onToggle} aria-expanded={selected} aria-label={`${selected ? "Hide" : "View"} details for ${item.title}`}>
+          <ChevronRight className={selected ? "is-open" : ""} size={15} />
+          {selected ? "Hide details" : "View details"}
+        </button>
+        <button className="danger-soft" onClick={onDelete} disabled={deleting} aria-label={`Delete ${item.title}`}>
+          <Trash2 size={15} />
+          {deleting ? "Deleting…" : "Delete"}
+        </button>
+      </div>
+    </article>
+  );
+}
+
 function AlertsPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [isDetailClosing, setIsDetailClosing] = useState(false);
@@ -1720,6 +1923,7 @@ function AlertsPage() {
   const [pageSize, setPageSize] = useState(10);
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [deletingAlert, setDeletingAlert] = useState<Alert | null>(null);
   const detailCloseTimer = useRef<number | null>(null);
   const alerts = useAlerts("all");
   const alert = useAlert(selected);
@@ -1791,13 +1995,14 @@ function AlertsPage() {
         setIsDetailClosing(false);
       }
       setSuccessMessage(`${item.title} was successfully deleted.`);
+      setDeletingAlert(null);
     } catch (error) {
       setActionError(normalizeApiError(error).message);
     }
   };
 
-  if (alerts.isLoading) return <StateBlock title="Loading alerts" message="Generating current alerts." />;
-  if (!alerts.data) return <StateBlock title="Alerts unavailable" message={normalizeApiError(alerts.error).message} />;
+  if (alerts.isLoading) return <StateBlock tone="loading" title="Loading alerts" message="Generating current alerts." />;
+  if (!alerts.data) return <StateBlock tone="error" title="Alerts unavailable" message={normalizeApiError(alerts.error).message} />;
 
   const tabItems: { id: AlertView; label: string; count: number }[] = [
     { id: "active", label: "Active alerts", count: activeCount },
@@ -1806,16 +2011,38 @@ function AlertsPage() {
   ];
   const panelTitle = tabItems.find((item) => item.id === view)?.label ?? "Alerts";
 
+  const selectAlertView = (nextView: AlertView, focus = false) => {
+    setView(nextView);
+    if (focus) {
+      window.requestAnimationFrame(() => document.getElementById(`alert-tab-${nextView}`)?.focus());
+    }
+  };
+
+  const handleAlertTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? tabItems.length - 1
+        : (index + (event.key === "ArrowRight" ? 1 : -1) + tabItems.length) % tabItems.length;
+    selectAlertView(tabItems[nextIndex].id, true);
+  };
+
   return (
     <div className="page-stack alerts-page">
       <div className="alert-view-tabs" role="tablist" aria-label="Alert views">
-        {tabItems.map((item) => (
+        {tabItems.map((item, index) => (
           <button
             key={item.id}
+            id={`alert-tab-${item.id}`}
             role="tab"
             aria-selected={view === item.id}
+            aria-controls="alert-panel"
+            tabIndex={view === item.id ? 0 : -1}
             className={view === item.id ? "active" : ""}
-            onClick={() => setView(item.id)}
+            onClick={() => selectAlertView(item.id)}
+            onKeyDown={(event) => handleAlertTabKeyDown(event, index)}
           >
             {item.label}
             <span className={`alert-count ${item.id === "active" && item.count > 0 ? "has-active" : ""}`}>{item.count}</span>
@@ -1823,26 +2050,28 @@ function AlertsPage() {
         ))}
       </div>
 
-      <Panel
-        title={panelTitle}
-        action={(
-          <div className="alert-table-tools">
-            <div className="search alert-search">
-              <Search size={16} />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search alerts" aria-label="Search alerts" />
+      <div id="alert-panel" role="tabpanel" aria-labelledby={`alert-tab-${view}`}>
+        <Panel
+          title={panelTitle}
+          action={(
+            <div className="alert-table-tools">
+              <div className="search alert-search">
+                <Search size={16} />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search alerts" aria-label="Search alerts" />
+              </div>
+              <button className="icon-only" onClick={() => alerts.refetch()} aria-label="Refresh alerts" title="Refresh alerts">
+                <RefreshCcw size={15} />
+              </button>
             </div>
-            <button className="icon-only" onClick={() => alerts.refetch()} aria-label="Refresh alerts" title="Refresh alerts">
-              <RefreshCcw size={15} />
-            </button>
-          </div>
-        )}
-      >
-        {actionError ? <div className="form-error">{actionError}</div> : null}
+          )}
+        >
+        {actionError ? <div className="form-error" role="alert">{actionError}</div> : null}
         {successMessage ? <SuccessNotice key={successMessage} message={successMessage} onDismiss={setSuccessMessage} /> : null}
         {filteredAlerts.length === 0 ? (
-          <StateBlock title="No alerts" message={query ? "No alerts match the current search." : `No ${view === "all" ? "" : `${view} `}alerts are available.`} />
+          <StateBlock icon={<Bell size={18} aria-hidden="true" />} title="No alerts" message={query ? "No alerts match the current search." : `No ${view === "all" ? "" : `${view} `}alerts are available.`} />
         ) : (
-          <div className="alert-table-scroll">
+          <>
+            <div className="alert-table-scroll">
             <div className="alert-table" role="table" aria-label={panelTitle}>
               <div className="alert-table-header" role="row">
                 <span role="columnheader">Alert name</span>
@@ -1879,14 +2108,27 @@ function AlertsPage() {
                     >
                       <ChevronRight size={15} />
                     </button>
-                    <button className="icon-only danger-soft" onClick={() => void deleteAlert(item)} disabled={removeAlert.isPending} aria-label={`Delete ${item.title}`} title="Delete alert">
+                    <button className="icon-only danger-soft" onClick={() => { setActionError(null); setDeletingAlert(item); }} disabled={removeAlert.isPending} aria-label={`Delete ${item.title}`} title="Delete alert">
                       <Trash2 size={15} />
                     </button>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+            </div>
+            <div className="alerts-mobile-list">
+              {pagedAlerts.map((item) => (
+                <AlertMobileCard
+                  key={item.id}
+                  item={item}
+                  selected={selected === item.id && !isDetailClosing}
+                  onToggle={() => toggleAlertDetail(item.id)}
+                  onDelete={() => { setActionError(null); setDeletingAlert(item); }}
+                  deleting={removeAlert.isPending}
+                />
+              ))}
+            </div>
+          </>
         )}
 
         <div className="alert-table-footer">
@@ -1911,202 +2153,313 @@ function AlertsPage() {
             </button>
           </div>
         </div>
-      </Panel>
+        </Panel>
+      </div>
 
       {selected ? (
         <div className={`alert-detail-collapse ${isDetailClosing ? "is-closing" : ""}`}>
           <Panel title="Alert detail">
-            {!alert.data ? <StateBlock title="Loading alert" message="Reading alert detail." /> : <AlertDetail alert={alert.data} />}
+            {!alert.data ? <StateBlock tone={alert.isError ? "error" : "loading"} title={alert.isError ? "Alert unavailable" : "Loading alert"} message={alert.isError ? normalizeApiError(alert.error).message : "Reading alert detail."} /> : <AlertDetail alert={alert.data} />}
           </Panel>
         </div>
       ) : null}
+      {deletingAlert ? <DeleteConfirmationDialog
+        title="Delete alert"
+        resource={deletingAlert.title}
+        description="Permanently delete this alert record from NodeGuard? This does not change the monitored resource."
+        confirmLabel="Delete alert"
+        busy={removeAlert.isPending}
+        error={actionError}
+        onClose={() => { setDeletingAlert(null); setActionError(null); }}
+        onConfirm={() => void deleteAlert(deletingAlert)}
+      /> : null}
     </div>
   );
 }
 
-function updateCategoryLabel(category: UpdateCategory) {
-  const labels: Record<UpdateCategory, string> = {
-    core: "Core",
-    "add-on": "Add-on",
-    integration: "Integration",
-    application: "Application",
-    firmware: "Firmware",
-    system: "System",
-    container: "Container",
-    other: "Other"
-  };
-  return labels[category];
+type MachineUpdateFilter = "all" | "updates" | "security" | "up_to_date" | "reboot" | "unsupported" | "check_failed" | "stale_offline";
+
+function machineUpdateCondition(machine: MachineUpdateSummary) {
+  if (machine.status === "waiting" || machine.supported === null) return { label: "Waiting", tone: "unknown" };
+  if (machine.supported === false || machine.status === "unsupported") return { label: "Unsupported", tone: "unknown" };
+  if (machine.status === "package_manager_busy") return { label: "Check delayed", tone: "warning" };
+  if (machine.status === "metadata_refresh_failed" || machine.status === "check_failed") return { label: "Check failed", tone: "critical" };
+  if (machine.agentStatus !== "online" && machine.lastSuccessfulAt) return { label: "Last known", tone: "unknown" };
+  if ((machine.securityUpdateCount ?? 0) > 0) return { label: "Security updates", tone: "critical" };
+  if ((machine.updateCount ?? 0) > 0) return { label: "Updates available", tone: "warning" };
+  if (machine.lastSuccessfulAt) return { label: "Up to date", tone: "healthy" };
+  return { label: "Waiting", tone: "unknown" };
 }
 
-function updateStatusLabel(status: UpdateStatus) {
-  const labels: Record<UpdateStatus, string> = {
-    available: "Available",
-    up_to_date: "Up to date",
-    installing: "Installing",
-    unknown: "Unknown"
-  };
-  return labels[status];
+function MachineUpdateConditionPill({ machine }: { machine: MachineUpdateSummary }) {
+  const condition = machineUpdateCondition(machine);
+  return <span className={`pill ${condition.tone}`}>{condition.label}</span>;
 }
 
-function UpdateStatusPill({ update }: { update: UpdateItem }) {
-  const tone = update.securityCritical && update.status === "available"
-    ? "critical"
-    : update.status === "available"
-      ? "warning"
-      : update.status === "up_to_date"
-        ? "healthy"
-        : "unknown";
-  return <span className={`pill ${tone}`}>{update.securityCritical && update.status === "available" ? "Security" : updateStatusLabel(update.status)}</span>;
+function updateCountValue(value: number | null) {
+  return value === null ? "—" : String(value);
 }
 
-function UpdateActions({ update }: { update: UpdateItem }) {
-  return (
-    <div className="update-actions">
-      {update.openUrl ? <a className="small-action-link" href={update.openUrl} target="_blank" rel="noreferrer" title={update.sourceId === "home_assistant" ? "Open in Home Assistant" : "Open update source"}><ExternalLink size={14} /><span>{update.sourceId === "home_assistant" ? "Open in Home Assistant" : "Open source"}</span></a> : null}
-      {update.releaseNotesUrl ? <a className="small-action-link" href={update.releaseNotesUrl} target="_blank" rel="noreferrer" title="Open release notes"><PackageOpen size={14} /><span>Release notes</span></a> : null}
-      {!update.openUrl && !update.releaseNotesUrl ? <span className="muted">No links</span> : null}
+function MachineCheckTime({ machine, successfulOnly = false }: { machine: MachineUpdateSummary; successfulOnly?: boolean }) {
+  const value = successfulOnly ? machine.lastSuccessfulAt : machine.checkedAt ?? machine.lastSuccessfulAt;
+  if (!value) return <>Never</>;
+  return <time dateTime={value} title={formatDateTime(value)}>{formatRelativeTime(value)}</time>;
+}
+
+function RebootState({ machine }: { machine: MachineUpdateSummary }) {
+  if (machine.rebootRequired === null) return <>—</>;
+  return machine.rebootRequired
+    ? <span className="reboot-required"><RefreshCcw size={13} aria-hidden="true" /> Required</span>
+    : <>No</>;
+}
+
+function MachineUpdateStatusNote({ machine }: { machine: MachineUpdateSummary }) {
+  if (machine.status === "waiting" || machine.supported === null) return <span>Waiting for the first scheduled update inventory.</span>;
+  if (machine.supported === false || machine.status === "unsupported") return <span>Update discovery is not available for this operating system yet.</span>;
+  if (machine.status === "package_manager_busy") return <span>The package manager is busy. NodeGuard will retry automatically.{machine.lastSuccessfulAt ? <> Showing data from the last successful check <MachineCheckTime machine={machine} successfulOnly />.</> : null}</span>;
+  if (machine.status === "metadata_refresh_failed" || machine.status === "check_failed") return <span>The latest update check failed.{machine.lastSuccessfulAt ? <> Showing data from the last successful check <MachineCheckTime machine={machine} successfulOnly />.</> : null}{machine.lastError ? <> {machine.lastError}</> : null}</span>;
+  if (machine.agentStatus !== "online" && machine.lastSuccessfulAt) return <span>Showing retained data from the last successful check <MachineCheckTime machine={machine} successfulOnly /> because this Agent is {machine.agentStatus}.</span>;
+  if (!machine.lastSuccessfulAt) return <span>Waiting for the first scheduled update inventory.</span>;
+  return null;
+}
+
+function MachinePackageEmptyState({ machine, securityOnly }: { machine: MachineUpdateSummary; securityOnly: boolean }) {
+  const currentInventoryUnavailable = machine.agentStatus !== "online" || machine.status !== "ok";
+  const retainedInventory = currentInventoryUnavailable && machine.lastSuccessfulAt !== null;
+
+  if (retainedInventory) {
+    return <StateBlock
+      icon={<PackageOpen size={18} aria-hidden="true" />}
+      title={securityOnly ? "No security updates in retained data" : "No package updates in retained data"}
+      message={securityOnly
+        ? "The retained inventory from the last successful check contains no security-classified package updates."
+        : "The retained inventory from the last successful check contains no package updates. A current result is unavailable."}
+    />;
+  }
+
+  if (currentInventoryUnavailable) {
+    return <StateBlock
+      icon={<PackageOpen size={18} aria-hidden="true" />}
+      title={securityOnly ? "Security inventory unavailable" : "Package inventory unavailable"}
+      message="No current package inventory is available for this machine."
+    />;
+  }
+
+  return <StateBlock
+    icon={<PackageOpen size={18} aria-hidden="true" />}
+    title={securityOnly ? "No security updates" : "No package updates"}
+    message={securityOnly ? "This machine has no security-classified package updates." : "This machine is currently up to date."}
+  />;
+}
+
+function MachineUpdateRow({ machine, onView }: { machine: MachineUpdateSummary; onView: () => void }) {
+  return <tr>
+    <td><span className="machine-update-name"><strong>{machine.displayName}</strong><small title={machine.hostname}>{machine.hostname}</small></span></td>
+    <td><span className="machine-update-os"><span title={machine.os.prettyName ?? undefined}>{machine.os.prettyName ?? "Unavailable"}</span><MachineUpdateStatusNote machine={machine} /></span></td>
+    <td className="number-cell"><strong>{updateCountValue(machine.updateCount)}</strong></td>
+    <td className={`number-cell ${(machine.securityUpdateCount ?? 0) > 0 ? "security-value" : ""}`}><strong>{updateCountValue(machine.securityUpdateCount)}</strong></td>
+    <td><RebootState machine={machine} /></td>
+    <td><MachineCheckTime machine={machine} /></td>
+    <td><AgentStatusPill status={machine.agentStatus} /></td>
+    <td><button className="small-action-button" onClick={onView} aria-label={`View updates for ${machine.displayName}`}>View</button></td>
+  </tr>;
+}
+
+function MachineUpdateCard({ machine, onView }: { machine: MachineUpdateSummary; onView: () => void }) {
+  return <article className="update-mobile-card machine-update-card">
+    <div className="update-mobile-head"><div><strong>{machine.displayName}</strong><span title={machine.hostname}>{machine.hostname}</span></div><AgentStatusPill status={machine.agentStatus} /></div>
+    <div className="machine-update-card-state"><MachineUpdateConditionPill machine={machine} /><span>{machine.os.prettyName ?? "Operating system unavailable"}</span></div>
+    <dl>
+      <div><dt>Updates</dt><dd>{updateCountValue(machine.updateCount)}</dd></div>
+      <div><dt>Security</dt><dd className={(machine.securityUpdateCount ?? 0) > 0 ? "security-value" : ""}>{updateCountValue(machine.securityUpdateCount)}</dd></div>
+      <div><dt>Reboot</dt><dd><RebootState machine={machine} /></dd></div>
+      <div><dt>Last checked</dt><dd><MachineCheckTime machine={machine} /></dd></div>
+    </dl>
+    <MachineUpdateStatusNote machine={machine} />
+    <button className="secondary-button" onClick={onView} aria-label={`View updates for ${machine.displayName}`}>View updates</button>
+  </article>;
+}
+
+function PackageUpdateTable({ packages }: { packages: MachinePackageUpdate[] }) {
+  return <>
+    <div className="package-updates-table-wrap">
+      <table className="package-updates-table">
+        <thead><tr><th scope="col">Package</th><th scope="col">Installed version</th><th scope="col">Available version</th><th scope="col">Type</th><th scope="col">Source</th></tr></thead>
+        <tbody>{packages.map((item) => <tr key={item.name}>
+          <td><strong title={item.name}>{item.name}</strong></td>
+          <td className="mono-cell" title={item.installedVersion}>{item.installedVersion}</td>
+          <td className="mono-cell" title={item.candidateVersion}>{item.candidateVersion}</td>
+          <td>{item.security ? <span className="security-flag"><ShieldAlert size={13} aria-hidden="true" /> Security</span> : "Standard"}</td>
+          <td title={item.source ?? undefined}>{item.source ?? "Unknown"}</td>
+        </tr>)}</tbody>
+      </table>
     </div>
-  );
+    <div className="package-updates-mobile-list">{packages.map((item) => <article className="package-update-card" key={item.name}>
+      <div><strong title={item.name}>{item.name}</strong>{item.security ? <span className="pill critical">Security</span> : <span className="pill unknown">Standard</span>}</div>
+      <dl><div><dt>Installed</dt><dd>{item.installedVersion}</dd></div><div><dt>Available</dt><dd>{item.candidateVersion}</dd></div><div><dt>Source</dt><dd>{item.source ?? "Unknown"}</dd></div></dl>
+    </article>)}</div>
+  </>;
 }
 
-function UpdatesPage() {
-  const updates = useUpdates();
-  const refreshUpdates = useRefreshUpdates();
+function MachineUpdatesDialog({ machineId, fallback, onClose }: { machineId: string; fallback?: MachineUpdateSummary; onClose: () => void }) {
+  const detail = useMachineUpdates(machineId);
+  const [packageFilter, setPackageFilter] = useState<"all" | "security">("all");
+  const machine = detail.data ?? fallback;
+  const packages = (detail.data?.packages ?? []).filter((item) => packageFilter === "all" || item.security);
+  const title = machine?.displayName ?? "Machine updates";
+
+  return <Modal title={title} onClose={onClose} descriptionId="machine-updates-description">
+    <div className="machine-updates-detail">
+      {!machine ? <StateBlock tone={detail.isError ? "error" : "loading"} title={detail.isError ? "Update inventory unavailable" : "Loading update inventory"} message={detail.isError ? normalizeApiError(detail.error).message : "Reading the latest stored machine inventory."} /> : <>
+        <div className="machine-updates-intro" id="machine-updates-description">
+          <div><span>{machine.os.prettyName ?? "Operating system unavailable"}</span><small>{machine.hostname}</small></div>
+          <div><MachineUpdateConditionPill machine={machine} /><AgentStatusPill status={machine.agentStatus} /></div>
+        </div>
+        <dl className="machine-update-detail-summary">
+          <div><dt>Available updates</dt><dd>{updateCountValue(machine.updateCount)}</dd></div>
+          <div><dt>Security updates</dt><dd className={(machine.securityUpdateCount ?? 0) > 0 ? "security-value" : ""}>{updateCountValue(machine.securityUpdateCount)}</dd></div>
+          <div><dt>Reboot</dt><dd><RebootState machine={machine} /></dd></div>
+          <div><dt>Last successful check</dt><dd><MachineCheckTime machine={machine} successfulOnly /></dd></div>
+        </dl>
+        <MachineUpdateStatusNote machine={machine} />
+        {detail.isError ? <div className="stale-notice" role={fallback?.lastSuccessfulAt ? "status" : "alert"}>{fallback?.lastSuccessfulAt ? "Latest detail refresh failed. Showing the last available machine summary." : "Package details are currently unavailable. Try again when the Agent inventory service is reachable."}</div> : null}
+        {machine.truncated ? <div className="stale-notice" role="status">Showing the first {detail.data?.packages.length ?? 0} package updates.</div> : null}
+        {detail.data ? <>
+          <div className="package-update-toolbar">
+            <h3>Package updates</h3>
+            <div className="segmented" aria-label="Filter package updates">
+              <button className={packageFilter === "all" ? "active" : ""} onClick={() => setPackageFilter("all")} aria-pressed={packageFilter === "all"}>All</button>
+              <button className={packageFilter === "security" ? "active" : ""} onClick={() => setPackageFilter("security")} aria-pressed={packageFilter === "security"}>Security</button>
+            </div>
+          </div>
+          {packages.length ? <PackageUpdateTable packages={packages} /> : <MachinePackageEmptyState machine={machine} securityOnly={packageFilter === "security"} />}
+        </> : detail.isLoading ? <StateBlock tone="loading" title="Loading package details" message="Reading the stored package inventory." /> : null}
+      </>}
+    </div>
+  </Modal>;
+}
+
+function UpdatesPage({ initialMachineId, onInitialMachineApplied }: { initialMachineId?: string | null; onInitialMachineApplied?: () => void }) {
   const [search, setSearch] = useState("");
-  const [source, setSource] = useState("all");
-  const [category, setCategory] = useState("all");
-  const [status, setStatus] = useState("all");
-  const [message, setMessage] = useState<string | null>(null);
+  const [status, setStatus] = useState<MachineUpdateFilter>("all");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selectedMachineId, setSelectedMachineId] = useState<string | null>(initialMachineId ?? null);
+  const updates = useUpdates(debouncedSearch, status);
 
-  const items = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (updates.data?.updates ?? []).filter((update) => {
-      if (source !== "all" && update.sourceId !== source) return false;
-      if (category !== "all" && update.category !== category) return false;
-      if (status !== "all" && update.status !== status) return false;
-      return !term || [update.name, update.sourceName, update.installedVersion, update.availableVersion].some((value) => value?.toLowerCase().includes(term));
-    });
-  }, [updates.data?.updates, search, source, category, status]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
-  const categories = [...new Set((updates.data?.updates ?? []).map((update) => update.category))];
-  const refresh = async () => {
-    setMessage(null);
-    try {
-      const snapshot = await refreshUpdates.mutateAsync();
-      setMessage(`Update check completed. ${snapshot.availableCount} ${snapshot.availableCount === 1 ? "update is" : "updates are"} available.`);
-    } catch (error) {
-      setMessage(normalizeApiError(error).message);
-    }
-  };
+  useEffect(() => {
+    if (!initialMachineId) return;
+    setSelectedMachineId(initialMachineId);
+    onInitialMachineApplied?.();
+  }, [initialMachineId, onInitialMachineApplied]);
 
-  if (updates.isLoading) return <StateBlock title="Loading updates" message="Reading configured update sources." />;
-  if (!updates.data) return <StateBlock title="Updates unavailable" message={normalizeApiError(updates.error).message} />;
+  const machines = updates.data?.machines ?? [];
+
+  if (updates.isLoading && !updates.data) return <StateBlock tone="loading" title="Loading updates" message="Reading stored Agent update inventories." />;
+  if (!updates.data) return <StateBlock tone="error" title="Updates unavailable" message={normalizeApiError(updates.error).message} />;
+
+  const isDefaultView = status === "all" && search.trim() === "" && debouncedSearch === "";
+  const eligibleMachines = updates.data.machines.filter((machine) => machine.supported !== false && machine.status !== "unsupported");
+  const waitingForInventory = isDefaultView
+    && updates.data.totalMachineCount > 0
+    && updates.data.reportingMachineCount === 0
+    && eligibleMachines.length > 0
+    && eligibleMachines.every((machine) => machine.status === "waiting" || machine.checkedAt === null);
+  const allUpToDate = isDefaultView
+    && updates.data.totalMachineCount > 0
+    && updates.data.machines.length === updates.data.totalMachineCount
+    && updates.data.machines.every((machine) => machine.supported === true
+      && machine.status === "ok"
+      && machine.agentStatus === "online"
+      && machine.lastSuccessfulAt !== null
+      && machine.updateCount === 0);
+  const lastKnownUpdateAt = updates.data.machines.reduce<string | null>((latest, machine) => {
+    const retainedAt = machine.lastSuccessfulAt && (machine.agentStatus !== "online" || machine.status !== "ok")
+      ? machine.lastSuccessfulAt
+      : null;
+    return retainedAt && (!latest || retainedAt > latest) ? retainedAt : latest;
+  }, null);
+  const selectedMachine = updates.data.machines.find((machine) => machine.agentId === selectedMachineId);
 
   return (
     <div className="page-stack updates-page">
       <StaleNotice isError={updates.isError} dataUpdatedAt={updates.dataUpdatedAt} />
-      <section className="update-summary-strip">
-        <div><span>Available updates</span><strong>{updates.data.availableCount}</strong></div>
-        <div><span>Security-critical</span><strong className={updates.data.securityCriticalCount ? "security-value" : ""}>{updates.data.securityCriticalCount}</strong></div>
-        <div><span>Connected sources</span><strong>{updates.data.sources.filter((item) => item.connected).length}/{updates.data.sources.length}</strong></div>
-        <div><span>Last checked</span><strong>{updates.data.lastCheckedAt ? formatRelativeTime(updates.data.lastCheckedAt) : "Never"}</strong></div>
-      </section>
-      {message ? <div className={`stale-notice ${refreshUpdates.isError ? "" : "success"}`}>{message}</div> : null}
-      {updates.data.sources.filter((item) => item.lastError).map((item) => <div className="stale-notice" key={item.id}><strong>{item.name}:</strong> {item.lastError}</div>)}
-      <Panel title="Update Center" action={<button className="secondary-button" onClick={refresh} disabled={refreshUpdates.isPending}><RefreshCcw size={16} /> {refreshUpdates.isPending ? "Checking..." : "Check now"}</button>}>
-        <div className="update-toolbar">
-          <label className="search-field"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search updates" aria-label="Search updates" /></label>
-          <NodeGuardSelect label="Source" value={source} options={[{ value: "all", label: "All sources" }, ...updates.data.sources.map((item) => ({ value: item.id, label: item.name }))]} onChange={setSource} />
-          <NodeGuardSelect label="Category" value={category} options={[{ value: "all", label: "All categories" }, ...categories.map((item) => ({ value: item, label: updateCategoryLabel(item) }))]} onChange={setCategory} />
-          <NodeGuardSelect label="Status" value={status} options={[{ value: "all", label: "All statuses" }, { value: "available", label: "Available" }, { value: "up_to_date", label: "Up to date" }, { value: "installing", label: "Installing" }, { value: "unknown", label: "Unknown" }]} onChange={setStatus} />
+      <dl className="update-summary-strip" aria-label="Machine update summary">
+        <div><dt>Available updates</dt><dd>{updates.data.availableCount}</dd></div>
+        <div><dt>Security-critical</dt><dd className={updates.data.securityCriticalCount ? "security-value" : ""}>{updates.data.securityCriticalCount}</dd></div>
+        <div><dt>Reporting machines</dt><dd>{updates.data.reportingMachineCount}/{updates.data.totalMachineCount}</dd></div>
+        <div>
+          <dt>{updates.data.lastCheckedAt ? "Last checked" : lastKnownUpdateAt ? "Last known" : "Last checked"}</dt>
+          <dd className={!updates.data.lastCheckedAt && !lastKnownUpdateAt ? "update-summary-status" : undefined}>
+            {updates.data.lastCheckedAt
+              ? <time dateTime={updates.data.lastCheckedAt} title={formatDateTime(updates.data.lastCheckedAt)}>{formatRelativeTime(updates.data.lastCheckedAt)}</time>
+              : lastKnownUpdateAt
+                ? <time dateTime={lastKnownUpdateAt} title={`Last successful report ${formatDateTime(lastKnownUpdateAt)}`}>{formatRelativeTime(lastKnownUpdateAt)}</time>
+                : updates.data.machines.length > 0 ? "No current reports" : "No reports yet"}
+          </dd>
         </div>
-        {items.length === 0 ? <StateBlock title="No matching updates" message={updates.data.updates.length ? "Adjust the search or filters." : "Configure Home Assistant in Settings to discover updates."} /> : (
-          <>
-            <div className="updates-table-wrap">
-              <table className="updates-table">
-                <thead><tr><th>Source</th><th>Update name</th><th>Installed</th><th>Available</th><th>Category</th><th>Status</th><th>Last checked</th><th>Actions</th></tr></thead>
-                <tbody>{items.map((update) => <tr key={update.id}>
-                  <td>{update.sourceName}</td>
-                  <td><strong>{update.name}</strong>{update.securityCritical ? <span className="security-flag"><ShieldAlert size={13} /> Security-critical</span> : null}</td>
-                  <td className="mono-cell">{update.installedVersion ?? "Unknown"}</td>
-                  <td className="mono-cell">{update.availableVersion ?? "Unknown"}</td>
-                  <td>{updateCategoryLabel(update.category)}</td>
-                  <td><UpdateStatusPill update={update} /></td>
-                  <td>{formatRelativeTime(update.lastCheckedAt)}</td>
-                  <td><UpdateActions update={update} /></td>
-                </tr>)}</tbody>
-              </table>
-            </div>
-            <div className="updates-mobile-list">{items.map((update) => <article className="update-mobile-card" key={update.id}>
-              <div className="update-mobile-head"><div><span>{update.sourceName}</span><strong>{update.name}</strong></div><UpdateStatusPill update={update} /></div>
-              <dl><div><dt>Installed</dt><dd>{update.installedVersion ?? "Unknown"}</dd></div><div><dt>Available</dt><dd>{update.availableVersion ?? "Unknown"}</dd></div><div><dt>Category</dt><dd>{updateCategoryLabel(update.category)}</dd></div><div><dt>Last checked</dt><dd>{formatRelativeTime(update.lastCheckedAt)}</dd></div></dl>
-              {update.securityCritical ? <span className="security-flag"><ShieldAlert size={13} /> Security-critical</span> : null}
-              <UpdateActions update={update} />
-            </article>)}</div>
-          </>
-        )}
+      </dl>
+      <Panel title="Update Center">
+        <div className="update-toolbar machine-update-toolbar">
+          <label className="search-field"><Search size={16} aria-hidden="true" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search machines or packages" aria-label="Search machines or packages" /></label>
+          <NodeGuardSelect label="Status" value={status} options={[
+            { value: "all", label: "All statuses" },
+            { value: "updates", label: "Updates available" },
+            { value: "security", label: "Security updates" },
+            { value: "up_to_date", label: "Up to date" },
+            { value: "reboot", label: "Reboot required" },
+            { value: "unsupported", label: "Unsupported" },
+            { value: "check_failed", label: "Check failed" },
+            { value: "stale_offline", label: "Stale or offline" }
+          ]} onChange={(value) => setStatus(value as MachineUpdateFilter)} />
+        </div>
+        {waitingForInventory ? <div className="update-state-banner" role="status"><RadioTower size={17} aria-hidden="true" /><span><strong>Waiting for update inventory</strong> Connected Agents will report operating-system updates after their first scheduled check.</span></div> : null}
+        {allUpToDate ? <div className="update-state-banner success" role="status"><ShieldCheck size={17} aria-hidden="true" /><span><strong>All machines are up to date</strong> No operating-system updates are currently available.</span></div> : null}
+        {machines.length === 0 ? <StateBlock
+          icon={isDefaultView ? <RadioTower size={18} aria-hidden="true" /> : <Search size={18} aria-hidden="true" />}
+          title={isDefaultView ? "No machines reporting updates" : "No matching machines"}
+          message={isDefaultView ? "Install and connect a NodeGuard Agent to discover operating-system updates." : "Adjust the search or status filter."}
+        /> : <>
+          <div className="updates-table-wrap">
+            <table className="updates-table machine-updates-table">
+              <thead><tr><th scope="col">Machine</th><th scope="col">Operating system</th><th scope="col">Updates</th><th scope="col">Security</th><th scope="col">Reboot</th><th scope="col">Last checked</th><th scope="col">Agent status</th><th scope="col">Action</th></tr></thead>
+              <tbody>{machines.map((machine) => <MachineUpdateRow machine={machine} key={machine.agentId} onView={() => setSelectedMachineId(machine.agentId)} />)}</tbody>
+            </table>
+          </div>
+          <div className="updates-mobile-list">{machines.map((machine) => <MachineUpdateCard machine={machine} key={machine.agentId} onView={() => setSelectedMachineId(machine.agentId)} />)}</div>
+        </>}
       </Panel>
+      {selectedMachineId ? <MachineUpdatesDialog machineId={selectedMachineId} fallback={selectedMachine} onClose={() => setSelectedMachineId(null)} /> : null}
     </div>
   );
 }
 
 function SettingsPage() {
-  const [connectionMessage, setConnectionMessage] = useState<string | null>(null);
-  const [integrationMessage, setIntegrationMessage] = useState<string | null>(null);
-  const [homeAssistantUrl, setHomeAssistantUrl] = useState("");
-  const [homeAssistantToken, setHomeAssistantToken] = useState("");
+  const [connectionMessage, setConnectionMessage] = useState<{ text: string; tone: "success" | "error" } | null>(null);
   const backendConfig = useSettingsStore((state) => state.backendConfig);
   const refreshIntervalSeconds = useSettingsStore((state) => state.refreshIntervalSeconds);
   const setRefreshIntervalSeconds = useSettingsStore((state) => state.setRefreshIntervalSeconds);
   const demoMode = backendConfig?.user.dataMode === "demo";
   const hideSensitiveValues = useSettingsStore((state) => state.hideSensitiveValues);
   const setHideSensitiveValues = useSettingsStore((state) => state.setHideSensitiveValues);
-  const homeAssistantSettings = useHomeAssistantSettings();
-  const testHomeAssistant = useTestHomeAssistantConnection();
-  const saveHomeAssistant = useSaveHomeAssistantSettings();
-
-  useEffect(() => {
-    if (homeAssistantSettings.data?.url) setHomeAssistantUrl(homeAssistantSettings.data.url);
-  }, [homeAssistantSettings.data?.url]);
-
-  const homeAssistantInput = (): HomeAssistantSettingsInput => ({
-    url: homeAssistantUrl,
-    ...(homeAssistantToken.trim() ? { accessToken: homeAssistantToken.trim() } : {})
-  });
-
-  const testHomeAssistantConnection = async () => {
-    setIntegrationMessage(null);
-    try {
-      const result = await testHomeAssistant.mutateAsync(homeAssistantInput());
-      setIntegrationMessage(`Connected to Home Assistant. Found ${result.updateEntities} update ${result.updateEntities === 1 ? "entity" : "entities"}.`);
-    } catch (error) {
-      setIntegrationMessage(normalizeApiError(error).message);
-    }
-  };
-
-  const saveHomeAssistantConnection = async () => {
-    setIntegrationMessage(null);
-    try {
-      await saveHomeAssistant.mutateAsync(homeAssistantInput());
-      setHomeAssistantToken("");
-      setIntegrationMessage("Home Assistant connection saved and updates refreshed.");
-    } catch (error) {
-      setIntegrationMessage(normalizeApiError(error).message);
-    }
-  };
-
   const testConnection = async () => {
     setConnectionMessage(null);
     if (!backendConfig) {
-      setConnectionMessage("No backend is configured.");
+      setConnectionMessage({ text: "No backend is configured.", tone: "error" });
       return;
     }
 
     try {
       const session = await getCurrentSession({ backendUrl: backendConfig.backendUrl });
-      setConnectionMessage(session.authenticated ? `Signed in as ${session.user?.username ?? "NodeGuard user"}.` : "Session expired. Sign in again.");
+      setConnectionMessage(session.authenticated
+        ? { text: `Signed in as ${session.user?.username ?? "NodeGuard user"}.`, tone: "success" }
+        : { text: "Session expired. Sign in again.", tone: "error" });
     } catch (error) {
-      setConnectionMessage(normalizeApiError(error).message);
+      setConnectionMessage({ text: normalizeApiError(error).message, tone: "error" });
     }
   };
 
@@ -2142,7 +2495,7 @@ function SettingsPage() {
             <Info label="Data mode" value={demoMode ? "Demo only" : "Live only"} />
             <Info label="Session started" value={formatDateTime(backendConfig?.connectedAt ?? null)} />
           </div>
-          {connectionMessage ? <div className="stale-notice success">{connectionMessage}</div> : null}
+          {connectionMessage ? <div className={`stale-notice ${connectionMessage.tone === "success" ? "success" : ""}`} role={connectionMessage.tone === "error" ? "alert" : "status"}>{connectionMessage.text}</div> : null}
         </div>
       </Panel>
       <Panel title="Monitoring">
@@ -2157,28 +2510,9 @@ function SettingsPage() {
         </div>
       </Panel>
       {!demoMode ? <ProxmoxSettingsPanel /> : null}
-      {!demoMode ? <Panel title="Update sources">
-        <div className="settings-content">
-          <p className="muted settings-description">Connect read-only update sources. Credentials are encrypted and stored only by the NodeGuard backend.</p>
-          <div className="integration-card">
-            <div className="integration-heading">
-              <div><strong>Home Assistant</strong><span>Discovers available update.* entities. NodeGuard never installs updates.</span></div>
-              <span className={`pill ${homeAssistantSettings.data?.configured ? homeAssistantSettings.data.lastError ? "warning" : "healthy" : "unknown"}`}>{homeAssistantSettings.data?.configured ? homeAssistantSettings.data.lastError ? "Needs attention" : "Configured" : "Not configured"}</span>
-            </div>
-            <div className="integration-form">
-              <label><span>Home Assistant URL</span><input type="url" value={homeAssistantUrl} onChange={(event) => setHomeAssistantUrl(event.target.value)} placeholder="https://homeassistant.example.com" /></label>
-              <label><span>Long-lived access token</span><input type="password" value={homeAssistantToken} onChange={(event) => setHomeAssistantToken(event.target.value)} placeholder={homeAssistantSettings.data?.configured ? "Leave blank to keep the saved token" : "Paste a long-lived access token"} autoComplete="new-password" /></label>
-            </div>
-            <div className="integration-footer">
-              <span className="muted">{homeAssistantSettings.data?.lastCheckedAt ? `Last checked ${formatRelativeTime(homeAssistantSettings.data.lastCheckedAt)}` : "Not checked yet"}</span>
-              <div><button className="secondary-button" onClick={testHomeAssistantConnection} disabled={testHomeAssistant.isPending}>{testHomeAssistant.isPending ? "Testing..." : "Test connection"}</button><button className="primary-button" onClick={saveHomeAssistantConnection} disabled={saveHomeAssistant.isPending}>{saveHomeAssistant.isPending ? "Saving..." : "Save connection"}</button></div>
-            </div>
-            {integrationMessage ? <div className={`stale-notice ${testHomeAssistant.isError || saveHomeAssistant.isError ? "" : "success"}`}>{integrationMessage}</div> : null}
-          </div>
-        </div>
-      </Panel> : <Panel title="Demo environment">
+      {demoMode ? <Panel title="Demo environment">
         <div className="settings-content"><p className="muted settings-description">Demo Mode is enforced for this account. All pages use isolated fictional infrastructure and cannot switch to Live Mode.</p></div>
-      </Panel>}
+      </Panel> : null}
       <Panel title={demoMode ? "Privacy" : "Privacy & Security"}>
         <div className="settings-content">
           <p className="muted settings-description">{demoMode ? "Live backend configuration and production diagnostics are hidden for this account." : "Control what is visible when sharing screenshots of NodeGuard."}</p>
@@ -2274,7 +2608,7 @@ function ContainerImageLink({ image }: { image: string }) {
       href={repositoryUrl}
       target="_blank"
       rel="noreferrer"
-      title="Open image repository"
+      title={image}
       aria-label={`Open image repository for ${image}`}
       onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => event.stopPropagation()}
@@ -2322,24 +2656,14 @@ function ContainerMobileCard({ container, selected, onSelect }: { container: Con
   return (
     <article
       className={`container-mobile-card ${selected ? "selected" : ""}`}
-      role="button"
-      tabIndex={0}
       onClick={onSelect}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
-      aria-label={`${selected ? "Hide" : "View"} details for ${container.name}`}
     >
       <div className="container-mobile-head">
         <div>
           <strong>{container.name}</strong>
           <small><ContainerImageLink image={container.image} /></small>
         </div>
-        <button className="icon-only" onClick={(event) => { event.stopPropagation(); onSelect(); }} aria-label={`${selected ? "Hide" : "View"} details for ${container.name}`}>
+        <button className="icon-only" onClick={(event) => { event.stopPropagation(); onSelect(); }} aria-label={`${selected ? "Hide" : "View"} details for ${container.name}`} title={selected ? "Hide details" : "View details"}>
           {selected ? <EyeOff size={15} /> : <Eye size={15} />}
         </button>
       </div>
@@ -2548,8 +2872,8 @@ function ServerMonitorRow({ monitor, onDuplicate, onEdit, onRemove }: { monitor:
       <span className="resource-cell">
         <strong>{monitor.name}</strong>
         <small className="resource-meta">
-          <span className="resource-url">{monitor.backendUrl}</span>
-          <span className="resource-context">· {monitor.lastError ?? `checked ${formatRelativeTime(monitor.lastCheckedAt)}`}</span>
+          <span className="resource-url" title={monitor.backendUrl}>{monitor.backendUrl}</span>
+          <span className="resource-context" title={monitor.lastError ?? `Checked ${formatDateTime(monitor.lastCheckedAt)}`}>· {monitor.lastError ?? `checked ${formatRelativeTime(monitor.lastCheckedAt)}`}</span>
           <LaunchLink href={monitor.backendUrl} label={`Open ${monitor.backendUrl}`} />
         </small>
       </span>
@@ -2568,16 +2892,12 @@ function ServerMonitorRow({ monitor, onDuplicate, onEdit, onRemove }: { monitor:
 }
 
 function ContainerMonitorRow({ monitor, onDuplicate, onEdit, onRemove }: { monitor: ContainerMonitorStatus; onDuplicate: () => void; onEdit: () => void; onRemove: () => void }) {
+  const summary = `${monitor.containerRef}${monitor.matchedContainerName ? ` · matched ${monitor.matchedContainerName}` : ""} · ${monitor.lastError ?? `checked ${formatRelativeTime(monitor.lastCheckedAt)}`}`;
   return (
     <div className="data-row monitor-row">
       <span>
         <strong>{monitor.name}</strong>
-        <small>
-          {monitor.containerRef}
-          {monitor.matchedContainerName ? ` · matched ${monitor.matchedContainerName}` : ""}
-          {" · "}
-          {monitor.lastError ?? `checked ${formatRelativeTime(monitor.lastCheckedAt)}`}
-        </small>
+        <small title={summary}>{summary}</small>
       </span>
       <StatusPill status={monitor.status} />
       <button className="icon-only" onClick={onDuplicate} aria-label={`Duplicate ${monitor.name}`} title={`Duplicate ${monitor.name}`}>
@@ -2790,7 +3110,32 @@ function AgentMobileCard({ agent, selected, onSelect }: { agent: AgentSummary; s
   );
 }
 
-function AgentsPage({ onOpenContainers }: { onOpenContainers: (agentId: string) => void }) {
+function AgentUpdateSummary({ machine, loading, unavailable, onOpen }: { machine?: MachineUpdateSummary; loading: boolean; unavailable: boolean; onOpen: () => void }) {
+  const retainedInventory = machine?.agentStatus !== "online" && machine?.lastSuccessfulAt;
+  const checkLabel = retainedInventory ? "Last known" : "Last checked";
+  const checkValue = retainedInventory
+    ? formatRelativeTime(retainedInventory)
+    : machine?.checkedAt
+      ? formatRelativeTime(machine.checkedAt)
+      : machine?.lastSuccessfulAt
+        ? formatRelativeTime(machine.lastSuccessfulAt)
+        : "No report yet";
+
+  return <section className="server-info-group agent-update-summary">
+    <h3>System updates</h3>
+    {machine ? <>
+      <div className="info-grid">
+        <Info label="Available" value={updateCountValue(machine.updateCount)} />
+        <Info label="Security" value={updateCountValue(machine.securityUpdateCount)} />
+        <Info label="Reboot" value={machine.rebootRequired === null ? "Unavailable" : machine.rebootRequired ? "Required" : "Not required"} />
+        <Info label={checkLabel} value={checkValue} />
+      </div>
+      <div className="agent-update-summary-footer"><MachineUpdateConditionPill machine={machine} /><button className="secondary-button" onClick={onOpen}><PackageOpen size={15} aria-hidden="true" /> View in Update Center</button></div>
+    </> : <div className="agent-update-empty"><span>{loading ? "Loading the latest update inventory..." : unavailable ? "Update inventory is currently unavailable." : "Waiting for this Agent's first scheduled update check."}</span><button className="secondary-button" onClick={onOpen}><PackageOpen size={15} aria-hidden="true" /> View Update Center</button></div>}
+  </section>;
+}
+
+function AgentsPage({ onOpenContainers, onOpenUpdates }: { onOpenContainers: (agentId: string) => void; onOpenUpdates: (agentId: string) => void }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | AgentStatus>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -2802,6 +3147,7 @@ function AgentsPage({ onOpenContainers }: { onOpenContainers: (agentId: string) 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const agents = useAgents();
   const detail = useAgent(selectedId);
+  const updates = useUpdates();
   const enrollmentProgress = useAgentEnrollmentProgress(enrollment?.purpose === "enroll" ? enrollment.id : null);
   const enrollmentTokens = useAgentEnrollmentTokens();
   const createEnrollment = useCreateAgentEnrollmentToken();
@@ -2813,6 +3159,7 @@ function AgentsPage({ onOpenContainers }: { onOpenContainers: (agentId: string) 
   const backendConfig = useSettingsStore((state) => state.backendConfig);
   const demoMode = useSettingsStore((state) => state.demoMode);
   const serverUrl = backendConfig?.backendUrl ?? window.location.origin;
+  const selectedMachineUpdates = updates.data?.machines.find((machine) => machine.agentId === selectedId);
   const visibleAgents = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return (agents.data?.agents ?? []).filter((agent) => statusFilter === "all" || agent.status === statusFilter).filter((agent) =>
@@ -2911,9 +3258,9 @@ function AgentsPage({ onOpenContainers }: { onOpenContainers: (agentId: string) 
           {!demoMode ? <button className="primary-button" onClick={() => { setModal("add"); setDisplayName(""); setEnrollment(null); }}><Plus size={16} /> Add agent</button> : null}
         </div>
       )}>
-        {agents.isLoading ? <StateBlock title="Loading agents" message="Reading registered Linux hosts." /> : null}
-        {agents.isError && !agents.data ? <StateBlock title="Agents unavailable" message={normalizeApiError(agents.error).message} /> : null}
-        {!agents.isLoading && visibleAgents.length === 0 ? <StateBlock title="No agents found" message={(agents.data?.agents.length ?? 0) === 0 ? "Generate an enrollment token to register the first Linux host." : "No agents matched the current search and status filter."} /> : null}
+        {agents.isLoading ? <StateBlock tone="loading" title="Loading agents" message="Reading registered Linux hosts." /> : null}
+        {agents.isError && !agents.data ? <StateBlock tone="error" title="Agents unavailable" message={normalizeApiError(agents.error).message} /> : null}
+        {agents.data && visibleAgents.length === 0 ? <StateBlock icon={<RadioTower size={18} aria-hidden="true" />} title="No agents found" message={agents.data.agents.length === 0 ? "Generate an enrollment token to register the first Linux host." : "No agents matched the current search and status filter."} /> : null}
         {visibleAgents.length > 0 ? (
           <>
             <div className="agents-table-wrap"><table className="agents-table"><thead><tr><th>Agent</th><th>Status</th><th>Operating system</th><th>Version</th><th>CPU</th><th>RAM</th><th>Containers</th><th>Last seen</th><th>Registered</th><th>Actions</th></tr></thead><tbody>{visibleAgents.map((agent) => <AgentListRow key={agent.id} agent={agent} selected={selectedId === agent.id} onSelect={() => setSelectedId((current) => current === agent.id ? null : agent.id)} />)}</tbody></table></div>
@@ -2923,13 +3270,14 @@ function AgentsPage({ onOpenContainers }: { onOpenContainers: (agentId: string) 
       </Panel>
       {selectedId ? (
         <Panel title={detail.data?.displayName ?? "Agent detail"} action={detail.data ? <AgentStatusPill status={detail.data.status} /> : undefined}>
-          {detail.isLoading ? <StateBlock title="Loading agent" message="Reading the latest inventory and metrics." /> : null}
-          {detail.isError ? <StateBlock title="Agent detail unavailable" message={normalizeApiError(detail.error).message} /> : null}
+          {detail.isLoading ? <StateBlock tone="loading" title="Loading agent" message="Reading the latest inventory and metrics." /> : null}
+          {detail.isError ? <StateBlock tone="error" title="Agent detail unavailable" message={normalizeApiError(detail.error).message} /> : null}
           {detail.data ? (
             <div className="agent-detail">
               <InfoGroup title="Overview"><Info label="Display name" value={detail.data.displayName} /><Info label="Hostname" value={detail.data.hostname} /><Info label="OS" value={[detail.data.osName, detail.data.osVersion].filter(Boolean).join(" ") || "Unavailable"} /><Info label="Kernel" value={detail.data.kernel ?? "Unavailable"} /><Info label="Architecture" value={detail.data.architecture ?? "Unavailable"} /><Info label="IP addresses" value={detail.data.ipAddresses.join(", ") || "Unavailable"} /><Info label="Agent version" value={detail.data.agentVersion} /><Info label="Registered" value={formatDateTime(detail.data.registeredAt)} /><Info label="Last seen" value={formatDateTime(detail.data.lastSeenAt)} /></InfoGroup>
               <InfoGroup title="Resources"><Info label="CPU" value={formatPercentage(detail.data.latestMetrics?.cpu.usagePercent ?? null)} /><Info label="CPU model" value={detail.data.cpuModel ?? "Unavailable"} /><Info label="CPU cores" value={[detail.data.physicalCoreCount === null ? null : `${detail.data.physicalCoreCount} physical`, detail.data.logicalCpuCount === null ? null : `${detail.data.logicalCpuCount} logical`].filter(Boolean).join(" / ") || "Unavailable"} /><Info label="RAM" value={formatPercentage(detail.data.latestMetrics?.memory.usagePercent ?? null)} /><Info label="Disk" value={formatPercentage(detail.data.latestMetrics?.disk.usagePercent ?? null)} /><Info label="Swap" value={formatPercentage(detail.data.latestMetrics?.swap.usagePercent ?? null)} /><Info label="Load averages" value={[detail.data.latestMetrics?.cpu.loadAverage, detail.data.latestMetrics?.cpu.loadAverage5, detail.data.latestMetrics?.cpu.loadAverage15].map((value) => value ?? "-").join(" / ")} /><Info label="Uptime" value={formatUptime(detail.data.systemUptimeSeconds)} /><Info label="Installed RAM" value={formatReportedBytes(detail.data.totalMemoryBytes)} /><Info label="Installed swap" value={formatReportedBytes(detail.data.totalSwapBytes)} /></InfoGroup>
               <InfoGroup title="Docker"><Info label="Availability" value={detail.data.dockerAvailable ? "Available" : "Unavailable"} /><Info label="Version" value={detail.data.dockerVersion ?? "Unavailable"} /><Info label="Containers" value={String(detail.data.containerCount)} /><Info label="Last inventory" value={formatDateTime(detail.data.lastDockerAt)} /></InfoGroup>
+              <AgentUpdateSummary machine={selectedMachineUpdates} loading={updates.isLoading} unavailable={updates.isError && !updates.data} onOpen={() => onOpenUpdates(detail.data.id)} />
               <InfoGroup title="Connection"><Info label="Last heartbeat" value={formatDateTime(detail.data.lastSeenAt)} /><Info label="Last metrics report" value={formatDateTime(detail.data.lastMetricsAt)} /><Info label="Last host inventory" value={formatDateTime(detail.data.lastInventoryAt)} /><Info label="Agent ID" value={shortAgentId(detail.data.id)} /><Info label="Credential" value={detail.data.credentialStatus === "active" ? "Active" : "Revoked"} /></InfoGroup>
               <div className="agent-detail-actions">
                 <button onClick={() => onOpenContainers(detail.data.id)}><Boxes size={15} /> View host containers</button>
@@ -2951,10 +3299,10 @@ function AgentsPage({ onOpenContainers }: { onOpenContainers: (agentId: string) 
           ) : null}
         </Panel>
       ) : null}
-      {modal === "add" ? <Modal title="Install NodeGuard Agent" onClose={closeModal}><p className="agent-install-description">Run this command on the Linux host you want to monitor.</p><form className="modal-form agent-install-form" onSubmit={generateEnrollment}>{enrollment ? <RegistrationCommand enrollment={enrollment} serverUrl={serverUrl} progress={enrollmentProgress.data} onCopyError={setFormError} onViewAgent={(agentId) => { setSelectedId(agentId); closeModal(); }} /> : <div className="agent-enrollment-form-row"><label>Display name (optional)<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Docker main" maxLength={120} /></label><button className="primary-button agent-generate-button" type="submit" disabled={createEnrollment.isPending} aria-busy={createEnrollment.isPending}>{createEnrollment.isPending ? <LoaderCircle className="is-spinning" size={16} /> : <KeyRound size={16} />}{createEnrollment.isPending ? "Generating..." : "Generate enrollment token"}</button></div>}</form>{formError ? <div className="form-error">{formError}</div> : null}{(enrollmentTokens.data?.tokens.length ?? 0) > 0 ? <div className="active-enrollments"><strong>Active enrollment tokens</strong>{enrollmentTokens.data?.tokens.map((token) => <div key={token.id}><span>{token.displayName ?? "Unnamed agent"} · expires {formatDateTime(token.expiresAt)}</span><button className="icon-only danger-button" onClick={() => revokeEnrollment.mutate(token.id)} title="Revoke enrollment token" aria-label="Revoke enrollment token"><Trash2 size={14} /></button></div>)}</div> : null}</Modal> : null}
-      {modal === "rename" ? <Modal title="Rename agent" onClose={closeModal}><form className="modal-form" onSubmit={saveRename}><label>Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required maxLength={120} /></label><button className="modal-submit" disabled={renameAgent.isPending}>Save name</button></form>{formError ? <div className="form-error">{formError}</div> : null}</Modal> : null}
-      {modal === "rotate" ? <Modal title="Rotate agent credential" onClose={closeModal}>{createRotation.isPending ? <StateBlock title="Creating rotation token" message="Preparing a single-use credential rotation command." /> : null}{enrollment ? <RegistrationCommand enrollment={enrollment} serverUrl={serverUrl} onCopyError={setFormError} /> : null}{formError ? <div className="form-error">{formError}</div> : null}</Modal> : null}
-      {modal === "revoke" ? <Modal title="Revoke agent" onClose={() => closeModal()} closeDisabled={revokeAgent.isPending}><div className="confirmation-dialog"><p>Revoke <strong>{detail.data?.displayName}</strong>? Its credential will stop working immediately.</p><p>Revoking disables this Agent's access but keeps its data and history. It does not uninstall the Agent from the remote Linux host.</p><div><button type="button" onClick={() => closeModal()} disabled={revokeAgent.isPending}>Cancel</button><button className="danger-button" type="button" onClick={() => void confirmRevoke()} disabled={revokeAgent.isPending} aria-busy={revokeAgent.isPending}>{revokeAgent.isPending ? <LoaderCircle className="is-spinning" size={15} /> : <ShieldAlert size={15} />}{revokeAgent.isPending ? "Revoking..." : "Revoke agent"}</button></div></div>{formError ? <div className="form-error">{formError}</div> : null}</Modal> : null}
+      {modal === "add" ? <Modal title="Install NodeGuard Agent" onClose={closeModal}><p className="agent-install-description">Run this command on the Linux host you want to monitor.</p><form className="modal-form agent-install-form" onSubmit={generateEnrollment}>{enrollment ? <RegistrationCommand enrollment={enrollment} serverUrl={serverUrl} progress={enrollmentProgress.data} onCopyError={setFormError} onViewAgent={(agentId) => { setSelectedId(agentId); closeModal(); }} /> : <div className="agent-enrollment-form-row"><label>Display name (optional)<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Docker main" maxLength={120} /></label><button className="primary-button agent-generate-button" type="submit" disabled={createEnrollment.isPending} aria-busy={createEnrollment.isPending}>{createEnrollment.isPending ? <LoaderCircle className="is-spinning" size={16} /> : <KeyRound size={16} />}{createEnrollment.isPending ? "Generating..." : "Generate enrollment token"}</button></div>}</form>{formError ? <div className="form-error" role="alert">{formError}</div> : null}{(enrollmentTokens.data?.tokens.length ?? 0) > 0 ? <div className="active-enrollments"><strong>Active enrollment tokens</strong>{enrollmentTokens.data?.tokens.map((token) => <div key={token.id}><span>{token.displayName ?? "Unnamed agent"} · expires {formatDateTime(token.expiresAt)}</span><button className="icon-only danger-button" onClick={() => revokeEnrollment.mutate(token.id)} title="Revoke enrollment token" aria-label="Revoke enrollment token"><Trash2 size={14} /></button></div>)}</div> : null}</Modal> : null}
+      {modal === "rename" ? <Modal title="Rename agent" onClose={closeModal}><form className="modal-form" onSubmit={saveRename}><label>Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required maxLength={120} /></label><button className="modal-submit" disabled={renameAgent.isPending}>Save name</button></form>{formError ? <div className="form-error" role="alert">{formError}</div> : null}</Modal> : null}
+      {modal === "rotate" ? <Modal title="Rotate agent credential" onClose={closeModal}>{createRotation.isPending ? <StateBlock tone="loading" title="Creating rotation token" message="Preparing a single-use credential rotation command." /> : null}{enrollment ? <RegistrationCommand enrollment={enrollment} serverUrl={serverUrl} onCopyError={setFormError} /> : null}{formError ? <div className="form-error" role="alert">{formError}</div> : null}</Modal> : null}
+      {modal === "revoke" ? <Modal title="Revoke agent" onClose={() => closeModal()} closeDisabled={revokeAgent.isPending}><div className="confirmation-dialog"><p>Revoke <strong>{detail.data?.displayName}</strong>? Its credential will stop working immediately.</p><p>Revoking disables this Agent's access but keeps its data and history. It does not uninstall the Agent from the remote Linux host.</p><div><button type="button" onClick={() => closeModal()} disabled={revokeAgent.isPending}>Cancel</button><button className="danger-button" type="button" onClick={() => void confirmRevoke()} disabled={revokeAgent.isPending} aria-busy={revokeAgent.isPending}>{revokeAgent.isPending ? <LoaderCircle className="is-spinning" size={15} /> : <ShieldAlert size={15} />}{revokeAgent.isPending ? "Revoking..." : "Revoke agent"}</button></div></div>{formError ? <div className="form-error" role="alert">{formError}</div> : null}</Modal> : null}
       {modal === "delete" ? <Modal title="Delete Agent" onClose={() => closeModal()} closeDisabled={deleteAgentMutation.isPending} descriptionId="delete-agent-description"><form className="confirmation-dialog agent-delete-confirmation" onSubmit={confirmDelete}><p id="delete-agent-description">Permanently delete this Agent and its stored monitoring data from NodeGuard.</p><p>You are about to permanently delete:<strong className="agent-delete-name">{detail.data?.displayName ?? "Agent"}</strong></p><p>This will permanently remove:</p><ul><li>Agent registration</li><li>Stored credentials</li><li>Heartbeat and metrics history</li><li>Host and Docker inventory</li><li>Related Agent monitoring data</li></ul>{detail.data?.status !== "revoked" ? <p className="agent-delete-warning"><ShieldAlert size={16} /> The Agent credential will be invalidated as part of deletion.</p> : null}<p>Deleting the Agent from NodeGuard does not uninstall the NodeGuard Agent from the remote Linux host.</p><p><strong>This action cannot be undone.</strong></p><label className="agent-delete-field">Type <code>DELETE</code> to confirm<input data-autofocus value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" spellCheck={false} disabled={deleteAgentMutation.isPending} /></label><div><button type="button" onClick={() => closeModal()} disabled={deleteAgentMutation.isPending}>Cancel</button><button className="danger-button" type="submit" disabled={deleteConfirmation !== "DELETE" || deleteAgentMutation.isPending} aria-busy={deleteAgentMutation.isPending}>{deleteAgentMutation.isPending ? <LoaderCircle className="is-spinning" size={15} /> : <Trash2 size={15} />}{deleteAgentMutation.isPending ? "Deleting..." : "Delete Agent"}</button></div></form>{formError ? <div className="form-error" role="alert">{formError}</div> : null}</Modal> : null}
     </div>
   );
@@ -2969,9 +3317,12 @@ function UpdatesNavLabel() {
 export function App() {
   const [view, setView] = useState<View>("dashboard");
   const [containerHostFilter, setContainerHostFilter] = useState<string | null>(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [pendingUpdateMachineId, setPendingUpdateMachineId] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 980px)").matches);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const logoutTimer = useRef<number | null>(null);
+  const sidebarRevealRef = useRef<HTMLButtonElement>(null);
+  const focusRevealAfterClose = useRef(false);
   const backendConfig = useSettingsStore((state) => state.backendConfig);
   const demoMode = useSettingsStore((state) => state.demoMode);
   const load = useSettingsStore((state) => state.load);
@@ -2991,8 +3342,8 @@ export function App() {
 
   const nav = [
     ["dashboard", Gauge, "Dashboard"],
-    ["server", Server, "Server"],
-    ["proxmox", CloudCog, "Proxmox"],
+    ["server", Server, "Machines"],
+    ["proxmox", ProxmoxIcon, "Proxmox"],
     ["agents", RadioTower, "Agents"],
     ["containers", Boxes, "Containers"],
     ["domains", Globe2, "Domains"],
@@ -3016,41 +3367,91 @@ export function App() {
     }, 260);
   };
 
+  const selectView = (nextView: View) => {
+    setView(nextView);
+    if (window.matchMedia("(max-width: 980px)").matches) {
+      focusRevealAfterClose.current = true;
+      setSidebarCollapsed(true);
+    }
+  };
+
+  const openSidebar = () => {
+    focusRevealAfterClose.current = false;
+    setSidebarCollapsed(false);
+  };
+
+  const closeSidebar = () => {
+    focusRevealAfterClose.current = true;
+    setSidebarCollapsed(true);
+  };
+
+  const handleSidebarTransitionEnd = (event: TransitionEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget || event.propertyName !== "opacity") return;
+    if (!sidebarCollapsed || !focusRevealAfterClose.current) return;
+
+    focusRevealAfterClose.current = false;
+    sidebarRevealRef.current?.focus({ preventScroll: true });
+  };
+
   return (
     <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${isLoggingOut ? "logging-out" : ""}`}>
-      {sidebarCollapsed ? (
-        <button className="sidebar-reveal" onClick={() => setSidebarCollapsed(false)} aria-label="Show sidebar">
-          <PanelLeftOpen size={18} />
-        </button>
-      ) : null}
-      <aside className="sidebar">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
+      <button
+        ref={sidebarRevealRef}
+        className="sidebar-reveal"
+        onClick={openSidebar}
+        aria-label="Open navigation"
+        title="Open navigation"
+        aria-controls="primary-sidebar"
+        aria-expanded={!sidebarCollapsed}
+        aria-hidden={!sidebarCollapsed}
+        tabIndex={sidebarCollapsed ? 0 : -1}
+      >
+        <PanelLeftOpen size={18} aria-hidden="true" />
+      </button>
+      <div className="sidebar-slot">
+        <aside
+          id="primary-sidebar"
+          className="sidebar"
+          aria-hidden={sidebarCollapsed}
+          inert={sidebarCollapsed}
+          onTransitionEnd={handleSidebarTransitionEnd}
+        >
         <div className="sidebar-top">
           <div className="brand"><LogoMark className="brand-logo" /><span>NodeGuard</span></div>
-          <button className="sidebar-toggle" onClick={() => setSidebarCollapsed(true)} aria-label="Hide sidebar">
-            <PanelLeftClose size={18} />
+          <button
+            className="sidebar-toggle"
+            onClick={closeSidebar}
+            aria-label="Close navigation"
+            title="Close navigation"
+            aria-controls="primary-sidebar"
+            aria-expanded={!sidebarCollapsed}
+          >
+            <PanelLeftClose size={18} aria-hidden="true" />
           </button>
         </div>
-        <nav>{nav.map(([key, Icon, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key)}><Icon size={18} /> {key === "updates" ? <UpdatesNavLabel /> : label}</button>)}</nav>
-        <button className="sidebar-logout" onClick={logout} disabled={isLoggingOut}><LogOut size={18} /> {isLoggingOut ? "Logging out" : "Logout"}</button>
-      </aside>
-      <main className="workspace">
+        <nav aria-label="Primary navigation">{nav.map(([key, Icon, label]) => <button key={key} className={view === key ? "active" : ""} aria-current={view === key ? "page" : undefined} onClick={() => selectView(key)}><Icon size={18} aria-hidden="true" /><span className="sidebar-nav-label">{key === "updates" ? <UpdatesNavLabel /> : label}</span></button>)}</nav>
+        <button className="sidebar-logout" onClick={logout} disabled={isLoggingOut}><LogOut size={18} aria-hidden="true" /><span className="sidebar-action-label">{isLoggingOut ? "Logging out" : "Logout"}</span></button>
+        </aside>
+      </div>
+      <main className="workspace" id="main-content" tabIndex={-1}>
         <header className="workspace-topbar">
           <div className="topbar-title">
-            <span><ActiveIcon size={16} /></span>
-            <strong>{activeLabel}</strong>
+            <span><ActiveIcon size={16} aria-hidden="true" /></span>
+            <h1>{activeLabel}</h1>
           </div>
           <div className="topbar-status">
-            <span>{demoMode ? "Demo mode" : backendConfig ? "Connected" : "Local"}</span>
-            <kbd>Live</kbd>
+            <span>{demoMode ? "Environment" : backendConfig ? "Connected" : "Local"}</span>
+            <span className={`environment-badge ${demoMode ? "is-demo" : "is-live"}`}>{demoMode ? "Demo" : "Live"}</span>
           </div>
         </header>
         {view === "dashboard" && <Dashboard setView={setView} />}
         {view === "server" && <ServerPage />}
         {view === "proxmox" && <ProxmoxPage />}
-        {view === "agents" && <AgentsPage onOpenContainers={(agentId) => { setContainerHostFilter(agentId); setView("containers"); }} />}
+        {view === "agents" && <AgentsPage onOpenContainers={(agentId) => { setContainerHostFilter(agentId); setView("containers"); }} onOpenUpdates={(agentId) => { setPendingUpdateMachineId(agentId); setView("updates"); }} />}
         {view === "containers" && <ContainersPage initialHostId={containerHostFilter} onHostFilterApplied={() => setContainerHostFilter(null)} />}
         {view === "domains" && <DomainsPage />}
-        {view === "updates" && <UpdatesPage />}
+        {view === "updates" && <UpdatesPage initialMachineId={pendingUpdateMachineId} onInitialMachineApplied={() => setPendingUpdateMachineId(null)} />}
         {view === "alerts" && <AlertsPage />}
         {view === "settings" && <SettingsPage />}
       </main>

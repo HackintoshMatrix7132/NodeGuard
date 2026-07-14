@@ -16,16 +16,15 @@ import {
   getContainer,
   getContainers,
   getDomains,
+  getMachineUpdates,
   getOverview,
   getUpdates,
-  getHomeAssistantSettings,
   getServer,
   getServerMetricHistory,
   getServerMetrics,
   getServerMonitors,
   getServers,
   login,
-  refreshUpdates,
   renameAgent,
   revokeAgent,
   revokeAgentEnrollmentToken,
@@ -34,15 +33,13 @@ import {
   removeContainerMonitor,
   removeDomain,
   runChecks,
-  saveHomeAssistantSettings,
-  testHomeAssistantConnection,
   updateContainerMonitor,
   updateDomain,
   updateServerMonitor
 } from "../api/endpoints";
 import type { ApiConfig } from "../api/client";
-import type { CreateAgentEnrollmentInput, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, HomeAssistantSettingsInput, LoginInput, MetricHistoryRange } from "../types/nodeguard";
-import { demoAgentDetails, demoAgents, demoAlerts, demoContainers, demoDocker, demoDomains, getDemoMetricHistory, getDemoOverview, getDemoUpdateCenter, demoMetrics, demoServer, demoServerMonitors, demoServers } from "../demoData";
+import type { CreateAgentEnrollmentInput, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, LoginInput, MetricHistoryRange } from "../types/nodeguard";
+import { demoAgentDetails, demoAgents, demoAlerts, demoContainers, demoDocker, demoDomains, getDemoMachineUpdates, getDemoMetricHistory, getDemoOverview, getDemoUpdateCenter, demoMetrics, demoServer, demoServerMonitors, demoServers } from "../demoData";
 import { useSettingsStore } from "../store/settingsStore";
 
 const dismissedDemoAlertIds = new Set<string>();
@@ -64,7 +61,7 @@ export const queryKeys = {
   alerts: (status: "active" | "resolved" | "all" = "active") => ["alerts", status] as const,
   alert: (id: string) => ["alert", id] as const,
   updates: ["updates"] as const,
-  homeAssistantSettings: ["updates", "settings", "home-assistant"] as const
+  machineUpdates: (id: string) => ["updates", "machines", id] as const
 };
 
 function useConfig() {
@@ -463,65 +460,31 @@ export function useRemoveAlert() {
   });
 }
 
-export function useUpdates() {
-  const config = useConfig();
-  const demoMode = useSettingsStore((state) => state.demoMode);
-  const liveOptions = useLiveQueryOptions();
-  return useQuery({
-    queryKey: [...queryKeys.updates, demoMode],
-    queryFn: () => demoMode ? Promise.resolve(getDemoUpdateCenter()) : getUpdates(config),
-    ...liveOptions
-  });
-}
-
-export function useRefreshUpdates() {
-  const config = useConfig();
-  const demoMode = useSettingsStore((state) => state.demoMode);
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => demoMode ? Promise.resolve(getDemoUpdateCenter()) : refreshUpdates(config),
-    onSuccess: (snapshot) => {
-      queryClient.setQueryData([...queryKeys.updates, demoMode], snapshot);
-      void queryClient.invalidateQueries({ queryKey: ["alerts"] });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
-    }
-  });
-}
-
-export function useHomeAssistantSettings() {
+export function useUpdates(search = "", status = "all") {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
   return useQuery({
-    queryKey: [...queryKeys.homeAssistantSettings, demoMode],
-    queryFn: () => demoMode
-      ? Promise.resolve({ configured: true, url: "https://ha.demo.example", lastCheckedAt: new Date().toISOString(), lastError: null })
-      : getHomeAssistantSettings(config)
+    queryKey: [...queryKeys.updates, demoMode, search, status],
+    queryFn: () => demoMode ? Promise.resolve(getDemoUpdateCenter(search, status)) : getUpdates(config, search, status),
+    placeholderData: (previous) => previous,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    staleTime: 30_000
   });
 }
 
-export function useTestHomeAssistantConnection() {
+export function useMachineUpdates(id: string | null) {
   const config = useConfig();
   const demoMode = useSettingsStore((state) => state.demoMode);
-  return useMutation({
-    mutationFn: (input: HomeAssistantSettingsInput) => demoMode
-      ? Promise.resolve({ connected: true, updateEntities: 5 })
-      : testHomeAssistantConnection(config, input)
-  });
-}
-
-export function useSaveHomeAssistantSettings() {
-  const config = useConfig();
-  const demoMode = useSettingsStore((state) => state.demoMode);
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: HomeAssistantSettingsInput) => demoMode
-      ? Promise.resolve({ configured: true, url: input.url, lastCheckedAt: new Date().toISOString(), lastError: null })
-      : saveHomeAssistantSettings(config, input),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.homeAssistantSettings });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.updates });
-      void queryClient.invalidateQueries({ queryKey: ["alerts"] });
-    }
+  return useQuery({
+    queryKey: [...queryKeys.machineUpdates(id ?? ""), demoMode],
+    queryFn: () => demoMode ? Promise.resolve(getDemoMachineUpdates(id ?? "")) : getMachineUpdates(config, id ?? ""),
+    enabled: Boolean(id),
+    refetchInterval: id ? 60_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    staleTime: 30_000
   });
 }
 

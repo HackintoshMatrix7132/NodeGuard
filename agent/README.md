@@ -1,6 +1,6 @@
-# NodeGuard Agent v0.1
+# NodeGuard Agent v0.2
 
-NodeGuard Agent is a read-only Linux collector for remote NodeGuard hosts. It connects outbound to a configured NodeGuard HTTPS URL, reports host metrics and optional Docker inventory, and never accepts inbound commands.
+NodeGuard Agent is a discovery-only Linux collector for remote NodeGuard hosts. It connects outbound to a configured NodeGuard HTTPS URL, reports host metrics, optional Docker inventory, and operating-system update availability, and never accepts inbound commands.
 
 ## Build
 
@@ -97,8 +97,19 @@ Default reporting intervals are:
 - metrics: 30 seconds
 - Docker: 60 seconds
 - static inventory: 6 hours
+- APT update discovery: 6 hours, with a short randomized startup delay
 
 The backend controls the intervals returned during registration. Do not hand-edit credentials.
+
+Existing protected configurations that predate update discovery automatically use the six-hour default. The minimum accepted update interval is 15 minutes.
+
+## Operating-system update discovery
+
+On Debian, Ubuntu, and Proxmox VE, the Agent uses fixed, shell-free APT commands to refresh package metadata and simulate an upgrade. It reports available package names, installed and candidate versions, security-repository classification, and the normal `/run/reboot-required` state. Package details are limited to 500 entries; summary totals remain complete and the report is marked as truncated when necessary.
+
+Refreshing APT metadata updates the host's package index under `/var/lib/apt`; it does not install, remove, configure, download upgrade packages, or reboot the machine. The packaged systemd unit grants write access only to the APT metadata/cache paths required for discovery while retaining `ProtectSystem=strict` elsewhere.
+
+Unsupported operating systems are reported as unsupported rather than as generic failures. If APT/dpkg is busy, the Agent does not kill or interfere with it and retries later. Update checks run independently so slow package repositories cannot block heartbeats, metrics, Docker inventory, or graceful shutdown.
 
 ## Status and troubleshooting
 
@@ -116,13 +127,13 @@ Common checks:
 - If Docker is unavailable, host metrics continue. Check the Docker service and socket permissions.
 - A stale/offline agent reconnects automatically with capped exponential backoff and jitter.
 
-Reports waiting during a backend outage are kept only in a bounded in-memory queue: at most 100 reports and at most 15 minutes old. They are lost if the process restarts. This deliberately avoids filling the host disk in v0.1.
+Reports waiting during a backend outage are kept only in a bounded in-memory queue: at most 100 reports and at most 15 minutes old. They are lost if the process restarts. This deliberately avoids filling the host disk in v0.2.
 
 ## Docker socket security
 
-Reading `/var/run/docker.sock` normally requires root or membership in the Docker group. Access to that socket is effectively highly privileged even when NodeGuard itself sends only fixed read-only Docker API requests. The v0.1 systemd unit runs under root so it can read protected host metrics/configuration and the socket; it does not claim least-privilege isolation. Use a dedicated host, review the agent source, and disable Docker collection with `--docker=false` during registration when Docker inventory is not required.
+Reading `/var/run/docker.sock` normally requires root or membership in the Docker group. Access to that socket is effectively highly privileged even when NodeGuard itself sends only fixed read-only Docker API requests. The v0.2 systemd unit runs under root so it can read protected host metrics/configuration and the socket; it does not claim least-privilege isolation. Use a dedicated host, review the agent source, and disable Docker collection with `--docker=false` during registration when Docker inventory is not required.
 
-The agent does not expose shell, exec, restart, stop, kill, delete, pull, package-management, or reboot operations.
+The agent does not expose shell, exec, restart, stop, kill, delete, pull, package-installation, or reboot operations. The update provider runs only fixed local discovery commands and accepts no command or argument from NodeGuard.
 
 ## Uninstall
 

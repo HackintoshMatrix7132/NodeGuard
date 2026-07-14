@@ -1,6 +1,6 @@
 # NodeGuard Agent Security Notes
 
-NodeGuard Agent v0.1 is outbound-only and read-only. It does not expose a listening port, remote shell, command runner, package installer, reboot control, or Docker lifecycle action.
+NodeGuard Agent is outbound-only and discovery-only. It does not expose a listening port, remote shell, generic command runner, package installer, reboot control, or Docker lifecycle action.
 
 ## Credentials
 
@@ -24,3 +24,5 @@ Access to `/var/run/docker.sock` is effectively root-equivalent even when the Ag
 ## Local privileges
 
 Installation and the packaged service run as root to protect configuration and read host/Docker metadata. The systemd unit applies several hardening directives, but Docker socket access remains the dominant privilege boundary.
+
+On Debian-family systems, the fixed APT provider may refresh package indexes under `/var/lib/apt` before simulating an upgrade. It never installs, removes, configures, or downloads upgrade packages. Commands and arguments are hard-coded, run without a shell, use time and output limits, and never originate from the NodeGuard API. The systemd unit keeps `ProtectSystem=strict` and grants write access only to the package-index/cache paths needed by APT.

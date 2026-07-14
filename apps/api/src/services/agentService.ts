@@ -330,7 +330,8 @@ export function registerAgent(input: AgentRegistrationInput): AgentRegistrationR
     heartbeatIntervalSeconds: env.agentHeartbeatIntervalSeconds,
     metricsIntervalSeconds: env.agentMetricsIntervalSeconds,
     dockerIntervalSeconds: env.agentDockerIntervalSeconds,
-    inventoryIntervalSeconds: env.agentInventoryIntervalSeconds
+    inventoryIntervalSeconds: env.agentInventoryIntervalSeconds,
+    updateIntervalSeconds: env.agentUpdateIntervalSeconds
   };
 }
 

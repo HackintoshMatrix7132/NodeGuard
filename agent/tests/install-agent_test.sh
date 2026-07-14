@@ -24,4 +24,10 @@ if grep -nE 'printf|echo' "$INSTALLER" | grep -q 'ENROLLMENT_TOKEN'; then
   exit 1
 fi
 
+APT_PATHS='ReadWritePaths=-/var/lib/apt/lists -/var/cache/apt -/var/lib/apt/periodic'
+grep -Fq "$APT_PATHS" "$INSTALLER"
+grep -Fq "$APT_PATHS" "$SCRIPT_DIR/packaging/nodeguard-agent.service"
+grep -Fq 'ProtectSystem=strict' "$INSTALLER"
+grep -Fq 'ProtectSystem=strict' "$SCRIPT_DIR/packaging/nodeguard-agent.service"
+
 printf '%s\n' "installer interface tests passed"

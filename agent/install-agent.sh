@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-readonly INSTALLER_VERSION="0.1.0"
+readonly INSTALLER_VERSION="0.2.0"
 readonly INSTALL_PATH="/usr/local/bin/nodeguard-agent"
 readonly CONFIG_DIR="/etc/nodeguard-agent"
 readonly CONFIG_PATH="${CONFIG_DIR}/config.json"
@@ -249,6 +249,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
+ReadWritePaths=-/var/lib/apt/lists -/var/cache/apt -/var/lib/apt/periodic
 ProtectControlGroups=true
 ProtectKernelModules=true
 ProtectKernelTunables=true

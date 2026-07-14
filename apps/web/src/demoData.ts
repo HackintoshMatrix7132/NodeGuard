@@ -1,4 +1,4 @@
-import type { AgentDetail, AgentSummary, Alert, Container, DockerSnapshot, DomainCheck, MetricHistory, MetricHistoryRange, MetricSnapshot, MonitoredServerStatus, Overview, Server, UpdateCenterSnapshot, UpdateItem } from "./types/nodeguard";
+import type { AgentDetail, AgentSummary, Alert, Container, DockerSnapshot, DomainCheck, MachineUpdateDetail, MetricHistory, MetricHistoryRange, MetricSnapshot, MonitoredServerStatus, Overview, Server, UpdateCenterSnapshot } from "./types/nodeguard";
 
 const now = () => new Date().toISOString();
 const ago = ({ minutes = 0, hours = 0, days = 0 }: { minutes?: number; hours?: number; days?: number }) => new Date(Date.now() - (((days * 24 + hours) * 60 + minutes) * 60 * 1000)).toISOString();
@@ -43,10 +43,11 @@ export const demoMetrics: MetricSnapshot = {
 };
 
 const demoAgentDefinitions = [
-  { id: "agent-docker-main", displayName: "Docker main", hostname: "docker-main", status: "online" as const, os: "Ubuntu 24.04.2 LTS", version: "0.1.0", cpu: 21.8, memory: 48.2, disk: 37.4, swap: 4.1, ip: "192.0.2.41", docker: true, dockerVersion: "27.5.1", lastSeenMinutes: 0, registeredDays: 34 },
-  { id: "agent-photos-vm", displayName: "Photos VM", hostname: "photos-vm", status: "online" as const, os: "Debian GNU/Linux 12", version: "0.1.0", cpu: 38.6, memory: 76.4, disk: 61.2, swap: 12.8, ip: "192.0.2.42", docker: true, dockerVersion: "27.5.1", lastSeenMinutes: 0, registeredDays: 27 },
-  { id: "agent-backup-node", displayName: "Backup node", hostname: "backup-node", status: "stale" as const, os: "Ubuntu Server 24.04 LTS", version: "0.1.0", cpu: 7.2, memory: 31.5, disk: 72.1, swap: null, ip: "192.0.2.43", docker: false, dockerVersion: null, lastSeenMinutes: 2, registeredDays: 18 },
-  { id: "agent-edge-node", displayName: "Edge node", hostname: "edge-node", status: "offline" as const, os: "Ubuntu Server 22.04 LTS", version: "0.1.0", cpu: null, memory: null, disk: null, swap: null, ip: "198.51.100.44", docker: false, dockerVersion: null, lastSeenMinutes: 43, registeredDays: 9 }
+  { id: "agent-docker-main", displayName: "Docker main", hostname: "docker-main", status: "online" as const, os: "Ubuntu 24.04.2 LTS", version: "0.2.0", cpu: 21.8, memory: 48.2, disk: 37.4, swap: 4.1, ip: "192.0.2.41", docker: true, dockerVersion: "27.5.1", lastSeenMinutes: 0, registeredDays: 34 },
+  { id: "agent-photos-vm", displayName: "Photos VM", hostname: "photos-vm", status: "online" as const, os: "Debian GNU/Linux 12", version: "0.2.0", cpu: 38.6, memory: 76.4, disk: 61.2, swap: 12.8, ip: "192.0.2.42", docker: true, dockerVersion: "27.5.1", lastSeenMinutes: 0, registeredDays: 27 },
+  { id: "agent-pve-main", displayName: "PVE main", hostname: "pve-main", status: "online" as const, os: "Proxmox VE 8.4", version: "0.2.0", cpu: 14.7, memory: 43.1, disk: 54.8, swap: 2.4, ip: "192.0.2.40", docker: false, dockerVersion: null, lastSeenMinutes: 0, registeredDays: 48 },
+  { id: "agent-backup-node", displayName: "Backup appliance", hostname: "backup-appliance", status: "stale" as const, os: "Alpine Linux 3.21", version: "0.2.0", cpu: 7.2, memory: 31.5, disk: 72.1, swap: null, ip: "192.0.2.43", docker: false, dockerVersion: null, lastSeenMinutes: 2, registeredDays: 18 },
+  { id: "agent-edge-node", displayName: "Edge node", hostname: "edge-node", status: "offline" as const, os: "Ubuntu Server 22.04 LTS", version: "0.2.0", cpu: null, memory: null, disk: null, swap: null, ip: "198.51.100.44", docker: false, dockerVersion: null, lastSeenMinutes: 43, registeredDays: 9 }
 ];
 
 export const demoAgents: AgentSummary[] = demoAgentDefinitions.map((agent) => ({
@@ -262,8 +263,8 @@ export const demoDomains: DomainCheck[] = [
 export const demoAlerts: Alert[] = [
   { id: "agent-backup-node-stale", severity: "warning", title: "Backup node agent is stale", message: "The latest heartbeat is overdue but remains within the configured grace period.", affectedResource: "Backup node", status: "active", createdAt: ago({ minutes: 2 }), firstSeenAt: ago({ minutes: 2 }), lastSeenAt: now(), occurrenceCount: 2, resolvedAt: null, failedChecks: ["agent status: stale"], possibleCause: "The backup host may have intermittent outbound connectivity.", suggestedNextSteps: ["Check the systemd service.", "Inspect the agent journal."] },
   { id: "agent-edge-node-offline", severity: "critical", title: "Edge node agent is offline", message: "No heartbeat has arrived within the offline threshold.", affectedResource: "Edge node", status: "active", createdAt: ago({ minutes: 43 }), firstSeenAt: ago({ minutes: 43 }), lastSeenAt: now(), occurrenceCount: 9, resolvedAt: null, failedChecks: ["agent status: offline"], possibleCause: "The edge host may be powered off or disconnected.", suggestedNextSteps: ["Check host power and network.", "Inspect the agent systemd service."] },
-  { id: "updates-available", severity: "info", title: "7 updates available", message: "New software updates are available in the Update Center.", affectedResource: "Update Center", status: "active", createdAt: ago({ minutes: 11 }), firstSeenAt: ago({ minutes: 11 }), lastSeenAt: now(), occurrenceCount: 1, resolvedAt: null, failedChecks: ["7 updates available"], possibleCause: null, suggestedNextSteps: ["Open the Update Center.", "Review release notes before scheduling maintenance."] },
-  { id: "security-updates-available", severity: "warning", title: "1 security-critical update available", message: "A security-critical update is available in the Update Center.", affectedResource: "Update Center", status: "active", createdAt: ago({ minutes: 11 }), firstSeenAt: ago({ minutes: 11 }), lastSeenAt: now(), occurrenceCount: 1, resolvedAt: null, failedChecks: ["1 security-critical update available"], possibleCause: null, suggestedNextSteps: ["Review the security advisory.", "Schedule maintenance from the source system."] },
+  { id: "updates-available", severity: "info", title: "17 operating-system updates available", message: "NodeGuard Agents reported package updates for monitored machines.", affectedResource: "Update Center", status: "active", createdAt: ago({ minutes: 11 }), firstSeenAt: ago({ minutes: 11 }), lastSeenAt: now(), occurrenceCount: 1, resolvedAt: null, failedChecks: ["17 package updates available"], possibleCause: null, suggestedNextSteps: ["Open the Update Center.", "Review the affected machines and package details.", "Schedule maintenance on each machine when appropriate."] },
+  { id: "security-updates-available", severity: "warning", title: "4 security updates available", message: "NodeGuard Agents reported security-classified package updates for monitored machines.", affectedResource: "Update Center", status: "active", createdAt: ago({ minutes: 11 }), firstSeenAt: ago({ minutes: 11 }), lastSeenAt: now(), occurrenceCount: 1, resolvedAt: null, failedChecks: ["4 security updates available"], possibleCause: null, suggestedNextSteps: ["Open the Update Center.", "Review the affected machines and security-classified packages.", "Schedule maintenance on each machine when appropriate."] },
   { id: "domain-photos-502", severity: "critical", title: "photos.demo.example returned HTTP 502", message: "The reverse proxy cannot reach the photo-service upstream.", affectedResource: "https://photos.demo.example", status: "active", createdAt: ago({ minutes: 21 }), firstSeenAt: ago({ minutes: 21 }), lastSeenAt: now(), occurrenceCount: 7, resolvedAt: null, failedChecks: ["HTTP 502", "upstream ping failed"], possibleCause: "The reverse proxy route points to an unavailable upstream service.", suggestedNextSteps: ["Inspect reverse proxy logs.", "Verify the photo-service container network.", "Confirm the upstream port is 2283."] },
   { id: "domain-dns-timeout", severity: "critical", title: "DNS console is unreachable", message: "The internal DNS dashboard timed out after 5 seconds.", affectedResource: "http://192.0.2.53", status: "active", createdAt: ago({ minutes: 14 }), firstSeenAt: ago({ minutes: 14 }), lastSeenAt: now(), occurrenceCount: 5, resolvedAt: null, failedChecks: ["TCP connection timeout", "HTTP check unavailable"], possibleCause: "The DNS console host may be offline or isolated from the monitoring network.", suggestedNextSteps: ["Ping 192.0.2.53 from the NodeGuard host.", "Check the DNS console VM state.", "Verify firewall rules."] },
   { id: "container-ente-stopped", severity: "warning", title: "archive-service is not running", message: "The monitored archive-service container exited with code 1.", affectedResource: "archive-service", status: "active", createdAt: ago({ minutes: 18 }), firstSeenAt: ago({ minutes: 18 }), lastSeenAt: now(), occurrenceCount: 6, resolvedAt: null, failedChecks: ["container state: exited", "database connection refused"], possibleCause: "The service cannot establish its database connection.", suggestedNextSteps: ["Inspect container logs.", "Verify database credentials.", "Check the Compose dependency health."] },
@@ -274,35 +275,154 @@ export const demoAlerts: Alert[] = [
   { id: "resolved-cloud-route", severity: "resolved", title: "Cloud route recovered", message: "The reverse proxy route is serving traffic normally.", affectedResource: "https://cloud.demo.example", status: "resolved", createdAt: ago({ days: 4 }), firstSeenAt: ago({ days: 4 }), lastSeenAt: ago({ days: 3, hours: 23, minutes: 49 }), occurrenceCount: 4, resolvedAt: ago({ days: 3, hours: 23, minutes: 49 }), failedChecks: ["HTTP 504"], possibleCause: "The cloud service was restarting after an application update.", suggestedNextSteps: ["No action required.", "Confirm future updates run inside the maintenance window."] }
 ];
 
-export const demoUpdates: UpdateItem[] = [
-  { id: "home_assistant:core", sourceId: "home_assistant", sourceName: "Home Assistant", name: "Home Assistant Core", installedVersion: "2026.6.4", availableVersion: "2026.7.1", category: "core", status: "available", securityCritical: false, lastCheckedAt: now(), openUrl: "https://ha.demo.example/config/updates", releaseNotesUrl: "https://www.home-assistant.io/blog/" },
-  { id: "home_assistant:studio", sourceId: "home_assistant", sourceName: "Home Assistant", name: "Studio Code Server", installedVersion: "5.18.2", availableVersion: "5.19.0", category: "add-on", status: "available", securityCritical: false, lastCheckedAt: now(), openUrl: "https://ha.demo.example/config/updates", releaseNotesUrl: null },
-  { id: "home_assistant:zigbee", sourceId: "home_assistant", sourceName: "Home Assistant", name: "Zigbee Device Firmware", installedVersion: "1.0.8", availableVersion: "1.1.0", category: "firmware", status: "available", securityCritical: false, lastCheckedAt: now(), openUrl: "https://ha.demo.example/config/updates", releaseNotesUrl: null },
-  { id: "home_assistant:hacs", sourceId: "home_assistant", sourceName: "Home Assistant", name: "Energy Dashboard Integration", installedVersion: "2.4.0", availableVersion: "2.5.1", category: "integration", status: "available", securityCritical: false, lastCheckedAt: now(), openUrl: "https://ha.demo.example/config/updates", releaseNotesUrl: "https://github.com/home-assistant/core/releases" },
-  { id: "ubuntu:openssl", sourceId: "ubuntu", sourceName: "Ubuntu", name: "OpenSSL security update", installedVersion: "3.0.13-0ubuntu3.4", availableVersion: "3.0.13-0ubuntu3.5", category: "system", status: "available", securityCritical: true, lastCheckedAt: now(), openUrl: null, releaseNotesUrl: "https://ubuntu.com/security/notices" },
-  { id: "docker:traefik", sourceId: "docker", sourceName: "Docker", name: "Traefik container image", installedVersion: "v3.4.0", availableVersion: "v3.4.1", category: "container", status: "available", securityCritical: false, lastCheckedAt: now(), openUrl: "https://hub.docker.com/_/traefik", releaseNotesUrl: "https://github.com/traefik/traefik/releases" },
-  { id: "proxmox:ve", sourceId: "proxmox", sourceName: "Proxmox", name: "Proxmox VE packages", installedVersion: "8.4.1", availableVersion: "8.4.2", category: "system", status: "available", securityCritical: false, lastCheckedAt: now(), openUrl: "https://pve.demo.example", releaseNotesUrl: "https://pve.proxmox.com/wiki/Roadmap" },
-  { id: "firmware:gateway", sourceId: "firmware", sourceName: "Firmware", name: "Lab Gateway firmware", installedVersion: "8.00", availableVersion: "8.02", category: "firmware", status: "available", securityCritical: false, lastCheckedAt: now(), openUrl: "https://gateway.demo.example", releaseNotesUrl: null },
-  { id: "home_assistant:os", sourceId: "home_assistant", sourceName: "Home Assistant", name: "Home Assistant Operating System", installedVersion: "16.0", availableVersion: "16.0", category: "system", status: "up_to_date", securityCritical: false, lastCheckedAt: now(), openUrl: "https://ha.demo.example/config/updates", releaseNotesUrl: null },
-  { id: "docker:nextcloud", sourceId: "docker", sourceName: "Docker", name: "Nextcloud container image", installedVersion: "30-apache", availableVersion: "31-apache", category: "container", status: "installing", securityCritical: false, lastCheckedAt: now(), openUrl: "https://hub.docker.com/_/nextcloud", releaseNotesUrl: null },
-  { id: "firmware:sensor", sourceId: "firmware", sourceName: "Firmware", name: "Workshop sensor firmware", installedVersion: "1.7.2", availableVersion: null, category: "firmware", status: "unknown", securityCritical: false, lastCheckedAt: now(), openUrl: null, releaseNotesUrl: null }
+export const demoMachineUpdates: MachineUpdateDetail[] = [
+  {
+    agentId: "agent-photos-vm",
+    displayName: "Photos VM",
+    hostname: "photos-vm",
+    agentStatus: "online",
+    provider: "apt",
+    supported: true,
+    status: "ok",
+    os: { id: "debian", versionId: "12", prettyName: "Debian GNU/Linux 12" },
+    checkedAt: ago({ minutes: 4 }),
+    lastSuccessfulAt: ago({ minutes: 4 }),
+    updateCount: 12,
+    securityUpdateCount: 3,
+    rebootRequired: false,
+    truncated: false,
+    lastError: null,
+    packages: [
+      { name: "openssl", installedVersion: "3.0.16-1~deb12u1", candidateVersion: "3.0.17-1~deb12u2", security: true, source: "debian-security" },
+      { name: "libssl3", installedVersion: "3.0.16-1~deb12u1", candidateVersion: "3.0.17-1~deb12u2", security: true, source: "debian-security" },
+      { name: "sudo", installedVersion: "1.9.13p3-1+deb12u1", candidateVersion: "1.9.13p3-1+deb12u2", security: true, source: "debian-security" },
+      { name: "curl", installedVersion: "7.88.1-10+deb12u12", candidateVersion: "7.88.1-10+deb12u13", security: false, source: "debian" },
+      { name: "git", installedVersion: "1:2.39.5-0+deb12u1", candidateVersion: "1:2.39.5-0+deb12u2", security: false, source: "debian" },
+      { name: "ca-certificates", installedVersion: "20230311", candidateVersion: "20230311+deb12u1", security: false, source: "debian" },
+      { name: "openssh-client", installedVersion: "1:9.2p1-2+deb12u5", candidateVersion: "1:9.2p1-2+deb12u6", security: false, source: "debian" },
+      { name: "systemd", installedVersion: "252.36-1~deb12u1", candidateVersion: "252.38-1~deb12u1", security: false, source: "debian" },
+      { name: "systemd-sysv", installedVersion: "252.36-1~deb12u1", candidateVersion: "252.38-1~deb12u1", security: false, source: "debian" },
+      { name: "tzdata", installedVersion: "2026a-0+deb12u1", candidateVersion: "2026b-0+deb12u1", security: false, source: "debian" },
+      { name: "apt", installedVersion: "2.6.1", candidateVersion: "2.6.1+deb12u1", security: false, source: "debian" },
+      { name: "debian-archive-keyring", installedVersion: "2023.3+deb12u1", candidateVersion: "2023.3+deb12u2", security: false, source: "debian" }
+    ]
+  },
+  {
+    agentId: "agent-docker-main",
+    displayName: "Docker main",
+    hostname: "docker-main",
+    agentStatus: "online",
+    provider: "apt",
+    supported: true,
+    status: "ok",
+    os: { id: "ubuntu", versionId: "24.04", prettyName: "Ubuntu 24.04.2 LTS" },
+    checkedAt: ago({ minutes: 7 }),
+    lastSuccessfulAt: ago({ minutes: 7 }),
+    updateCount: 0,
+    securityUpdateCount: 0,
+    rebootRequired: false,
+    truncated: false,
+    lastError: null,
+    packages: []
+  },
+  {
+    agentId: "agent-pve-main",
+    displayName: "PVE main",
+    hostname: "pve-main",
+    agentStatus: "online",
+    provider: "apt",
+    supported: true,
+    status: "ok",
+    os: { id: "debian", versionId: "12", prettyName: "Proxmox VE 8.4" },
+    checkedAt: ago({ minutes: 12 }),
+    lastSuccessfulAt: ago({ minutes: 12 }),
+    updateCount: 5,
+    securityUpdateCount: 1,
+    rebootRequired: true,
+    truncated: false,
+    lastError: null,
+    packages: [
+      { name: "openssl", installedVersion: "3.0.16-1~deb12u1", candidateVersion: "3.0.17-1~deb12u2", security: true, source: "debian-security" },
+      { name: "pve-manager", installedVersion: "8.4.1", candidateVersion: "8.4.2", security: false, source: "proxmox" },
+      { name: "proxmox-widget-toolkit", installedVersion: "4.3.5", candidateVersion: "4.3.7", security: false, source: "proxmox" },
+      { name: "qemu-server", installedVersion: "8.3.8", candidateVersion: "8.3.10", security: false, source: "proxmox" },
+      { name: "pve-container", installedVersion: "5.2.4", candidateVersion: "5.2.5", security: false, source: "proxmox" }
+    ]
+  },
+  {
+    agentId: "agent-backup-node",
+    displayName: "Backup appliance",
+    hostname: "backup-appliance",
+    agentStatus: "stale",
+    provider: "apt",
+    supported: false,
+    status: "unsupported",
+    os: { id: "alpine", versionId: "3.21", prettyName: "Alpine Linux 3.21" },
+    checkedAt: ago({ hours: 2 }),
+    lastSuccessfulAt: null,
+    updateCount: null,
+    securityUpdateCount: null,
+    rebootRequired: null,
+    truncated: false,
+    lastError: null,
+    packages: []
+  },
+  {
+    agentId: "agent-edge-node",
+    displayName: "Edge node",
+    hostname: "edge-node",
+    agentStatus: "offline",
+    provider: "apt",
+    supported: true,
+    status: "ok",
+    os: { id: "ubuntu", versionId: "22.04", prettyName: "Ubuntu Server 22.04 LTS" },
+    checkedAt: ago({ days: 2 }),
+    lastSuccessfulAt: ago({ days: 2 }),
+    updateCount: 0,
+    securityUpdateCount: 0,
+    rebootRequired: false,
+    truncated: false,
+    lastError: null,
+    packages: []
+  }
 ];
 
-export function getDemoUpdateCenter(): UpdateCenterSnapshot {
-  const available = demoUpdates.filter((update) => update.status === "available");
+function demoMachineMatchesStatus(machine: MachineUpdateDetail, status: string) {
+  if (status === "all") return true;
+  if (status === "updates") return (machine.updateCount ?? 0) > 0;
+  if (status === "security") return (machine.securityUpdateCount ?? 0) > 0;
+  if (status === "up_to_date") return machine.supported === true && machine.status === "ok" && machine.lastSuccessfulAt !== null && machine.updateCount === 0;
+  if (status === "reboot") return machine.rebootRequired === true;
+  if (status === "unsupported") return machine.supported === false || machine.status === "unsupported";
+  if (status === "check_failed") return ["package_manager_busy", "metadata_refresh_failed", "check_failed"].includes(machine.status);
+  if (status === "stale_offline") return machine.agentStatus === "stale" || machine.agentStatus === "offline" || machine.agentStatus === "revoked";
+  return true;
+}
+
+export function getDemoUpdateCenter(search = "", status = "all"): UpdateCenterSnapshot {
+  const eligibleMachines = demoMachineUpdates.filter((machine) => machine.supported !== false && machine.status !== "unsupported");
+  const reportingMachines = eligibleMachines.filter((machine) => machine.status === "ok" && machine.agentStatus === "online" && machine.lastSuccessfulAt !== null);
+  const term = search.trim().toLowerCase();
+  const machines = demoMachineUpdates.filter((machine) => {
+    if (!demoMachineMatchesStatus(machine, status)) return false;
+    if (!term) return true;
+    return [machine.displayName, machine.hostname, machine.os.prettyName, machine.provider, ...machine.packages.flatMap((item) => [item.name, item.source])]
+      .some((value) => value?.toLowerCase().includes(term));
+  });
   return {
-    updates: demoUpdates.map((update) => ({ ...update, lastCheckedAt: now() })),
-    sources: [
-      { id: "home_assistant", name: "Home Assistant", configured: true, connected: true, lastCheckedAt: now(), lastError: null },
-      { id: "ubuntu", name: "Ubuntu", configured: true, connected: true, lastCheckedAt: now(), lastError: null },
-      { id: "docker", name: "Docker", configured: true, connected: true, lastCheckedAt: now(), lastError: null },
-      { id: "proxmox", name: "Proxmox", configured: true, connected: true, lastCheckedAt: now(), lastError: null },
-      { id: "firmware", name: "Firmware", configured: true, connected: true, lastCheckedAt: now(), lastError: null }
-    ],
-    availableCount: available.length,
-    securityCriticalCount: available.filter((update) => update.securityCritical).length,
-    lastCheckedAt: now()
+    availableCount: reportingMachines.reduce((total, machine) => total + (machine.updateCount ?? 0), 0),
+    securityCriticalCount: reportingMachines.reduce((total, machine) => total + (machine.securityUpdateCount ?? 0), 0),
+    reportingMachineCount: reportingMachines.length,
+    totalMachineCount: eligibleMachines.length,
+    lastCheckedAt: reportingMachines.reduce<string | null>((latest, machine) => !latest || (machine.checkedAt ?? "") > latest ? machine.checkedAt : latest, null),
+    machines: machines.map((machine) => ({ ...machine, packages: machine.packages.map((item) => ({ ...item })) }))
   };
+}
+
+export function getDemoMachineUpdates(id: string): MachineUpdateDetail {
+  const machine = demoMachineUpdates.find((item) => item.agentId === id);
+  if (!machine) throw new Error("Machine update inventory not found.");
+  return { ...machine, packages: machine.packages.map((item) => ({ ...item })) };
 }
 
 export const demoServerMonitors: MonitoredServerStatus[] = [

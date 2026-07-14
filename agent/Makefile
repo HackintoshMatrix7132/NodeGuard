@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-VERSION ?= 0.1.0
+VERSION ?= 0.2.0
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || printf development)
 DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X github.com/HackintoshMatrix7132/NodeGuard/agent/internal/version.Version=$(VERSION) -X github.com/HackintoshMatrix7132/NodeGuard/agent/internal/version.Commit=$(COMMIT) -X github.com/HackintoshMatrix7132/NodeGuard/agent/internal/version.Date=$(DATE)

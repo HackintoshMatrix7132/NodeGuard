@@ -3,8 +3,10 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +33,23 @@ func TestRegisterDoesNotSendAgentAuthorization(t *testing.T) {
 	}
 	if response.AgentID != "new-agent" || response.Credential != "new-secret" {
 		t.Fatal("registration response was not decoded")
+	}
+}
+
+func TestOversizedRequestIsRejectedBeforeSending(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		requests++
+		response.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	api := New(config.Config{ServerURL: server.URL, AgentID: "agent-id", Credential: "agent-secret"})
+	err := api.Post(context.Background(), "/api/agent/updates", map[string]string{"payload": strings.Repeat("x", maxRequestBodyBytes)})
+	if !errors.Is(err, ErrRequestBodyTooLarge) {
+		t.Fatalf("oversized request error = %v", err)
+	}
+	if requests != 0 {
+		t.Fatal("oversized request reached the network")
 	}
 }
 

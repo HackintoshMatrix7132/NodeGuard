@@ -133,12 +133,12 @@ export async function getMonitoringSnapshot(): Promise<MonitoringSnapshot> {
       updateAlert.securityCritical ? "warning" : "info",
       `${updateAlert.count} ${updateAlert.securityCritical ? "security-critical " : ""}${updateAlert.count === 1 ? "update" : "updates"} available`,
       updateAlert.securityCritical
-        ? "Security-critical updates are available in the Update Center."
-        : "New software updates are available in the Update Center.",
+        ? "Security operating-system updates are available on reporting machines."
+        : "Operating-system package updates are available on reporting machines.",
       "Update Center",
       [`${updateAlert.count} update${updateAlert.count === 1 ? "" : "s"} available`],
       null,
-      ["Open the Update Center.", "Review release notes before scheduling maintenance.", "Install updates from their source system."],
+      ["Open the Update Center.", "Review the affected machines and packages.", "Apply updates directly on each machine during a maintenance window."],
       updateAlert.checkedAt
     ));
   }

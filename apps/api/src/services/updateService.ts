@@ -1,327 +1,367 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-
-import { env } from "../config/env.js";
-import type { HomeAssistantSettings, HomeAssistantSettingsInput, UpdateCategory, UpdateCenterSnapshot, UpdateItem, UpdateSource } from "../types/nodeguard.js";
+import type {
+  AgentStatus,
+  AgentUpdateCheckStatus,
+  AgentUpdateInventoryInput,
+  MachineUpdateDetail,
+  MachineUpdatePackage,
+  MachineUpdateSummary,
+  UpdateCenterSnapshot
+} from "../types/nodeguard.js";
+import { AgentServiceError, calculateAgentStatus } from "./agentService.js";
 import { getDatabase } from "./database.js";
 
-type IntegrationRow = {
-  id: string;
-  base_url: string;
-  encrypted_secret: string;
-  secret_iv: string;
-  secret_tag: string;
-  last_checked_at: string | null;
+type InventoryRow = {
+  agent_id: string;
+  display_name: string;
+  hostname: string;
+  agent_status: AgentStatus;
+  agent_os_name: string | null;
+  agent_os_version: string | null;
+  last_seen_at: string | null;
+  revoked_at: string | null;
+  schema_version: number | null;
+  provider: "apt" | null;
+  supported: number | null;
+  status: AgentUpdateCheckStatus | null;
+  checked_at: string | null;
+  last_successful_at: string | null;
+  update_count: number | null;
+  security_update_count: number | null;
+  reboot_required: number | null;
+  truncated: number | null;
+  os_id: string | null;
+  os_version_id: string | null;
+  os_pretty_name: string | null;
   last_error: string | null;
-  created_at: string;
-  updated_at: string;
 };
 
-type UpdateRow = {
-  id: string;
-  source_id: string;
-  source_name: string;
-  name: string;
-  installed_version: string | null;
-  available_version: string | null;
-  category: UpdateCategory;
-  status: UpdateItem["status"];
-  security_critical: number;
-  last_checked_at: string;
-  open_url: string | null;
-  release_notes_url: string | null;
-};
-
-type HomeAssistantState = {
-  entity_id?: unknown;
-  state?: unknown;
-  attributes?: Record<string, unknown>;
+type PackageRow = {
+  package_name: string;
+  installed_version: string;
+  candidate_version: string;
+  security: number;
+  source: string | null;
 };
 
 const database = getDatabase();
-const homeAssistantSourceId = "home_assistant";
 
-function integrationKey() {
-  if (!env.integrationSecret.trim()) {
-    throw new Error("NODEGUARD_INTEGRATION_SECRET must be configured before storing integration credentials.");
-  }
-  return createHash("sha256").update(env.integrationSecret).digest();
+export type UpdateMachineFilterStatus =
+  | "all"
+  | "updates"
+  | "security"
+  | "up_to_date"
+  | "reboot"
+  | "unsupported"
+  | "check_failed"
+  | "stale_offline";
+
+export type UpdateMachineFilters = {
+  search?: string;
+  status?: UpdateMachineFilterStatus;
+};
+
+const safeStatusMessages: Partial<Record<AgentUpdateCheckStatus, string>> = {
+  package_manager_busy: "The package manager is currently busy. NodeGuard will retry automatically.",
+  metadata_refresh_failed: "Package metadata could not be refreshed. NodeGuard will retry automatically.",
+  check_failed: "Operating-system updates could not be checked. NodeGuard will retry automatically."
+};
+
+function nowIso() {
+  return new Date().toISOString();
 }
 
-function encryptSecret(value: string) {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", integrationKey(), iv);
-  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
-  return {
-    encrypted: encrypted.toString("base64"),
-    iv: iv.toString("base64"),
-    tag: cipher.getAuthTag().toString("base64")
-  };
+function inventoryRow(agentId: string) {
+  return database.prepare("SELECT * FROM agent_update_inventories WHERE agent_id = ?").get(agentId) as
+    | Omit<InventoryRow, "display_name" | "hostname" | "agent_status" | "agent_os_name" | "agent_os_version" | "last_seen_at" | "revoked_at">
+    | undefined;
 }
 
-function decryptSecret(row: IntegrationRow) {
-  const decipher = createDecipheriv("aes-256-gcm", integrationKey(), Buffer.from(row.secret_iv, "base64"));
-  decipher.setAuthTag(Buffer.from(row.secret_tag, "base64"));
-  return Buffer.concat([
-    decipher.update(Buffer.from(row.encrypted_secret, "base64")),
-    decipher.final()
-  ]).toString("utf8");
-}
+const writeSuccessfulInventory = database.prepare(`
+  INSERT INTO agent_update_inventories (
+    agent_id, schema_version, provider, supported, status, checked_at, last_successful_at,
+    update_count, security_update_count, reboot_required, truncated, os_id, os_version_id,
+    os_pretty_name, last_error, updated_at
+  ) VALUES (
+    @agentId, @schemaVersion, @provider, @supported, @status, @checkedAt, @lastSuccessfulAt,
+    @updateCount, @securityUpdateCount, @rebootRequired, @truncated, @osId, @osVersionId,
+    @osPrettyName, NULL, @updatedAt
+  )
+  ON CONFLICT(agent_id) DO UPDATE SET
+    schema_version = excluded.schema_version,
+    provider = excluded.provider,
+    supported = excluded.supported,
+    status = excluded.status,
+    checked_at = excluded.checked_at,
+    last_successful_at = excluded.last_successful_at,
+    update_count = excluded.update_count,
+    security_update_count = excluded.security_update_count,
+    reboot_required = excluded.reboot_required,
+    truncated = excluded.truncated,
+    os_id = excluded.os_id,
+    os_version_id = excluded.os_version_id,
+    os_pretty_name = excluded.os_pretty_name,
+    last_error = NULL,
+    updated_at = excluded.updated_at
+`);
 
-function normalizeUrl(value: string) {
-  const parsed = new URL(value.trim());
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
-    throw new Error("Home Assistant URL must use http:// or https://.");
-  }
-  parsed.pathname = parsed.pathname.replace(/\/+$/, "");
-  parsed.search = "";
-  parsed.hash = "";
-  return parsed.toString().replace(/\/$/, "");
-}
+const insertPackage = database.prepare(`
+  INSERT INTO agent_package_updates (
+    agent_id, package_name, installed_version, candidate_version, security, source, inventory_checked_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?)
+`);
 
-function stringAttribute(attributes: Record<string, unknown>, key: string) {
-  const value = attributes[key];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
+export function recordAgentUpdates(agentId: string, input: AgentUpdateInventoryInput) {
+  const recorded = database.transaction(() => {
+    const agent = database.prepare("SELECT id FROM agents WHERE id = ? AND revoked_at IS NULL").get(agentId);
+    if (!agent) throw new AgentServiceError("agent_not_found", "Agent not found.", 404);
 
-function safeHttpUrl(value: string | null) {
-  if (!value) return null;
-  try {
-    const parsed = new URL(value);
-    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
-function updateCategory(entityId: string, attributes: Record<string, unknown>): UpdateCategory {
-  const text = [
-    entityId,
-    stringAttribute(attributes, "friendly_name"),
-    stringAttribute(attributes, "title"),
-    stringAttribute(attributes, "device_class")
-  ].filter(Boolean).join(" ").toLowerCase();
-
-  if (text.includes("home assistant core") || entityId === "update.home_assistant_core_update") return "core";
-  if (text.includes("add-on") || text.includes("addon")) return "add-on";
-  if (text.includes("firmware") || text.includes("device firmware")) return "firmware";
-  if (text.includes("integration") || text.includes("hacs")) return "integration";
-  return "application";
-}
-
-function isSecurityCritical(attributes: Record<string, unknown>) {
-  if (attributes.security === true || attributes.security_critical === true) return true;
-  const text = [
-    stringAttribute(attributes, "friendly_name"),
-    stringAttribute(attributes, "title"),
-    stringAttribute(attributes, "release_summary")
-  ].filter(Boolean).join(" ").toLowerCase();
-  return /security[- ]critical|critical security update/.test(text);
-}
-
-export function normalizeHomeAssistantUpdates(states: HomeAssistantState[], baseUrl: string, checkedAt = new Date().toISOString()): UpdateItem[] {
-  return states.flatMap((entry) => {
-    if (typeof entry.entity_id !== "string" || !entry.entity_id.startsWith("update.")) return [];
-    const attributes = entry.attributes ?? {};
-    const state = typeof entry.state === "string" ? entry.state : "unknown";
-    const status: UpdateItem["status"] = attributes.in_progress === true
-      ? "installing"
-      : state === "on"
-        ? "available"
-        : state === "off"
-          ? "up_to_date"
-          : "unknown";
-    const fallbackName = entry.entity_id.slice("update.".length).replace(/_/g, " ");
-    const name = stringAttribute(attributes, "friendly_name") ?? stringAttribute(attributes, "title") ?? fallbackName;
-
-    return [{
-      id: `${homeAssistantSourceId}:${entry.entity_id}`,
-      sourceId: homeAssistantSourceId,
-      sourceName: "Home Assistant",
-      name,
-      installedVersion: stringAttribute(attributes, "installed_version"),
-      availableVersion: stringAttribute(attributes, "latest_version"),
-      category: updateCategory(entry.entity_id, attributes),
-      status,
-      securityCritical: isSecurityCritical(attributes),
-      lastCheckedAt: checkedAt,
-      openUrl: `${baseUrl}/config/updates`,
-      releaseNotesUrl: safeHttpUrl(stringAttribute(attributes, "release_url"))
-    }];
-  }).sort((left, right) => left.name.localeCompare(right.name));
-}
-
-function rowToUpdate(row: UpdateRow): UpdateItem {
-  return {
-    id: row.id,
-    sourceId: row.source_id,
-    sourceName: row.source_name,
-    name: row.name,
-    installedVersion: row.installed_version,
-    availableVersion: row.available_version,
-    category: row.category,
-    status: row.status,
-    securityCritical: Boolean(row.security_critical),
-    lastCheckedAt: row.last_checked_at,
-    openUrl: row.open_url,
-    releaseNotesUrl: row.release_notes_url
-  };
-}
-
-function getHomeAssistantRow() {
-  return database.prepare("SELECT * FROM integration_settings WHERE id = ?").get(homeAssistantSourceId) as IntegrationRow | undefined;
-}
-
-function sourceFromRow(row?: IntegrationRow): UpdateSource {
-  return {
-    id: homeAssistantSourceId,
-    name: "Home Assistant",
-    configured: Boolean(row),
-    connected: Boolean(row && row.last_checked_at && !row.last_error),
-    lastCheckedAt: row?.last_checked_at ?? null,
-    lastError: row?.last_error ?? null
-  };
-}
-
-export function getHomeAssistantSettings(): HomeAssistantSettings {
-  const row = getHomeAssistantRow();
-  return {
-    configured: Boolean(row),
-    url: row?.base_url ?? null,
-    lastCheckedAt: row?.last_checked_at ?? null,
-    lastError: row?.last_error ?? null
-  };
-}
-
-function listStoredUpdates() {
-  return (database.prepare("SELECT * FROM update_records ORDER BY source_name, name").all() as UpdateRow[]).map(rowToUpdate);
-}
-
-export function getUpdateCenterSnapshot(): UpdateCenterSnapshot {
-  const updates = listStoredUpdates();
-  const available = updates.filter((update) => update.status === "available");
-  const row = getHomeAssistantRow();
-  const lastCheckedAt = updates.reduce<string | null>((latest, update) => !latest || update.lastCheckedAt > latest ? update.lastCheckedAt : latest, row?.last_checked_at ?? null);
-  return {
-    updates,
-    sources: [sourceFromRow(row)],
-    availableCount: available.length,
-    securityCriticalCount: available.filter((update) => update.securityCritical).length,
-    lastCheckedAt
-  };
-}
-
-async function fetchHomeAssistantStates(url: string, token: string) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), env.updateCheckTimeoutMs);
-  try {
-    const response = await fetch(`${url}/api/states`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-      signal: controller.signal
-    });
-    if (!response.ok) {
-      throw new Error(response.status === 401 ? "Home Assistant rejected the access token." : `Home Assistant returned HTTP ${response.status}.`);
+    const current = inventoryRow(agentId);
+    if (current && Date.parse(input.checkedAt) <= Date.parse(current.checked_at ?? "")) {
+      return false;
     }
-    const body = await response.json() as unknown;
-    if (!Array.isArray(body)) throw new Error("Home Assistant returned an unexpected response.");
-    return body as HomeAssistantState[];
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") throw new Error("Home Assistant connection timed out.");
-    throw error;
-  } finally {
-    clearTimeout(timeout);
+
+    const values = {
+      agentId,
+      schemaVersion: input.schemaVersion,
+      provider: input.provider,
+      supported: input.supported ? 1 : 0,
+      status: input.status,
+      checkedAt: input.checkedAt,
+      lastSuccessfulAt: input.lastSuccessfulAt,
+      updateCount: input.updateCount,
+      securityUpdateCount: input.securityUpdateCount,
+      rebootRequired: input.rebootRequired ? 1 : 0,
+      truncated: input.truncated ? 1 : 0,
+      osId: input.os.id,
+      osVersionId: input.os.versionId,
+      osPrettyName: input.os.prettyName,
+      updatedAt: nowIso()
+    };
+
+    if (input.status === "ok" || input.status === "unsupported") {
+      writeSuccessfulInventory.run(input.status === "unsupported"
+        ? {
+            ...values,
+            lastSuccessfulAt: null,
+            updateCount: 0,
+            securityUpdateCount: 0,
+            rebootRequired: 0,
+            truncated: 0
+          }
+        : values);
+      database.prepare("DELETE FROM agent_package_updates WHERE agent_id = ?").run(agentId);
+      if (input.status === "ok") {
+        for (const update of input.packages) {
+          insertPackage.run(
+            agentId,
+            update.name,
+            update.installedVersion,
+            update.candidateVersion,
+            update.security ? 1 : 0,
+            update.source,
+            input.lastSuccessfulAt
+          );
+        }
+      }
+      return true;
+    }
+
+    const lastError = safeStatusMessages[input.status] ?? "Operating-system updates could not be checked.";
+    if (current) {
+      database.prepare(`
+        UPDATE agent_update_inventories SET
+          schema_version = ?, provider = ?, supported = ?, status = ?, checked_at = ?,
+          os_id = ?, os_version_id = ?, os_pretty_name = ?, last_error = ?, updated_at = ?
+        WHERE agent_id = ?
+      `).run(
+        input.schemaVersion,
+        input.provider,
+        input.supported ? 1 : 0,
+        input.status,
+        input.checkedAt,
+        input.os.id,
+        input.os.versionId,
+        input.os.prettyName,
+        lastError,
+        values.updatedAt,
+        agentId
+      );
+    } else {
+      database.prepare(`
+        INSERT INTO agent_update_inventories (
+          agent_id, schema_version, provider, supported, status, checked_at, last_successful_at,
+          update_count, security_update_count, reboot_required, truncated, os_id, os_version_id,
+          os_pretty_name, last_error, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, 0, 0, 0, ?, ?, ?, ?, ?)
+      `).run(
+        agentId,
+        input.schemaVersion,
+        input.provider,
+        input.supported ? 1 : 0,
+        input.status,
+        input.checkedAt,
+        input.os.id,
+        input.os.versionId,
+        input.os.prettyName,
+        lastError,
+        values.updatedAt
+      );
+    }
+    return true;
+  })();
+
+  return { ok: true as const, accepted: recorded, receivedAt: nowIso() };
+}
+
+const inventorySelect = `
+  SELECT
+    agents.id AS agent_id,
+    agents.display_name,
+    agents.hostname,
+    agents.status AS agent_status,
+    agents.os_name AS agent_os_name,
+    agents.os_version AS agent_os_version,
+    agents.last_seen_at,
+    agents.revoked_at,
+    agent_update_inventories.schema_version,
+    agent_update_inventories.provider,
+    agent_update_inventories.supported,
+    agent_update_inventories.status,
+    agent_update_inventories.checked_at,
+    agent_update_inventories.last_successful_at,
+    agent_update_inventories.update_count,
+    agent_update_inventories.security_update_count,
+    agent_update_inventories.reboot_required,
+    agent_update_inventories.truncated,
+    agent_update_inventories.os_id,
+    agent_update_inventories.os_version_id,
+    agent_update_inventories.os_pretty_name,
+    agent_update_inventories.last_error
+  FROM agents
+  LEFT JOIN agent_update_inventories ON agent_update_inventories.agent_id = agents.id
+`;
+
+function rowToMachine(row: InventoryRow): MachineUpdateSummary {
+  const hasReport = row.checked_at !== null;
+  const hasSuccessfulInventory = row.last_successful_at !== null;
+  const fallbackPrettyName = [row.agent_os_name, row.agent_os_version].filter(Boolean).join(" ") || null;
+  return {
+    agentId: row.agent_id,
+    displayName: row.display_name,
+    hostname: row.hostname,
+    agentStatus: calculateAgentStatus(row.last_seen_at, row.revoked_at),
+    provider: hasReport ? row.provider : null,
+    supported: hasReport ? Boolean(row.supported) : null,
+    status: row.status ?? "waiting",
+    os: {
+      id: row.os_id,
+      versionId: row.os_version_id,
+      prettyName: row.os_pretty_name ?? fallbackPrettyName
+    },
+    updateCount: hasSuccessfulInventory ? row.update_count ?? 0 : null,
+    securityUpdateCount: hasSuccessfulInventory ? row.security_update_count ?? 0 : null,
+    rebootRequired: hasSuccessfulInventory ? Boolean(row.reboot_required) : null,
+    truncated: hasSuccessfulInventory && Boolean(row.truncated),
+    checkedAt: row.checked_at,
+    lastSuccessfulAt: row.last_successful_at,
+    lastError: row.last_error
+  };
+}
+
+function listMachineRows(search?: string) {
+  const normalizedSearch = search?.trim().slice(0, 120) ?? "";
+  if (!normalizedSearch) {
+    return database.prepare(`${inventorySelect}
+      WHERE agents.revoked_at IS NULL
+      ORDER BY agents.display_name COLLATE NOCASE
+    `).all() as InventoryRow[];
   }
-}
 
-async function connectionValues(input?: HomeAssistantSettingsInput) {
-  const row = getHomeAssistantRow();
-  const url = input?.url ? normalizeUrl(input.url) : row?.base_url;
-  const suppliedToken = input?.accessToken?.trim();
-  const token = suppliedToken || (row ? decryptSecret(row) : null);
-  if (!url) throw new Error("Enter the Home Assistant URL.");
-  if (!token) throw new Error("Enter a Home Assistant long-lived access token.");
-  return { url, token };
-}
-
-export async function testHomeAssistantConnection(input: HomeAssistantSettingsInput) {
-  const values = await connectionValues(input);
-  const states = await fetchHomeAssistantStates(values.url, values.token);
-  return { connected: true, updateEntities: states.filter((entry) => typeof entry.entity_id === "string" && entry.entity_id.startsWith("update.")).length };
-}
-
-export async function saveHomeAssistantSettings(input: HomeAssistantSettingsInput) {
-  const values = await connectionValues(input);
-  await fetchHomeAssistantStates(values.url, values.token);
-  const encrypted = encryptSecret(values.token);
-  const now = new Date().toISOString();
-  database.prepare(`
-    INSERT INTO integration_settings (id, base_url, encrypted_secret, secret_iv, secret_tag, last_checked_at, last_error, created_at, updated_at)
-    VALUES (@id, @baseUrl, @encrypted, @iv, @tag, @checkedAt, NULL, @createdAt, @updatedAt)
-    ON CONFLICT(id) DO UPDATE SET
-      base_url = excluded.base_url,
-      encrypted_secret = excluded.encrypted_secret,
-      secret_iv = excluded.secret_iv,
-      secret_tag = excluded.secret_tag,
-      last_checked_at = excluded.last_checked_at,
-      last_error = NULL,
-      updated_at = excluded.updated_at
-  `).run({ id: homeAssistantSourceId, baseUrl: values.url, ...encrypted, checkedAt: now, createdAt: now, updatedAt: now });
-  await refreshUpdates();
-  return getHomeAssistantSettings();
-}
-
-function replaceSourceUpdates(sourceId: string, updates: UpdateItem[]) {
-  const replace = database.transaction(() => {
-    database.prepare("DELETE FROM update_records WHERE source_id = ?").run(sourceId);
-    const insert = database.prepare(`
-      INSERT INTO update_records (
-        id, source_id, source_name, name, installed_version, available_version, category, status,
-        security_critical, last_checked_at, open_url, release_notes_url
-      ) VALUES (
-        @id, @sourceId, @sourceName, @name, @installedVersion, @availableVersion, @category, @status,
-        @securityCritical, @lastCheckedAt, @openUrl, @releaseNotesUrl
+  const escapedSearch = normalizedSearch.replace(/[\\%_]/g, "\\$&");
+  const pattern = `%${escapedSearch}%`;
+  return database.prepare(`${inventorySelect}
+    WHERE agents.revoked_at IS NULL AND (
+      agents.display_name LIKE ? ESCAPE '\\'
+      OR agents.hostname LIKE ? ESCAPE '\\'
+      OR COALESCE(agent_update_inventories.os_pretty_name, '') LIKE ? ESCAPE '\\'
+      OR EXISTS (
+        SELECT 1 FROM agent_package_updates
+        WHERE agent_package_updates.agent_id = agents.id
+          AND agent_package_updates.package_name LIKE ? ESCAPE '\\'
       )
-    `);
-    for (const update of updates) insert.run({ ...update, securityCritical: update.securityCritical ? 1 : 0 });
-  });
-  replace();
+    )
+    ORDER BY agents.display_name COLLATE NOCASE
+  `).all(pattern, pattern, pattern, pattern) as InventoryRow[];
 }
 
-export async function refreshUpdates(): Promise<UpdateCenterSnapshot> {
-  const row = getHomeAssistantRow();
-  if (!row) return getUpdateCenterSnapshot();
-  const checkedAt = new Date().toISOString();
-  try {
-    const states = await fetchHomeAssistantStates(row.base_url, decryptSecret(row));
-    replaceSourceUpdates(homeAssistantSourceId, normalizeHomeAssistantUpdates(states, row.base_url, checkedAt));
-    database.prepare("UPDATE integration_settings SET last_checked_at = ?, last_error = NULL, updated_at = ? WHERE id = ?").run(checkedAt, checkedAt, homeAssistantSourceId);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Home Assistant update check failed.";
-    database.prepare("UPDATE integration_settings SET last_checked_at = ?, last_error = ?, updated_at = ? WHERE id = ?").run(checkedAt, message, checkedAt, homeAssistantSourceId);
+function matchesStatus(machine: MachineUpdateSummary, status: UpdateMachineFilterStatus) {
+  switch (status) {
+    case "updates": return (machine.updateCount ?? 0) > 0;
+    case "security": return (machine.securityUpdateCount ?? 0) > 0;
+    case "up_to_date": return machine.status === "ok" && machine.updateCount === 0;
+    case "reboot": return machine.rebootRequired === true;
+    case "unsupported": return machine.status === "unsupported";
+    case "check_failed": return ["package_manager_busy", "metadata_refresh_failed", "check_failed"].includes(machine.status);
+    case "stale_offline": return machine.agentStatus === "stale" || machine.agentStatus === "offline";
+    default: return true;
   }
-  return getUpdateCenterSnapshot();
+}
+
+export function getUpdateCenterSnapshot(filters: UpdateMachineFilters = {}): UpdateCenterSnapshot {
+  const allMachines = listMachineRows().map(rowToMachine);
+  const currentMachines = allMachines.filter((machine) =>
+    machine.status === "ok" && machine.agentStatus === "online" && machine.lastSuccessfulAt !== null
+  );
+  const eligibleMachines = allMachines.filter((machine) => machine.status !== "unsupported");
+  const status = filters.status ?? "all";
+  const searchedMachines = filters.search ? listMachineRows(filters.search).map(rowToMachine) : allMachines;
+  const machines = status === "all" ? searchedMachines : searchedMachines.filter((machine) => matchesStatus(machine, status));
+  return {
+    machines,
+    availableCount: currentMachines.reduce((total, machine) => total + (machine.updateCount ?? 0), 0),
+    securityCriticalCount: currentMachines.reduce((total, machine) => total + (machine.securityUpdateCount ?? 0), 0),
+    reportingMachineCount: currentMachines.length,
+    totalMachineCount: eligibleMachines.length,
+    lastCheckedAt: currentMachines.reduce<string | null>((latest, machine) => {
+      if (!machine.lastSuccessfulAt) return latest;
+      return !latest || machine.lastSuccessfulAt > latest ? machine.lastSuccessfulAt : latest;
+    }, null)
+  };
+}
+
+export function getMachineUpdateDetail(agentId: string): MachineUpdateDetail | null {
+  const row = database.prepare(`${inventorySelect}
+    WHERE agents.id = ? AND agents.revoked_at IS NULL
+  `).get(agentId) as InventoryRow | undefined;
+  if (!row) return null;
+
+  const packages = row.last_successful_at
+    ? (database.prepare(`
+        SELECT package_name, installed_version, candidate_version, security, source
+        FROM agent_package_updates
+        WHERE agent_id = ?
+        ORDER BY security DESC, package_name COLLATE NOCASE
+      `).all(agentId) as PackageRow[]).map<MachineUpdatePackage>((update) => ({
+        name: update.package_name,
+        installedVersion: update.installed_version,
+        candidateVersion: update.candidate_version,
+        security: Boolean(update.security),
+        source: update.source
+      }))
+    : [];
+
+  return { ...rowToMachine(row), packages };
 }
 
 export function getUpdateAlerts() {
   const snapshot = getUpdateCenterSnapshot();
-  const available = snapshot.updates.filter((update) => update.status === "available");
-  if (available.length === 0) return [];
-  const checkedAt = snapshot.lastCheckedAt ?? new Date().toISOString();
-  const standardCount = available.length - snapshot.securityCriticalCount;
+  if (snapshot.availableCount === 0) return [];
+  const checkedAt = snapshot.lastCheckedAt ?? nowIso();
+  const standardCount = snapshot.availableCount - snapshot.securityCriticalCount;
   const alerts = [];
-  if (standardCount > 0) {
-    alerts.push({ count: standardCount, securityCritical: false, checkedAt });
-  }
+  if (standardCount > 0) alerts.push({ count: standardCount, securityCritical: false, checkedAt });
   if (snapshot.securityCriticalCount > 0) {
     alerts.push({ count: snapshot.securityCriticalCount, securityCritical: true, checkedAt });
   }
   return alerts;
-}
-
-let refreshTimer: NodeJS.Timeout | null = null;
-
-export function startUpdateRefreshScheduler() {
-  if (refreshTimer) return;
-  void refreshUpdates();
-  refreshTimer = setInterval(() => void refreshUpdates(), env.updateRefreshIntervalMinutes * 60 * 1000);
-  refreshTimer.unref();
 }

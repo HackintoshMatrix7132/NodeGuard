@@ -7,7 +7,8 @@ import {
   parseAgentHeartbeat,
   parseAgentInventory,
   parseAgentMetrics,
-  parseAgentRegistration
+  parseAgentRegistration,
+  parseAgentUpdates
 } from "../services/agentValidation.js";
 import {
   AgentServiceError,
@@ -18,6 +19,7 @@ import {
   recordAgentMetrics,
   registerAgent
 } from "../services/agentService.js";
+import { recordAgentUpdates } from "../services/updateService.js";
 
 export const agentIngestRouter = Router();
 
@@ -83,6 +85,14 @@ agentIngestRouter.post("/metrics", (request, response, next) => {
 agentIngestRouter.post("/docker", (request, response, next) => {
   try {
     response.json(recordAgentDocker(agentId(response), parseAgentDocker(request.body)));
+  } catch (error) {
+    if (!sendAgentError(error, response)) next(error);
+  }
+});
+
+agentIngestRouter.post("/updates", (request, response, next) => {
+  try {
+    response.json(recordAgentUpdates(agentId(response), parseAgentUpdates(request.body)));
   } catch (error) {
     if (!sendAgentError(error, response)) next(error);
   }

@@ -8,6 +8,7 @@ process.env.AGENT_OFFLINE_AFTER_SECONDS = "180";
 const agentService = await import("./agentService.js");
 const { getDatabase } = await import("./database.js");
 const { getMetricHistory } = await import("./metricHistoryService.js");
+const { recordAgentUpdates } = await import("./updateService.js");
 
 function registration(token: string, hostname = "test-host") {
   return agentService.registerAgent({
@@ -129,6 +130,20 @@ test("agent enrollment, ingestion, rotation, and revocation lifecycle", async (c
         memoryLimitBytes: 512 * 1024 ** 2
       }]
     });
+    recordAgentUpdates(agentId, {
+      schemaVersion: 1,
+      provider: "apt",
+      supported: true,
+      status: "ok",
+      os: { id: "ubuntu", versionId: "24.04", prettyName: "Ubuntu 24.04 LTS" },
+      checkedAt: timestamp,
+      lastSuccessfulAt: timestamp,
+      updateCount: 1,
+      securityUpdateCount: 1,
+      rebootRequired: false,
+      truncated: false,
+      packages: [{ name: "openssl", installedVersion: "1", candidateVersion: "2", security: true, source: "noble-security" }]
+    });
 
     const detail = agentService.getAgent(agentId);
     assert.equal(detail?.hostname, "docker-main");
@@ -181,7 +196,7 @@ test("agent enrollment, ingestion, rotation, and revocation lifecycle", async (c
     assert.deepEqual(agentService.deleteAgent(agentId), { deleted: true });
     assert.equal(agentService.getAgent(agentId), null);
     assert.equal(agentService.authenticateAgent(agentId, credential), null);
-    for (const table of ["agent_metrics", "agent_containers", "agent_enrollment_tokens"]) {
+    for (const table of ["agent_metrics", "agent_containers", "agent_enrollment_tokens", "agent_update_inventories", "agent_package_updates"]) {
       const row = getDatabase().prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE agent_id = ?`).get(agentId) as { count: number };
       assert.equal(row.count, 0, `${table} should be deleted`);
     }

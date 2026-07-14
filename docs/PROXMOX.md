@@ -10,7 +10,7 @@ NodeGuard does not start, stop, restart, migrate, back up, update, or otherwise 
 - A dedicated Proxmox API token
 - At least the built-in `PVEAuditor` role at `/`
 - The Proxmox certificate authority when the endpoint uses a private or self-signed certificate
-- A configured `NODEGUARD_INTEGRATION_ENCRYPTION_KEY` on the NodeGuard backend
+- A configured `NODEGUARD_INTEGRATION_SECRET` (or dedicated `NODEGUARD_INTEGRATION_ENCRYPTION_KEY`) on the NodeGuard backend
 
 ## Create a read-only API token
 
@@ -96,10 +96,12 @@ Optional updates and stopped guests do not affect the overall infrastructure hea
 - Mutating integration routes require an authenticated NodeGuard owner.
 - Demo Mode is isolated from real Proxmox connections and uses fictional data only.
 
-Set a stable encryption key in the backend environment before saving integrations:
+Set the stable integration secret in the backend environment before saving integrations. A dedicated Proxmox encryption key may override it when required by your secret-management policy:
 
 ```env
-NODEGUARD_INTEGRATION_ENCRYPTION_KEY=replace_with_a_long_random_secret
+NODEGUARD_INTEGRATION_SECRET=replace_with_at_least_32_random_bytes
+# Optional override:
+# NODEGUARD_INTEGRATION_ENCRYPTION_KEY=replace_with_a_long_random_secret
 ```
 
 Changing this key after credentials have been stored prevents NodeGuard from decrypting the saved secrets. Back up the key using the same secret-management process as the rest of the NodeGuard deployment.
@@ -109,12 +111,14 @@ Changing this key after credentials have been stored prevents NodeGuard from dec
 The following backend environment variables are optional:
 
 ```env
-NODEGUARD_PROXMOX_SYNC_INTERVAL_SECONDS=300
+NODEGUARD_PROXMOX_SYNC_INTERVAL_SECONDS=30
 NODEGUARD_PROXMOX_FAILURE_THRESHOLD=3
 NODEGUARD_PROXMOX_STORAGE_WARNING_PERCENT=80
 NODEGUARD_PROXMOX_STORAGE_CRITICAL_PERCENT=90
 NODEGUARD_PROXMOX_REQUEST_TIMEOUT_MS=10000
 ```
+
+The sync interval defaults to 30 seconds and values below 30 seconds are clamped to that minimum. The three-failure default marks a continuously unavailable connection after approximately 90 seconds.
 
 Warning and critical percentages must reflect the storage policy for your environment. The request timeout should remain long enough for the Proxmox cluster resource endpoint to respond under load.
 
@@ -140,7 +144,7 @@ Demo sessions may read fictional Proxmox data but cannot call connection-managem
 
 ### Authentication fails with HTTP 401
 
-- Confirm the token ID includes both the realm and token name, such as `nodeguard@pve!nodeguard`.
+- Confirm **Token user** contains the realm (for example `nodeguard@pve`) and **Token ID** contains only the token name (for example `nodeguard`).
 - Confirm the token secret was copied exactly.
 - Confirm the token has not been removed or expired.
 - Confirm the user and token have `PVEAuditor` access at the required path.

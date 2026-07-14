@@ -13,9 +13,12 @@ import (
 
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/config"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/model"
+	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/version"
 )
 
-const userAgent = "NodeGuard-Agent/0.1.0"
+const maxRequestBodyBytes = 480 * 1024
+
+var ErrRequestBodyTooLarge = errors.New("agent request body exceeds the safe limit")
 
 type APIError struct {
 	StatusCode int
@@ -72,6 +75,9 @@ func (client *Client) doJSON(ctx context.Context, method string, path string, pa
 		if err != nil {
 			return fmt.Errorf("encode request: %w", err)
 		}
+		if len(encoded) > maxRequestBodyBytes {
+			return ErrRequestBodyTooLarge
+		}
 		body = bytes.NewReader(encoded)
 	}
 	request, err := http.NewRequestWithContext(ctx, method, client.serverURL+path, body)
@@ -79,7 +85,7 @@ func (client *Client) doJSON(ctx context.Context, method string, path string, pa
 		return fmt.Errorf("create request: %w", err)
 	}
 	request.Header.Set("Accept", "application/json")
-	request.Header.Set("User-Agent", userAgent)
+	request.Header.Set("User-Agent", "NodeGuard-Agent/"+version.Version)
 	if payload != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}

@@ -76,6 +76,28 @@ export function normalizeProxmoxBaseUrl(value: string): string {
   return parsed.toString().replace(/\/$/, "");
 }
 
+export function normalizeProxmoxTransportError(error: Error & { code?: string }): Error {
+  if (
+    error.message === "Proxmox response exceeded the allowed size."
+    || error.message === "Proxmox API request timed out."
+  ) {
+    return error;
+  }
+
+  const tlsCodes = new Set([
+    "CERT_HAS_EXPIRED",
+    "DEPTH_ZERO_SELF_SIGNED_CERT",
+    "ERR_TLS_CERT_ALTNAME_INVALID",
+    "SELF_SIGNED_CERT_IN_CHAIN",
+    "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  ]);
+  if (error.code && tlsCodes.has(error.code)) {
+    return new Error("Unable to verify the Proxmox TLS certificate. Check the API URL and custom CA certificate.");
+  }
+
+  return new Error("Unable to reach the Proxmox API. Check the URL, network access, and TLS configuration.");
+}
+
 function requestJson(credentials: ProxmoxCredentials, path: string): Promise<unknown> {
   const baseUrl = normalizeProxmoxBaseUrl(credentials.baseUrl);
   const endpoint = new URL(`${baseUrl}/api2/json${path}`);
@@ -126,7 +148,7 @@ function requestJson(credentials: ProxmoxCredentials, path: string): Promise<unk
     );
 
     request.setTimeout(timeoutMs, () => request.destroy(new Error("Proxmox API request timed out.")));
-    request.on("error", (error) => reject(error));
+    request.on("error", (error) => reject(normalizeProxmoxTransportError(error)));
     request.end();
   });
 }

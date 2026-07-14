@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { env } from "../config/env.js";
 import type { Alert } from "../types/nodeguard.js";
 import { createAlert } from "./alertService.js";
 import { getDatabase } from "./database.js";
@@ -16,6 +17,20 @@ import {
 const db = getDatabase();
 const activeSyncs = new Set<string>();
 let scheduler: NodeJS.Timeout | null = null;
+
+export async function runWithProxmoxSyncLock(
+  id: string,
+  task: () => Promise<void>,
+): Promise<boolean> {
+  if (activeSyncs.has(id)) return false;
+  activeSyncs.add(id);
+  try {
+    await task();
+    return true;
+  } finally {
+    activeSyncs.delete(id);
+  }
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS proxmox_connections (
@@ -134,12 +149,7 @@ function failureThreshold(): number {
 }
 
 function syncIntervalMs(): number {
-  return (
-    Math.max(
-      30,
-      Number(process.env.NODEGUARD_PROXMOX_SYNC_INTERVAL_SECONDS ?? 300),
-    ) * 1000
-  );
+  return env.proxmoxSyncIntervalSeconds * 1000;
 }
 
 function storageWarningThreshold(): number {
@@ -160,6 +170,36 @@ function storageCriticalThreshold(): number {
       Number(process.env.NODEGUARD_PROXMOX_STORAGE_CRITICAL_PERCENT ?? 90),
     ),
   );
+}
+
+export function summarizeProxmoxStorage(
+  storage: ReadonlyArray<{ status: unknown; utilization: unknown }>,
+) {
+  const warningThreshold = storageWarningThreshold();
+  const criticalThreshold = storageCriticalThreshold();
+  let storageWarnings = 0;
+  let storageCritical = 0;
+  let storageUnavailable = 0;
+
+  for (const item of storage) {
+    if (item.status === "unavailable" || item.status === "offline") {
+      storageUnavailable += 1;
+      continue;
+    }
+
+    const percent =
+      typeof item.utilization === "number" &&
+      Number.isFinite(item.utilization)
+        ? item.utilization * 100
+        : null;
+    if (percent !== null && percent >= criticalThreshold) {
+      storageCritical += 1;
+    } else if (percent !== null && percent >= warningThreshold) {
+      storageWarnings += 1;
+    }
+  }
+
+  return { storageWarnings, storageCritical, storageUnavailable };
 }
 
 function validateInput(
@@ -262,7 +302,15 @@ export function listProxmoxConnections() {
     db
       .prepare("SELECT * FROM proxmox_connections ORDER BY name COLLATE NOCASE")
       .all() as ConnectionRow[]
-  ).map(publicConnection);
+  ).map((row) => {
+    const inventory = rowsForConnection(row.id);
+    return {
+      ...publicConnection(row),
+      nodeCount: inventory.nodes.length,
+      guestCount: inventory.guests.length,
+      storageCount: inventory.storage.length,
+    };
+  });
 }
 
 function storeSnapshot(
@@ -502,18 +550,16 @@ export function deleteProxmoxConnection(id: string): boolean {
 }
 
 export async function syncProxmoxConnection(id: string): Promise<void> {
-  if (activeSyncs.has(id)) return;
   const row = getConnectionRow(id);
   if (!row || !row.enabled) return;
-  activeSyncs.add(id);
-  try {
-    storeSnapshot(id, await collectProxmoxSnapshot(credentials(row)));
-  } catch (error) {
-    recordFailure(id, error);
-    throw error;
-  } finally {
-    activeSyncs.delete(id);
-  }
+  await runWithProxmoxSyncLock(id, async () => {
+    try {
+      storeSnapshot(id, await collectProxmoxSnapshot(credentials(row)));
+    } catch (error) {
+      recordFailure(id, error);
+      throw error;
+    }
+  });
 }
 
 export async function syncAllProxmoxConnections(): Promise<void> {
@@ -588,9 +634,23 @@ export function getProxmoxSnapshot() {
     ...rowsForConnection(row.id),
   }));
   const enabled = connections.filter((connection) => connection.enabled);
-  const nodes = enabled.flatMap((connection) => connection.nodes);
-  const guests = enabled.flatMap((connection) => connection.guests);
-  const storage = enabled.flatMap((connection) => connection.storage);
+  let nodesOnline = 0;
+  let nodesTotal = 0;
+  let guestsRunning = 0;
+  let guestsTotal = 0;
+  const storage: Array<{ status: unknown; utilization: unknown }> = [];
+  for (const connection of enabled) {
+    for (const node of connection.nodes) {
+      nodesTotal += 1;
+      if (node.status === "online") nodesOnline += 1;
+    }
+    for (const guest of connection.guests) {
+      guestsTotal += 1;
+      if (guest.status === "running") guestsRunning += 1;
+    }
+    storage.push(...connection.storage);
+  }
+  const storageIssues = summarizeProxmoxStorage(storage);
   return {
     configured: rows.length > 0,
     enabledCount: enabled.length,
@@ -605,14 +665,15 @@ export function getProxmoxSnapshot() {
       connectionsAvailable: enabled.filter(
         (item) => item.status === "available",
       ).length,
-      nodesOnline: nodes.filter((item) => item.status === "online").length,
-      nodesTotal: nodes.length,
-      guestsRunning: guests.filter((item) => item.status === "running").length,
-      guestsTotal: guests.length,
+      nodesOnline,
+      nodesTotal,
+      guestsRunning,
+      guestsTotal,
       storageHealthy: storage.filter(
         (item) => item.status !== "unavailable" && item.status !== "offline",
       ).length,
       storageTotal: storage.length,
+      ...storageIssues,
     },
     connections,
   };
@@ -730,21 +791,7 @@ export function getProxmoxAlerts(): Alert[] {
 
 export function getDemoProxmoxSnapshot() {
   const checkedAt = new Date().toISOString();
-  return {
-    configured: true,
-    enabledCount: 2,
-    lastCheckedAt: checkedAt,
-    summary: {
-      connections: 2,
-      connectionsAvailable: 1,
-      nodesOnline: 3,
-      nodesTotal: 4,
-      guestsRunning: 8,
-      guestsTotal: 11,
-      storageHealthy: 5,
-      storageTotal: 6,
-    },
-    connections: [
+  const connections = [
       {
         id: "demo-pve-main",
         name: "Primary cluster",
@@ -944,12 +991,56 @@ export function getDemoProxmoxSnapshot() {
           },
         ],
       },
-    ],
+    ];
+  const enabled = connections.filter((connection) => connection.enabled);
+  let nodesOnline = 0;
+  let nodesTotal = 0;
+  let guestsRunning = 0;
+  let guestsTotal = 0;
+  const storage: Array<{ status: unknown; utilization: unknown }> = [];
+  for (const connection of enabled) {
+    for (const node of connection.nodes) {
+      nodesTotal += 1;
+      if (node.status === "online") nodesOnline += 1;
+    }
+    for (const guest of connection.guests) {
+      guestsTotal += 1;
+      if (guest.status === "running") guestsRunning += 1;
+    }
+    storage.push(...connection.storage);
+  }
+
+  return {
+    configured: true,
+    demoMode: true,
+    enabledCount: enabled.length,
+    lastCheckedAt: checkedAt,
+    summary: {
+      connections: enabled.length,
+      connectionsAvailable: enabled.filter(
+        (connection) => connection.status === "available",
+      ).length,
+      nodesOnline,
+      nodesTotal,
+      guestsRunning,
+      guestsTotal,
+      storageHealthy: storage.filter(
+        (item) => item.status !== "unavailable" && item.status !== "offline",
+      ).length,
+      storageTotal: storage.length,
+      ...summarizeProxmoxStorage(storage),
+    },
+    connections,
   };
 }
 
 export function startProxmoxSyncScheduler(): void {
   if (scheduler) return;
+  console.log(
+    "Proxmox sync scheduler started with a " +
+      env.proxmoxSyncIntervalSeconds +
+      "s interval.",
+  );
   void syncAllProxmoxConnections();
   scheduler = setInterval(
     () => void syncAllProxmoxConnections(),

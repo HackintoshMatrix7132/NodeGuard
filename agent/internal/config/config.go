@@ -11,7 +11,11 @@ import (
 	"strings"
 )
 
-const DefaultPath = "/etc/nodeguard-agent/config.json"
+const (
+	DefaultPath                  = "/etc/nodeguard-agent/config.json"
+	DefaultUpdateIntervalSeconds = 6 * 60 * 60
+	MinimumUpdateIntervalSeconds = 15 * 60
+)
 
 type Config struct {
 	ServerURL                string `json:"serverUrl"`
@@ -22,7 +26,15 @@ type Config struct {
 	MetricsIntervalSeconds   int    `json:"metricsIntervalSeconds"`
 	DockerIntervalSeconds    int    `json:"dockerIntervalSeconds"`
 	InventoryIntervalSeconds int    `json:"inventoryIntervalSeconds"`
+	UpdateIntervalSeconds    int    `json:"updateIntervalSeconds"`
 	DockerEnabled            bool   `json:"dockerEnabled"`
+}
+
+func WithDefaults(cfg Config) Config {
+	if cfg.UpdateIntervalSeconds == 0 {
+		cfg.UpdateIntervalSeconds = DefaultUpdateIntervalSeconds
+	}
+	return cfg
 }
 
 func ValidateServerURL(raw string) (string, error) {
@@ -49,7 +61,8 @@ func (cfg Config) Validate() error {
 	if cfg.AgentID == "" || cfg.Credential == "" {
 		return errors.New("agent is not registered")
 	}
-	if cfg.HeartbeatIntervalSeconds < 10 || cfg.MetricsIntervalSeconds < 15 || cfg.DockerIntervalSeconds < 30 || cfg.InventoryIntervalSeconds < 300 {
+	if cfg.HeartbeatIntervalSeconds < 10 || cfg.MetricsIntervalSeconds < 15 || cfg.DockerIntervalSeconds < 30 ||
+		cfg.InventoryIntervalSeconds < 300 || cfg.UpdateIntervalSeconds < MinimumUpdateIntervalSeconds {
 		return errors.New("configuration contains unsafe collection intervals")
 	}
 	return nil
@@ -64,6 +77,7 @@ func Load(path string) (Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parse configuration: %w", err)
 	}
+	cfg = WithDefaults(cfg)
 	if err := cfg.Validate(); err != nil {
 		return Config{}, fmt.Errorf("validate configuration: %w", err)
 	}
@@ -71,6 +85,7 @@ func Load(path string) (Config, error) {
 }
 
 func Save(path string, cfg Config) error {
+	cfg = WithDefaults(cfg)
 	if err := cfg.Validate(); err != nil {
 		return err
 	}

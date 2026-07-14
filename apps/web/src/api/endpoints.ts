@@ -1,4 +1,4 @@
-import type { AgentDetail, AgentEnrollmentProgress, AgentEnrollmentToken, AgentSummary, Alert, AuthSession, Container, CreateAgentEnrollmentInput, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, CreatedAgentEnrollmentToken, DockerSnapshot, DomainCheck, HomeAssistantSettings, HomeAssistantSettingsInput, LoginInput, MetricHistory, MetricHistoryRange, MetricSnapshot, MonitoredServerStatus, Overview, ServerListItem, Server, UpdateCenterSnapshot } from "../types/nodeguard";
+import type { AgentDetail, AgentEnrollmentProgress, AgentEnrollmentToken, AgentSummary, Alert, AuthSession, Container, CreateAgentEnrollmentInput, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, CreatedAgentEnrollmentToken, DockerSnapshot, DomainCheck, LoginInput, MachineUpdateDetail, MetricHistory, MetricHistoryRange, MetricSnapshot, MonitoredServerStatus, Overview, ServerListItem, Server, UpdateCenterSnapshot } from "../types/nodeguard";
 import type { ApiConfig } from "./client";
 import { apiFetch } from "./client";
 
@@ -171,28 +171,14 @@ export function runChecks(config: ApiConfig) {
   return apiFetch<Overview>(config, "/api/checks/run", { method: "POST" });
 }
 
-export function getUpdates(config: ApiConfig) {
-  return apiFetch<UpdateCenterSnapshot>(config, "/api/updates");
+export function getUpdates(config: ApiConfig, search = "", status = "all") {
+  const params = new URLSearchParams();
+  if (search.trim()) params.set("search", search.trim());
+  if (status !== "all") params.set("status", status);
+  const query = params.size ? `?${params.toString()}` : "";
+  return apiFetch<UpdateCenterSnapshot>(config, `/api/updates${query}`);
 }
 
-export function refreshUpdates(config: ApiConfig) {
-  return apiFetch<UpdateCenterSnapshot>(config, "/api/updates/refresh", { method: "POST" });
-}
-
-export function getHomeAssistantSettings(config: ApiConfig) {
-  return apiFetch<HomeAssistantSettings>(config, "/api/updates/settings/home-assistant");
-}
-
-export function saveHomeAssistantSettings(config: ApiConfig, input: HomeAssistantSettingsInput) {
-  return apiFetch<HomeAssistantSettings>(config, "/api/updates/settings/home-assistant", {
-    method: "PUT",
-    body: JSON.stringify(input)
-  });
-}
-
-export function testHomeAssistantConnection(config: ApiConfig, input: HomeAssistantSettingsInput) {
-  return apiFetch<{ connected: boolean; updateEntities: number }>(config, "/api/updates/settings/home-assistant/test", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+export function getMachineUpdates(config: ApiConfig, agentId: string) {
+  return apiFetch<MachineUpdateDetail>(config, `/api/updates/machines/${encodeURIComponent(agentId)}`);
 }

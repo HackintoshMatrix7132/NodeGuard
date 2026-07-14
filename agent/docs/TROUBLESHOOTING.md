@@ -4,7 +4,7 @@
 
 - **Invalid or expired enrollment token:** Generate a new token in **Agents → Add Agent**. Tokens are short-lived and single-use.
 - **Checksum mismatch:** Do not run the downloaded binary. Retry from a trusted network and confirm the NodeGuard deployment exposes the expected release.
-- **Unsupported architecture:** v0.1 supports Linux `amd64` and `arm64` only.
+- **Unsupported architecture:** v0.2 supports Linux `amd64` and `arm64` only.
 - **systemd missing:** Use the manual guide and an equivalent supervised service only if you understand the host's init system.
 - **Connection timeout:** Check DNS, HTTPS certificate trust, system time, and outbound TCP 443 access.
 
@@ -24,6 +24,14 @@ The service should be enabled and active. A valid configuration exists at `/etc/
 ## Docker unavailable
 
 Host monitoring continues when Docker is unavailable. Confirm Docker is running and `/var/run/docker.sock` exists. Docker socket access is highly privileged; do not loosen socket permissions merely to silence the warning.
+
+## Update discovery delayed
+
+- **Package manager busy:** Allow the current APT/dpkg operation to finish. NodeGuard never kills the process and retries automatically.
+- **Metadata refresh failed:** Check repository configuration, DNS, proxy settings, and outbound repository access. Raw repository errors are intentionally not sent to NodeGuard; use the local APT tools for detailed diagnosis.
+- **Unsupported:** Update discovery currently supports Debian, Ubuntu, Debian-derived systems, and Proxmox VE with APT available.
+
+The Agent may refresh local APT package indexes, but it never installs updates or reboots the machine.
 
 ## Reinstall
 

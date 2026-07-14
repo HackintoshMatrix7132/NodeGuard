@@ -27,3 +27,16 @@ func TestQueueDropsExpiredItems(t *testing.T) {
 		t.Fatal("expired report remained in queue")
 	}
 }
+
+func TestQueueCoalescesUpdateInventories(t *testing.T) {
+	buffer := New(10, time.Minute)
+	buffer.Add(Item{Path: "/api/agent/updates", Payload: 1, CreatedAt: time.Now()})
+	buffer.Add(Item{Path: "/api/agent/updates", Payload: 2, CreatedAt: time.Now()})
+	if buffer.Len() != 1 {
+		t.Fatalf("update inventory queue length = %d, want 1", buffer.Len())
+	}
+	item, ok := buffer.Peek()
+	if !ok || item.Payload != 2 {
+		t.Fatal("newest update inventory did not replace the older snapshot")
+	}
+}

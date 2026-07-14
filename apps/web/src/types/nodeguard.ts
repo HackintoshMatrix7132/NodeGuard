@@ -84,51 +84,50 @@ export type CreateAgentEnrollmentInput = {
   displayName?: string;
 };
 
-export type UpdateCategory = "core" | "add-on" | "integration" | "application" | "firmware" | "system" | "container" | "other";
-export type UpdateStatus = "available" | "up_to_date" | "installing" | "unknown";
+export type UpdateCheckStatus = "waiting" | "ok" | "unsupported" | "package_manager_busy" | "metadata_refresh_failed" | "check_failed";
 
-export type UpdateItem = {
-  id: string;
-  sourceId: string;
-  sourceName: string;
+export type MachinePackageUpdate = {
   name: string;
-  installedVersion: string | null;
-  availableVersion: string | null;
-  category: UpdateCategory;
-  status: UpdateStatus;
-  securityCritical: boolean;
-  lastCheckedAt: string;
-  openUrl: string | null;
-  releaseNotesUrl: string | null;
+  installedVersion: string;
+  candidateVersion: string;
+  security: boolean;
+  source: string | null;
 };
 
-export type UpdateSource = {
-  id: string;
-  name: string;
-  configured: boolean;
-  connected: boolean;
-  lastCheckedAt: string | null;
+export type MachineUpdateSummary = {
+  agentId: string;
+  displayName: string;
+  hostname: string;
+  agentStatus: AgentStatus;
+  provider: "apt" | null;
+  supported: boolean | null;
+  status: UpdateCheckStatus;
+  os: {
+    id: string | null;
+    versionId: string | null;
+    prettyName: string | null;
+  };
+  checkedAt: string | null;
+  lastSuccessfulAt: string | null;
+  updateCount: number | null;
+  securityUpdateCount: number | null;
+  rebootRequired: boolean | null;
+  truncated: boolean;
   lastError: string | null;
+  packages?: MachinePackageUpdate[];
+};
+
+export type MachineUpdateDetail = MachineUpdateSummary & {
+  packages: MachinePackageUpdate[];
 };
 
 export type UpdateCenterSnapshot = {
-  updates: UpdateItem[];
-  sources: UpdateSource[];
   availableCount: number;
   securityCriticalCount: number;
+  reportingMachineCount: number;
+  totalMachineCount: number;
   lastCheckedAt: string | null;
-};
-
-export type HomeAssistantSettings = {
-  configured: boolean;
-  url: string | null;
-  lastCheckedAt: string | null;
-  lastError: string | null;
-};
-
-export type HomeAssistantSettingsInput = {
-  url: string;
-  accessToken?: string;
+  machines: MachineUpdateSummary[];
 };
 
 export type Overview = {

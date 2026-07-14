@@ -77,7 +77,8 @@ func register(args []string) error {
 		ServerURL: normalizedURL, AgentID: response.AgentID, Credential: response.Credential,
 		DisplayName: response.DisplayName, HeartbeatIntervalSeconds: response.HeartbeatIntervalSeconds,
 		MetricsIntervalSeconds: response.MetricsIntervalSeconds, DockerIntervalSeconds: response.DockerIntervalSeconds,
-		InventoryIntervalSeconds: response.InventoryIntervalSeconds, DockerEnabled: *dockerEnabled,
+		InventoryIntervalSeconds: response.InventoryIntervalSeconds, UpdateIntervalSeconds: response.UpdateIntervalSeconds,
+		DockerEnabled: *dockerEnabled,
 	}
 	if err := config.Save(*configPath, cfg); err != nil {
 		return fmt.Errorf("save registration: %w", err)

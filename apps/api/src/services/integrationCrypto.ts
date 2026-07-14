@@ -10,11 +10,12 @@ function getEncryptionKey(): Buffer {
   const source =
     process.env.NODEGUARD_INTEGRATION_ENCRYPTION_KEY ??
     process.env.NODEGUARD_SESSION_SECRET ??
-    process.env.NODEGUARD_AUTH_SECRET;
+    process.env.NODEGUARD_AUTH_SECRET ??
+    process.env.NODEGUARD_INTEGRATION_SECRET;
 
   if (!source || source.length < 24) {
     throw new Error(
-      "A strong NODEGUARD_INTEGRATION_ENCRYPTION_KEY is required for integration credentials."
+      "A strong NodeGuard integration encryption secret is required for integration credentials."
     );
   }
 

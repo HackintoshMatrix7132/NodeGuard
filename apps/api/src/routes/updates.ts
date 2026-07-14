@@ -1,48 +1,42 @@
 import { Router } from "express";
 
-import { getMonitoringSnapshot } from "../services/snapshotService.js";
-import { getHomeAssistantSettings, getUpdateCenterSnapshot, refreshUpdates, saveHomeAssistantSettings, testHomeAssistantConnection } from "../services/updateService.js";
+import { requireOwner } from "../middleware/auth.js";
+import { getMachineUpdateDetail, getUpdateCenterSnapshot, type UpdateMachineFilterStatus } from "../services/updateService.js";
 
 export const updatesRouter = Router();
 
-updatesRouter.get("/", (_request, response) => {
-  response.json(getUpdateCenterSnapshot());
+updatesRouter.use(requireOwner);
+
+const updateStatuses = new Set<UpdateMachineFilterStatus>([
+  "all",
+  "updates",
+  "security",
+  "up_to_date",
+  "reboot",
+  "unsupported",
+  "check_failed",
+  "stale_offline"
+]);
+
+updatesRouter.get("/", (request, response) => {
+  response.setHeader("Cache-Control", "no-store");
+  const search = typeof request.query.search === "string" ? request.query.search : undefined;
+  const requestedStatus = typeof request.query.status === "string" ? request.query.status : "all";
+  const status = updateStatuses.has(requestedStatus as UpdateMachineFilterStatus)
+    ? requestedStatus as UpdateMachineFilterStatus
+    : "all";
+  response.json(getUpdateCenterSnapshot({ search, status }));
 });
 
-updatesRouter.post("/refresh", async (_request, response, next) => {
-  try {
-    const snapshot = await refreshUpdates();
-    await getMonitoringSnapshot();
-    response.json(snapshot);
-  } catch (error) {
-    next(error);
-  }
-});
-
-updatesRouter.get("/settings/home-assistant", (_request, response) => {
-  response.json(getHomeAssistantSettings());
-});
-
-updatesRouter.post("/settings/home-assistant/test", async (request, response) => {
-  try {
-    response.json(await testHomeAssistantConnection(request.body));
-  } catch (error) {
-    response.status(400).json({
-      error: "home_assistant_connection_failed",
-      message: error instanceof Error ? error.message : "Home Assistant connection failed."
+updatesRouter.get("/machines/:agentId", (request, response) => {
+  response.setHeader("Cache-Control", "no-store");
+  const machine = getMachineUpdateDetail(request.params.agentId);
+  if (!machine) {
+    response.status(404).json({
+      error: "agent_not_found",
+      message: "Agent update inventory not found."
     });
+    return;
   }
-});
-
-updatesRouter.put("/settings/home-assistant", async (request, response) => {
-  try {
-    const settings = await saveHomeAssistantSettings(request.body);
-    await getMonitoringSnapshot();
-    response.json(settings);
-  } catch (error) {
-    response.status(400).json({
-      error: "invalid_home_assistant_settings",
-      message: error instanceof Error ? error.message : "Home Assistant settings could not be saved."
-    });
-  }
+  response.json(machine);
 });

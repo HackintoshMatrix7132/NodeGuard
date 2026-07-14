@@ -130,31 +130,9 @@ database.exec(`
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
-  CREATE TABLE IF NOT EXISTS integration_settings (
-    id TEXT PRIMARY KEY,
-    base_url TEXT NOT NULL,
-    encrypted_secret TEXT NOT NULL,
-    secret_iv TEXT NOT NULL,
-    secret_tag TEXT NOT NULL,
-    last_checked_at TEXT,
-    last_error TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS update_records (
-    id TEXT PRIMARY KEY,
-    source_id TEXT NOT NULL,
-    source_name TEXT NOT NULL,
-    name TEXT NOT NULL,
-    installed_version TEXT,
-    available_version TEXT,
-    category TEXT NOT NULL,
-    status TEXT NOT NULL,
-    security_critical INTEGER NOT NULL DEFAULT 0,
-    last_checked_at TEXT NOT NULL,
-    open_url TEXT,
-    release_notes_url TEXT
+  CREATE TABLE IF NOT EXISTS schema_migrations (
+    name TEXT PRIMARY KEY,
+    applied_at TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS agents (
@@ -251,25 +229,84 @@ database.exec(`
     FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS agent_update_inventories (
+    agent_id TEXT PRIMARY KEY,
+    schema_version INTEGER NOT NULL CHECK(schema_version = 1),
+    provider TEXT NOT NULL CHECK(provider = 'apt'),
+    supported INTEGER NOT NULL CHECK(supported IN (0, 1)),
+    status TEXT NOT NULL CHECK(status IN ('ok', 'unsupported', 'package_manager_busy', 'metadata_refresh_failed', 'check_failed')),
+    checked_at TEXT NOT NULL,
+    last_successful_at TEXT,
+    update_count INTEGER NOT NULL DEFAULT 0 CHECK(update_count >= 0),
+    security_update_count INTEGER NOT NULL DEFAULT 0 CHECK(security_update_count >= 0 AND security_update_count <= update_count),
+    reboot_required INTEGER NOT NULL DEFAULT 0 CHECK(reboot_required IN (0, 1)),
+    truncated INTEGER NOT NULL DEFAULT 0 CHECK(truncated IN (0, 1)),
+    os_id TEXT,
+    os_version_id TEXT,
+    os_pretty_name TEXT,
+    last_error TEXT,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS agent_package_updates (
+    agent_id TEXT NOT NULL,
+    package_name TEXT NOT NULL,
+    installed_version TEXT NOT NULL,
+    candidate_version TEXT NOT NULL,
+    security INTEGER NOT NULL DEFAULT 0 CHECK(security IN (0, 1)),
+    source TEXT,
+    inventory_checked_at TEXT NOT NULL,
+    PRIMARY KEY(agent_id, package_name),
+    FOREIGN KEY(agent_id) REFERENCES agent_update_inventories(agent_id) ON DELETE CASCADE
+  );
+
   CREATE INDEX IF NOT EXISTS idx_alert_history_status ON alert_history(status);
   CREATE INDEX IF NOT EXISTS idx_alert_history_last_seen ON alert_history(last_seen_at);
   CREATE INDEX IF NOT EXISTS idx_domain_check_history_domain_time ON domain_check_history(domain_id, checked_at DESC);
   CREATE INDEX IF NOT EXISTS idx_metric_history_server_time ON metric_history(server_id, sampled_at DESC);
   CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(token_hash);
   CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
-  CREATE INDEX IF NOT EXISTS idx_update_records_source ON update_records(source_id);
-  CREATE INDEX IF NOT EXISTS idx_update_records_status ON update_records(status);
   CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
   CREATE INDEX IF NOT EXISTS idx_agents_last_seen ON agents(last_seen_at);
   CREATE INDEX IF NOT EXISTS idx_agent_enrollment_token_hash ON agent_enrollment_tokens(token_hash);
   CREATE INDEX IF NOT EXISTS idx_agent_enrollment_expires ON agent_enrollment_tokens(expires_at);
   CREATE INDEX IF NOT EXISTS idx_agent_metrics_agent_time ON agent_metrics(agent_id, sampled_at DESC);
   CREATE INDEX IF NOT EXISTS idx_agent_containers_agent ON agent_containers(agent_id);
+  CREATE INDEX IF NOT EXISTS idx_agent_update_inventories_status ON agent_update_inventories(status);
+  CREATE INDEX IF NOT EXISTS idx_agent_update_inventories_success ON agent_update_inventories(last_successful_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_agent_package_updates_security ON agent_package_updates(agent_id, security);
 `);
 
 export function getDatabase() {
   return database;
 }
+
+const removeHomeAssistantUpdatesMigration = "2026-07-14-remove-home-assistant-updates";
+
+export function removeLegacyHomeAssistantUpdateSchema(target: typeof database = database) {
+  target.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      name TEXT PRIMARY KEY,
+      applied_at TEXT NOT NULL
+    )
+  `);
+  const applied = target.prepare("SELECT 1 FROM schema_migrations WHERE name = ?").get(removeHomeAssistantUpdatesMigration);
+  if (applied) return false;
+
+  const migrate = target.transaction(() => {
+    target.exec(`
+      DROP TABLE IF EXISTS update_records;
+      DROP TABLE IF EXISTS integration_settings;
+    `);
+    target.prepare("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)")
+      .run(removeHomeAssistantUpdatesMigration, new Date().toISOString());
+  });
+  migrate();
+  return true;
+}
+
+removeLegacyHomeAssistantUpdateSchema();
 
 function hasColumn(tableName: string, columnName: string) {
   const columns = database.prepare(`PRAGMA table_info(${tableName})`).all() as { name: string }[];

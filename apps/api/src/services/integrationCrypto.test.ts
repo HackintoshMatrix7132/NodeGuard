@@ -46,3 +46,26 @@ test("integration credentials cannot be decrypted with another key", () => {
     }
   }
 });
+
+test("the standard integration secret encrypts Proxmox credentials", () => {
+  const names = [
+    "NODEGUARD_INTEGRATION_ENCRYPTION_KEY",
+    "NODEGUARD_SESSION_SECRET",
+    "NODEGUARD_AUTH_SECRET",
+    "NODEGUARD_INTEGRATION_SECRET",
+  ] as const;
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+
+  try {
+    for (const name of names) delete process.env[name];
+    process.env.NODEGUARD_INTEGRATION_SECRET = TEST_KEY;
+    const encrypted = encryptIntegrationValue("pve-secret-value");
+    assert.equal(decryptIntegrationValue(encrypted), "pve-secret-value");
+  } finally {
+    for (const name of names) {
+      const value = previous[name];
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});

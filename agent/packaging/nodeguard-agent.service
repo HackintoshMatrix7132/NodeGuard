@@ -15,6 +15,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
+ReadWritePaths=-/var/lib/apt/lists -/var/cache/apt -/var/lib/apt/periodic
 ProtectControlGroups=true
 ProtectKernelModules=true
 ProtectKernelTunables=true

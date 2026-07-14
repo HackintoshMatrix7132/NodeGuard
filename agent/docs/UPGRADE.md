@@ -7,7 +7,7 @@ curl -fsSL https://YOUR_NODEGUARD/install-agent.sh | sudo bash -s -- \
   --server https://YOUR_NODEGUARD
 ```
 
-Use `--version 0.1.0` to pin an available release. The installer:
+Use `--version 0.2.0` to pin an available release. The installer:
 
 1. Detects the installed version.
 2. Downloads and verifies the requested binary when versions differ.

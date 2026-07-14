@@ -103,6 +103,7 @@ export type AgentRegistrationResponse = {
   metricsIntervalSeconds: number;
   dockerIntervalSeconds: number;
   inventoryIntervalSeconds: number;
+  updateIntervalSeconds: number;
 };
 
 export type AgentHeartbeatInput = {
@@ -182,51 +183,77 @@ export type AgentDockerInput = {
   containers: AgentContainerInput[];
 };
 
-export type UpdateCategory = "core" | "add-on" | "integration" | "application" | "firmware" | "system" | "container" | "other";
-export type UpdateStatus = "available" | "up_to_date" | "installing" | "unknown";
+export type AgentUpdateCheckStatus =
+  | "ok"
+  | "unsupported"
+  | "package_manager_busy"
+  | "metadata_refresh_failed"
+  | "check_failed";
 
-export type UpdateItem = {
-  id: string;
-  sourceId: string;
-  sourceName: string;
+export type AgentPackageUpdateInput = {
   name: string;
-  installedVersion: string | null;
-  availableVersion: string | null;
-  category: UpdateCategory;
-  status: UpdateStatus;
-  securityCritical: boolean;
-  lastCheckedAt: string;
-  openUrl: string | null;
-  releaseNotesUrl: string | null;
+  installedVersion: string;
+  candidateVersion: string;
+  security: boolean;
+  source: string | null;
 };
 
-export type UpdateSource = {
-  id: string;
-  name: string;
-  configured: boolean;
-  connected: boolean;
-  lastCheckedAt: string | null;
+export type AgentUpdateInventoryInput = {
+  schemaVersion: 1;
+  provider: "apt";
+  supported: boolean;
+  status: AgentUpdateCheckStatus;
+  os: {
+    id: string | null;
+    versionId: string | null;
+    prettyName: string | null;
+  };
+  checkedAt: string;
+  lastSuccessfulAt: string | null;
+  updateCount: number;
+  securityUpdateCount: number;
+  rebootRequired: boolean | null;
+  truncated: boolean;
+  packages: AgentPackageUpdateInput[];
+};
+
+export type MachineUpdateCheckStatus = AgentUpdateCheckStatus | "waiting";
+
+export type MachineUpdatePackage = AgentPackageUpdateInput;
+
+export type MachineUpdateSummary = {
+  agentId: string;
+  displayName: string;
+  hostname: string;
+  agentStatus: AgentStatus;
+  provider: "apt" | null;
+  supported: boolean | null;
+  status: MachineUpdateCheckStatus;
+  os: {
+    id: string | null;
+    versionId: string | null;
+    prettyName: string | null;
+  };
+  updateCount: number | null;
+  securityUpdateCount: number | null;
+  rebootRequired: boolean | null;
+  truncated: boolean;
+  checkedAt: string | null;
+  lastSuccessfulAt: string | null;
   lastError: string | null;
+};
+
+export type MachineUpdateDetail = MachineUpdateSummary & {
+  packages: MachineUpdatePackage[];
 };
 
 export type UpdateCenterSnapshot = {
-  updates: UpdateItem[];
-  sources: UpdateSource[];
+  machines: MachineUpdateSummary[];
   availableCount: number;
   securityCriticalCount: number;
+  reportingMachineCount: number;
+  totalMachineCount: number;
   lastCheckedAt: string | null;
-};
-
-export type HomeAssistantSettings = {
-  configured: boolean;
-  url: string | null;
-  lastCheckedAt: string | null;
-  lastError: string | null;
-};
-
-export type HomeAssistantSettingsInput = {
-  url: string;
-  accessToken?: string;
 };
 
 export type Overview = {

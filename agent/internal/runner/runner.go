@@ -2,8 +2,10 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/client"
@@ -11,6 +13,7 @@ import (
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/config"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/model"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/queue"
+	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/updates"
 )
 
 type Runner struct {
@@ -26,13 +29,18 @@ type Runner struct {
 	failures         int
 	connectionFailed bool
 	dockerAvailable  *bool
+	updateProvider   updates.UpdateProvider
+	updateWaitGroup  sync.WaitGroup
+	updateStartDelay func(time.Duration) time.Duration
 }
 
 func New(cfg config.Config, version string, logger *slog.Logger) *Runner {
+	cfg = config.WithDefaults(cfg)
 	return &Runner{
 		config: cfg, api: client.New(cfg), metrics: &collectors.MetricsCollector{},
 		docker: collectors.NewDockerCollector(""), queue: queue.New(100, 15*time.Minute),
-		logger: logger, version: version, startedAt: time.Now(),
+		logger: logger, version: version, startedAt: time.Now(), updateProvider: updates.NewAPTProvider(),
+		updateStartDelay: updateStartupDelay,
 	}
 }
 
@@ -93,6 +101,45 @@ func retryDelay(failures int) time.Duration {
 	return base + jitter
 }
 
+func updateStartupDelay(interval time.Duration) time.Duration {
+	window := interval / 10
+	if window > 2*time.Minute {
+		window = 2 * time.Minute
+	}
+	if window <= 0 {
+		return 0
+	}
+	return time.Duration(rand.Int63n(int64(window) + 1))
+}
+
+func updateStatusIsTransient(status model.UpdateStatus) bool {
+	return status == model.UpdateStatusPackageManagerBusy || status == model.UpdateStatusMetadataRefreshFailed || status == model.UpdateStatusCheckFailed
+}
+
+func updateRetryDelay(failures int) time.Duration {
+	delays := []time.Duration{15 * time.Minute, 30 * time.Minute, 60 * time.Minute}
+	index := failures - 1
+	if index < 0 {
+		index = 0
+	}
+	if index >= len(delays) {
+		index = len(delays) - 1
+	}
+	return delays[index]
+}
+
+func (runner *Runner) startUpdateCheck(ctx context.Context, results chan<- model.UpdateInventory) {
+	runner.updateWaitGroup.Add(1)
+	go func() {
+		defer runner.updateWaitGroup.Done()
+		inventory := runner.updateProvider.Check(ctx)
+		select {
+		case results <- inventory:
+		case <-ctx.Done():
+		}
+	}()
+}
+
 func (runner *Runner) sendNext(ctx context.Context) {
 	if time.Now().Before(runner.nextAttempt) {
 		return
@@ -105,6 +152,11 @@ func (runner *Runner) sendNext(ctx context.Context) {
 	err := runner.api.Post(requestContext, item.Path, item.Payload)
 	cancel()
 	if err != nil {
+		if errors.Is(err, client.ErrRequestBodyTooLarge) {
+			runner.queue.RemoveFirst()
+			runner.logger.Error("agent report discarded because it exceeded the safe payload limit", "event", "report_too_large", "path", item.Path)
+			return
+		}
 		runner.failures++
 		delay := retryDelay(runner.failures)
 		runner.nextAttempt = time.Now().Add(delay)
@@ -135,15 +187,22 @@ func (runner *Runner) Run(ctx context.Context) error {
 	dockerTicker := time.NewTicker(time.Duration(runner.config.DockerIntervalSeconds) * time.Second)
 	inventoryTicker := time.NewTicker(time.Duration(runner.config.InventoryIntervalSeconds) * time.Second)
 	senderTicker := time.NewTicker(time.Second)
+	updateInterval := time.Duration(runner.config.UpdateIntervalSeconds) * time.Second
+	updateTimer := time.NewTimer(runner.updateStartDelay(updateInterval))
+	updateResults := make(chan model.UpdateInventory, 1)
+	updateRunning := false
+	updateFailures := 0
 	defer heartbeatTicker.Stop()
 	defer metricsTicker.Stop()
 	defer dockerTicker.Stop()
 	defer inventoryTicker.Stop()
 	defer senderTicker.Stop()
+	defer updateTimer.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
+			runner.updateWaitGroup.Wait()
 			runner.logger.Info("NodeGuard Agent stopped gracefully", "event", "graceful_shutdown", "queuedReportsDiscarded", runner.queue.Len())
 			return nil
 		case <-heartbeatTicker.C:
@@ -156,6 +215,25 @@ func (runner *Runner) Run(ctx context.Context) error {
 			runner.collectInventory()
 		case <-senderTicker.C:
 			runner.sendNext(ctx)
+		case <-updateTimer.C:
+			if !updateRunning {
+				updateRunning = true
+				runner.startUpdateCheck(ctx, updateResults)
+			}
+		case inventory := <-updateResults:
+			updateRunning = false
+			runner.enqueue("/api/agent/updates", inventory)
+			if updateStatusIsTransient(inventory.Status) {
+				updateFailures++
+				delay := updateRetryDelay(updateFailures)
+				runner.logger.Warn("package update discovery delayed", "event", "updates_delayed", "status", inventory.Status, "retryIn", delay.String())
+				updateTimer.Reset(delay)
+			} else {
+				updateFailures = 0
+				runner.logger.Info("package update inventory collected", "event", "updates_collected", "status", inventory.Status,
+					"updates", inventory.UpdateCount, "securityUpdates", inventory.SecurityUpdateCount)
+				updateTimer.Reset(updateInterval)
+			}
 		}
 	}
 }

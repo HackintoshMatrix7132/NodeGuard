@@ -1,4 +1,4 @@
-ARG AGENT_VERSION=0.1.0
+ARG AGENT_VERSION=0.2.0
 
 FROM golang:1.23-bookworm AS agent-build
 

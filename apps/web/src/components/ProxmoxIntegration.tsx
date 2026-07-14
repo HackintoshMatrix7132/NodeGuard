@@ -32,6 +32,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { apiFetch, getDefaultBackendUrl } from "../api/client";
+import { ApiError } from "../api/errors";
+import { useSettingsStore } from "../store/settingsStore";
+
 type ProxmoxStatus =
   | "available"
   | "online"
@@ -193,6 +197,92 @@ function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function asOptionalNumber(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function inventoryIdentity(
+  value: Record<string, unknown>,
+  parent?: Record<string, unknown>,
+): { connectionId: string; connectionName?: string; id?: string } {
+  const connectionId = asString(value.connectionId ?? parent?.id);
+  const connectionName = asString(value.connectionName ?? parent?.name) || undefined;
+  const rawId = asString(value.id);
+  const id = rawId && connectionId && !rawId.startsWith(`${connectionId}:`)
+    ? `${connectionId}:${rawId}`
+    : rawId || undefined;
+  return { connectionId, connectionName, id };
+}
+
+function normalizeNode(value: unknown, parent?: Record<string, unknown>): ProxmoxNode {
+  const node = asRecord(value);
+  return {
+    ...inventoryIdentity(node, parent),
+    name: asString(node.name) || undefined,
+    node: asString(node.node) || undefined,
+    status: asString(node.status, "unknown") as ProxmoxStatus,
+    uptimeSeconds: asOptionalNumber(node.uptimeSeconds),
+    uptime: asOptionalNumber(node.uptime),
+    cpuUsagePercent: asOptionalNumber(node.cpuUsagePercent),
+    cpuUsage: asOptionalNumber(node.cpuUsage),
+    memoryUsedBytes: asOptionalNumber(node.memoryUsedBytes ?? node.memoryUsed),
+    memoryTotalBytes: asOptionalNumber(node.memoryTotalBytes ?? node.memoryTotal),
+    rootUsedBytes: asOptionalNumber(node.rootUsedBytes ?? node.diskUsed),
+    rootTotalBytes: asOptionalNumber(node.rootTotalBytes ?? node.diskTotal),
+    version: asString(node.version) || null,
+    lastSyncAt: asString(node.lastSyncAt ?? node.lastSyncedAt) || null,
+  };
+}
+
+function normalizeGuest(value: unknown, parent?: Record<string, unknown>): ProxmoxGuest {
+  const guest = asRecord(value);
+  const vmid = typeof guest.vmid === "number" || typeof guest.vmid === "string"
+    ? guest.vmid
+    : undefined;
+  return {
+    ...inventoryIdentity(guest, parent),
+    node: asString(guest.node) || null,
+    kind: asString(guest.kind) || undefined,
+    type: asString(guest.type) || undefined,
+    vmid,
+    name: asString(guest.name) || null,
+    status: asString(guest.status, "unknown") as ProxmoxStatus,
+    cpuUsagePercent: asOptionalNumber(guest.cpuUsagePercent),
+    cpuUsage: asOptionalNumber(guest.cpuUsage),
+    memoryUsedBytes: asOptionalNumber(guest.memoryUsedBytes ?? guest.memoryUsed),
+    memoryTotalBytes: asOptionalNumber(guest.memoryTotalBytes ?? guest.memoryTotal),
+    uptimeSeconds: asOptionalNumber(guest.uptimeSeconds),
+    uptime: asOptionalNumber(guest.uptime),
+    lastSyncAt: asString(guest.lastSyncAt ?? guest.lastSyncedAt) || null,
+  };
+}
+
+function normalizeStorage(value: unknown, parent?: Record<string, unknown>): ProxmoxStorage {
+  const storage = asRecord(value);
+  const rawUtilization = asOptionalNumber(storage.utilization);
+  const utilizationPercent = asOptionalNumber(storage.utilizationPercent)
+    ?? (typeof rawUtilization === "number"
+      ? (rawUtilization <= 1 ? rawUtilization * 100 : rawUtilization)
+      : rawUtilization);
+  const content = Array.isArray(storage.content)
+    ? storage.content.filter((item): item is string => typeof item === "string")
+    : asString(storage.content) || null;
+  return {
+    ...inventoryIdentity(storage, parent),
+    storage: asString(storage.storage) || undefined,
+    name: asString(storage.name) || undefined,
+    node: asString(storage.node) || null,
+    type: asString(storage.type) || null,
+    status: asString(storage.status, "unknown") as ProxmoxStatus,
+    usedBytes: asOptionalNumber(storage.usedBytes ?? storage.used),
+    totalBytes: asOptionalNumber(storage.totalBytes ?? storage.total),
+    utilizationPercent,
+    content,
+    lastSyncAt: asString(storage.lastSyncAt ?? storage.lastSyncedAt) || null,
+  };
+}
+
 function normalizeConnection(value: unknown): ProxmoxConnection {
   const connection = asRecord(value);
   return {
@@ -218,16 +308,26 @@ function normalizeSnapshot(value: unknown): ProxmoxSnapshot {
   const body = asRecord(wrapped.data ?? wrapped);
   const summary = asRecord(body.summary);
   const rawConnections = asArray<unknown>(body.connections);
+  const rawEnabledConnections = rawConnections.filter((connection) => asRecord(connection).enabled !== false);
   const connections = rawConnections.map(normalizeConnection);
-  const nodes = asArray<ProxmoxNode>(body.nodes).length
-    ? asArray<ProxmoxNode>(body.nodes)
-    : rawConnections.flatMap((connection) => asArray<ProxmoxNode>(asRecord(connection).nodes));
-  const guests = asArray<ProxmoxGuest>(body.guests).length
-    ? asArray<ProxmoxGuest>(body.guests)
-    : rawConnections.flatMap((connection) => asArray<ProxmoxGuest>(asRecord(connection).guests));
-  const storage = asArray<ProxmoxStorage>(body.storage).length
-    ? asArray<ProxmoxStorage>(body.storage)
-    : rawConnections.flatMap((connection) => asArray<ProxmoxStorage>(asRecord(connection).storage));
+  const nodes = asArray<unknown>(body.nodes).length
+    ? asArray<unknown>(body.nodes).map((node) => normalizeNode(node))
+    : rawEnabledConnections.flatMap((connection) => {
+      const parent = asRecord(connection);
+      return asArray<unknown>(parent.nodes).map((node) => normalizeNode(node, parent));
+    });
+  const guests = asArray<unknown>(body.guests).length
+    ? asArray<unknown>(body.guests).map((guest) => normalizeGuest(guest))
+    : rawEnabledConnections.flatMap((connection) => {
+      const parent = asRecord(connection);
+      return asArray<unknown>(parent.guests).map((guest) => normalizeGuest(guest, parent));
+    });
+  const storage = asArray<unknown>(body.storage).length
+    ? asArray<unknown>(body.storage).map((item) => normalizeStorage(item))
+    : rawEnabledConnections.flatMap((connection) => {
+      const parent = asRecord(connection);
+      return asArray<unknown>(parent.storage).map((item) => normalizeStorage(item, parent));
+    });
 
   return {
     configured: Boolean(body.configured ?? connections.length > 0),
@@ -305,63 +405,104 @@ function normalizeConnections(value: unknown): ProxmoxConnection[] {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    credentials: "include",
-    ...init,
-    headers: {
-      Accept: "application/json",
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
-      ...init?.headers,
-    },
-  });
-
-  let payload: unknown = null;
   try {
-    payload = await response.json();
-  } catch {
-    if (!response.ok) throw new Error(`Request failed with HTTP ${response.status}.`);
+    const backendUrl = useSettingsStore.getState().backendConfig?.backendUrl ?? getDefaultBackendUrl();
+    return await apiFetch<T>({ backendUrl }, path, init);
+  } catch (caught) {
+    // Older Proxmox endpoints return a human-readable `error` string rather
+    // than the standard `{ error: code, message }` envelope. Keep that useful
+    // text while still using the configured, timeout-aware API client.
+    if (caught instanceof ApiError && caught.message === "Request failed." && caught.code) {
+      throw new Error(caught.code);
+    }
+    throw caught;
   }
-
-  if (!response.ok) {
-    const record = asRecord(payload);
-    const nestedError = asRecord(record.error);
-    const message =
-      (typeof record.message === "string" && record.message) ||
-      (typeof record.error === "string" && record.error) ||
-      (typeof nestedError.message === "string" && nestedError.message) ||
-      `Request failed with HTTP ${response.status}.`;
-    throw new Error(message);
-  }
-
-  return payload as T;
 }
+
+const PROXMOX_AUTO_REFRESH_MS = 30_000;
+
+function useVisibleAutoRefresh(
+  refresh: () => void | Promise<void>,
+  enabled = true,
+): void {
+  const refreshRef = useRef(refresh);
+
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        void refreshRef.current();
+      }
+    };
+    const interval = window.setInterval(
+      refreshWhenVisible,
+      PROXMOX_AUTO_REFRESH_MS,
+    );
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("focus", refreshWhenVisible);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("focus", refreshWhenVisible);
+    };
+  }, [enabled]);
+}
+
+type ProxmoxLoadMode = "initial" | "manual" | "background";
 
 function useProxmoxSnapshot(refreshKey = 0) {
   const [snapshot, setSnapshot] = useState<ProxmoxSnapshot>(emptySnapshot);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestRef = useRef<Promise<void> | null>(null);
+  const enabled = refreshKey >= 0;
 
-  const load = useCallback(async (quiet = false) => {
-    if (quiet) setRefreshing(true);
-    else setLoading(true);
-    try {
-      const payload = await requestJson<unknown>("/api/proxmox");
-      setSnapshot(normalizeSnapshot(payload));
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to load Proxmox data.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const load = useCallback((mode: ProxmoxLoadMode = "initial"): Promise<void> => {
+    if (requestRef.current) return requestRef.current;
+    if (mode === "initial") setLoading(true);
+    if (mode === "manual") setRefreshing(true);
+
+    const request = (async () => {
+      try {
+        const payload = await requestJson<unknown>("/api/proxmox");
+        setSnapshot(normalizeSnapshot(payload));
+        setError(null);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Unable to load Proxmox data.");
+      } finally {
+        setLoading(false);
+        if (mode === "manual") setRefreshing(false);
+      }
+    })();
+
+    requestRef.current = request;
+    void request.finally(() => {
+      if (requestRef.current === request) requestRef.current = null;
+    });
+    return request;
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load, refreshKey]);
+    if (enabled) void load("initial");
+  }, [enabled, load, refreshKey]);
 
-  return { snapshot, loading, refreshing, error, reload: () => load(true) };
+  const autoRefresh = useCallback(() => load("background"), [load]);
+  useVisibleAutoRefresh(autoRefresh, enabled);
+
+  const reload = useCallback(async () => {
+    const activeRequest = requestRef.current;
+    if (activeRequest) await activeRequest;
+    await load("manual");
+  }, [load]);
+
+  return { snapshot, loading, refreshing, error, reload };
 }
 
 function formatPercent(value?: number | null): string {
@@ -403,6 +544,10 @@ function formatDate(value?: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatCount(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 function titleCase(value: string): string {
@@ -518,21 +663,21 @@ function SummaryCards({ snapshot }: { snapshot: ProxmoxSnapshot }) {
   return (
     <div className="proxmox-summary-grid">
       <article className="proxmox-summary-card proxmox-summary-card--cyan">
-        <span>Connections available</span>
-        <strong>
+        <span className="proxmox-summary-card__label">Connections available</span>
+        <strong className="proxmox-summary-card__value">
           {summaryValue(summary.availableConnections, summary.enabledConnections)}
         </strong>
-        <small>{summary.connections ?? snapshot.connections.length} configured</small>
+        <small className="proxmox-summary-card__detail">{snapshot.connections.length} configured</small>
       </article>
       <article className="proxmox-summary-card proxmox-summary-card--green">
-        <span>Nodes online</span>
-        <strong>{summaryValue(summary.nodesOnline, summary.nodesTotal)}</strong>
-        <small>Across all enabled connections</small>
+        <span className="proxmox-summary-card__label">Nodes online</span>
+        <strong className="proxmox-summary-card__value">{summaryValue(summary.nodesOnline, summary.nodesTotal)}</strong>
+        <small className="proxmox-summary-card__detail">Across all enabled connections</small>
       </article>
       <article className="proxmox-summary-card proxmox-summary-card--blue">
-        <span>Guests running</span>
-        <strong>{summaryValue(summary.guestsRunning, summary.guestsTotal)}</strong>
-        <small>
+        <span className="proxmox-summary-card__label">Guests running</span>
+        <strong className="proxmox-summary-card__value">{summaryValue(summary.guestsRunning, summary.guestsTotal)}</strong>
+        <small className="proxmox-summary-card__detail">
           {summary.vmRunning ?? 0}/{summary.vmTotal ?? 0} VMs, {summary.lxcRunning ?? 0}/
           {summary.lxcTotal ?? 0} LXCs
         </small>
@@ -542,10 +687,10 @@ function SummaryCards({ snapshot }: { snapshot: ProxmoxSnapshot }) {
           storageIssues > 0 ? "proxmox-summary-card--amber" : "proxmox-summary-card--green"
         }`}
       >
-        <span>Storage issues</span>
-        <strong>{storageIssues}</strong>
-        <small>
-          {summary.storageCritical ?? 0} critical, {summary.storageWarnings ?? 0} warning
+        <span className="proxmox-summary-card__label">Storage issues</span>
+        <strong className="proxmox-summary-card__value">{storageIssues}</strong>
+        <small className="proxmox-summary-card__detail">
+          {summary.storageCritical ?? 0} critical, {summary.storageWarnings ?? 0} warning, {summary.storageUnavailable ?? 0} unavailable
         </small>
       </article>
     </div>
@@ -860,10 +1005,35 @@ export function ProxmoxPage() {
     }
   };
 
-  if (loading) return <LoadingState label="Loading Proxmox inventory..." />;
+  if (loading) {
+    return (
+      <div className="proxmox-page">
+        <LoadingState label="Loading Proxmox inventory..." />
+      </div>
+    );
+  }
+
+  if (error && !snapshot.configured) {
+    return (
+      <div className="proxmox-page proxmox-page--enter">
+        <Panel
+          title="Proxmox VE"
+          icon={<CloudCog size={18} />}
+          actions={
+            <button className="proxmox-button proxmox-button--secondary" onClick={reload} type="button">
+              <RefreshCw size={16} />
+              Retry
+            </button>
+          }
+        >
+          <ErrorBanner message={error} />
+        </Panel>
+      </div>
+    );
+  }
 
   return (
-    <div className="proxmox-page">
+    <div className="proxmox-page proxmox-page--enter">
       {error ? <ErrorBanner message={error} /> : null}
       {syncError ? <ErrorBanner message={syncError} /> : null}
       {!snapshot.configured ? (
@@ -1142,7 +1312,6 @@ function ConnectionFormDialog({
         tone: "error",
         text: caught instanceof Error ? caught.message : "Unable to save the Proxmox connection.",
       });
-    } finally {
       setSaving(false);
     }
   };
@@ -1288,7 +1457,6 @@ function DeleteConnectionDialog({
       closeDialog();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to remove the connection.");
-    } finally {
       setBusy(false);
     }
   };
@@ -1326,22 +1494,42 @@ export function ProxmoxSettingsPanel() {
   const [deleting, setDeleting] = useState<ProxmoxConnection | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
+  const requestRef = useRef<Promise<void> | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const payload = await requestJson<unknown>("/api/proxmox/connections");
-      setConnections(normalizeConnections(payload));
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to load Proxmox connections.");
-    } finally {
-      setLoading(false);
-    }
+  const load = useCallback((): Promise<void> => {
+    if (requestRef.current) return requestRef.current;
+
+    const request = (async () => {
+      try {
+        const payload = await requestJson<unknown>("/api/proxmox/connections");
+        setConnections(normalizeConnections(payload));
+        setError(null);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Unable to load Proxmox connections.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+
+    requestRef.current = request;
+    void request.finally(() => {
+      if (requestRef.current === request) requestRef.current = null;
+    });
+    return request;
   }, []);
+
+  const reloadConnections = useCallback(async () => {
+    const activeRequest = requestRef.current;
+    if (activeRequest) await activeRequest;
+    await load();
+  }, [load]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const autoRefresh = useCallback(() => load(), [load]);
+  useVisibleAutoRefresh(autoRefresh);
 
   useEffect(() => {
     if (!notice) return;
@@ -1365,7 +1553,7 @@ export function ProxmoxSettingsPanel() {
         });
         setNotice(`${connection.name} was ${connection.enabled ? "disabled" : "enabled"}.`);
       }
-      await load();
+      await reloadConnections();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to update the connection.");
     } finally {
@@ -1405,7 +1593,7 @@ export function ProxmoxSettingsPanel() {
             <p>Monitor clusters, nodes, VMs, LXC containers, and storage using a PVEAuditor token.</p>
           </div>
           <span className={`proxmox-configuration-badge${connections.length ? " is-configured" : ""}`}>
-            {loading ? "Checking…" : connections.length ? "Configured" : "Not configured"}
+            {loading ? "Checking…" : error && connections.length === 0 ? "Unavailable" : connections.length ? "Configured" : "Not configured"}
           </span>
         </div>
         {notice ? (
@@ -1417,7 +1605,7 @@ export function ProxmoxSettingsPanel() {
         {error ? <ErrorBanner message={error} /> : null}
         {loading ? (
           <LoadingState label="Loading Proxmox connections..." />
-        ) : connections.length === 0 ? (
+        ) : error && connections.length === 0 ? null : connections.length === 0 ? (
           <EmptyState
             title="No Proxmox connections"
             description="Add a read-only Proxmox API token to start monitoring."
@@ -1430,18 +1618,21 @@ export function ProxmoxSettingsPanel() {
                 <article className="proxmox-settings-row" key={connection.id}>
                   <div className="proxmox-settings-row__identity">
                     <strong>{connection.name}</strong>
-                    <a href={connection.endpoint} rel="noreferrer" target="_blank">
-                      {connection.endpoint}<ExternalLink size={13} />
-                    </a>
-                    <span>
-                      Last successful sync {formatDate(connection.lastSuccessfulSyncAt)}
-                      {connection.errorMessage ? ` - ${connection.errorMessage}` : ""}
-                    </span>
+                    <div className="proxmox-settings-row__details">
+                      <a href={connection.endpoint} rel="noreferrer" target="_blank">
+                        <span>{connection.endpoint}</span>
+                        <ExternalLink aria-hidden="true" size={13} />
+                      </a>
+                      <span className="proxmox-settings-row__sync">
+                        <span aria-hidden="true" className="proxmox-settings-row__separator">•</span>
+                        <span>Last successful sync {formatDate(connection.lastSuccessfulSyncAt)}{connection.errorMessage ? ` - ${connection.errorMessage}` : ""}</span>
+                      </span>
+                    </div>
                   </div>
                   <div className="proxmox-settings-row__counts">
-                    <span>{connection.nodeCount ?? 0} nodes</span>
-                    <span>{connection.guestCount ?? 0} guests</span>
-                    <span>{connection.storageCount ?? 0} storage</span>
+                    <span>{formatCount(connection.nodeCount ?? 0, "node")}</span>
+                    <span>{formatCount(connection.guestCount ?? 0, "guest")}</span>
+                    <span>{formatCount(connection.storageCount ?? 0, "storage", "storage")}</span>
                   </div>
                   <StatusBadge status={connection.enabled ? connection.status : "disabled"} />
                   <div className="proxmox-settings-row__actions">
@@ -1493,10 +1684,10 @@ export function ProxmoxSettingsPanel() {
         )}
       </div>
       {editing ? (
-        <ConnectionFormDialog initial={editing} onClose={() => setEditing(null)} onSaved={load} returnFocus={editing.id ? undefined : addButtonRef.current} />
+        <ConnectionFormDialog initial={editing} onClose={() => setEditing(null)} onSaved={reloadConnections} returnFocus={editing.id ? undefined : addButtonRef.current} />
       ) : null}
       {deleting ? (
-        <DeleteConnectionDialog connection={deleting} onClose={() => setDeleting(null)} onDeleted={load} />
+        <DeleteConnectionDialog connection={deleting} onClose={() => setDeleting(null)} onDeleted={reloadConnections} />
       ) : null}
     </section>
   );

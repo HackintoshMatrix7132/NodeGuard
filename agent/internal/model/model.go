@@ -28,6 +28,7 @@ type RegistrationResponse struct {
 	MetricsIntervalSeconds   int    `json:"metricsIntervalSeconds"`
 	DockerIntervalSeconds    int    `json:"dockerIntervalSeconds"`
 	InventoryIntervalSeconds int    `json:"inventoryIntervalSeconds"`
+	UpdateIntervalSeconds    int    `json:"updateIntervalSeconds"`
 }
 
 type Heartbeat struct {
@@ -105,6 +106,47 @@ type DockerPayload struct {
 	Version       *string     `json:"version"`
 	InventoryHash *string     `json:"inventoryHash"`
 	Containers    []Container `json:"containers"`
+}
+
+type UpdateStatus string
+
+const (
+	UpdateStatusOK                    UpdateStatus = "ok"
+	UpdateStatusUnsupported           UpdateStatus = "unsupported"
+	UpdateStatusPackageManagerBusy    UpdateStatus = "package_manager_busy"
+	UpdateStatusMetadataRefreshFailed UpdateStatus = "metadata_refresh_failed"
+	UpdateStatusCheckFailed           UpdateStatus = "check_failed"
+)
+
+type UpdateOS struct {
+	ID         string `json:"id"`
+	VersionID  string `json:"versionId"`
+	PrettyName string `json:"prettyName"`
+}
+
+type PackageUpdate struct {
+	Name             string  `json:"name"`
+	InstalledVersion string  `json:"installedVersion"`
+	CandidateVersion string  `json:"candidateVersion"`
+	Security         bool    `json:"security"`
+	Source           *string `json:"source"`
+}
+
+type UpdateInventory struct {
+	SchemaVersion       int             `json:"schemaVersion"`
+	Provider            string          `json:"provider"`
+	Supported           bool            `json:"supported"`
+	Status              UpdateStatus    `json:"status"`
+	OS                  UpdateOS        `json:"os"`
+	CheckedAt           time.Time       `json:"checkedAt"`
+	LastSuccessfulAt    *time.Time      `json:"lastSuccessfulAt"`
+	UpdateCount         int             `json:"updateCount"`
+	SecurityUpdateCount int             `json:"securityUpdateCount"`
+	RebootRequired      *bool           `json:"rebootRequired"`
+	Truncated           bool            `json:"truncated"`
+	Packages            []PackageUpdate `json:"packages"`
+	ErrorCode           *string         `json:"errorCode,omitempty"`
+	ErrorMessage        *string         `json:"errorMessage,omitempty"`
 }
 
 type AgentStatus struct {

@@ -53,7 +53,7 @@ NodeGuard brings those answers into one focused, read-only dashboard. The projec
 | **03** | **Deep Docker visibility** | Searchable and sortable inventory with runtime state, health, image, stack, IP, ports, uptime, details, and bounded log previews. |
 | **04** | **Service and domain monitoring** | Expected status codes, custom paths, latency trends, rolling 30-day uptime, SSL state, diagnostics, and manual checks. |
 | **05** | **Persistent alert lifecycle** | Active and resolved incidents with first/last seen timestamps, occurrence counts, failed checks, likely causes, and suggested actions. |
-| **06** | **Read-only update discovery** | A shared update model with Home Assistant integration, release information, search, filters, and deduplicated update alerts. |
+| **06** | **Read-only update discovery** | Linux Agents discover APT package updates on Debian, Ubuntu, and Proxmox VE hosts, including security-origin and reboot-required status. |
 | **07** | **Safe public demonstration** | Demo users are restricted at the backend to isolated fictional data and cannot access live infrastructure or configuration APIs. |
 | **08** | **Production-style deployment** | A single Docker image serves the web UI and API, with SQLite persistence and HTTPS reverse-proxy support. |
 
@@ -92,10 +92,10 @@ The dashboard above provides the high-level operational view. The pages below sh
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src="docs/screenshots/update-center.png" alt="NodeGuard Update Center showing update sources, installed and available versions, categories, security status, release notes, and filters">
+      <img src="docs/screenshots/update-center.png" alt="NodeGuard Update Center showing machine update totals, operating systems, package counts, security updates, reboot status, and Agent freshness">
       <br>
       <strong>Read-only Update Center</strong><br>
-      Normalize updates from multiple sources into a searchable inventory with installed and available versions, categories, security-critical status, source links, and release notes.
+      Scan Agent-managed Linux machines by update count, security-origin packages, reboot requirement, check state, and freshness; then inspect bounded package details without installing anything.
     </td>
     <td width="50%" valign="top">
       <img src="docs/screenshots/settings-demo-isolation.png" alt="NodeGuard Settings page showing the isolated demo session, refresh controls, enforced demo environment, and hidden production diagnostics">
@@ -137,6 +137,8 @@ The demo environment contains fictional servers, Docker workloads, service state
 - Heartbeats with online, stale, and offline states
 - Linux host inventory and resource metrics
 - Read-only Docker inventory and runtime health
+- Scheduled APT metadata refresh and package-update discovery for Debian, Ubuntu, and Proxmox VE
+- Security-origin package and reboot-required reporting with bounded package details
 - Bounded in-memory retry queue during temporary outages
 - Static Linux `amd64` and `arm64` releases
 - Automated installation, checksum verification, systemd setup, upgrades, and uninstallation
@@ -179,14 +181,13 @@ The demo environment contains fictional servers, Docker workloads, service state
 
 ### Update Center
 
-- Shared source model designed for multiple integrations
-- Searchable and filterable update inventory
-- Installed and available versions, categories, states, source links, and release notes
-- Dashboard and sidebar update totals
-- Backend-only Home Assistant long-lived access tokens
-- Encrypted integration credentials at rest
-- Manual and scheduled refreshes
-- Read-only discovery: updates are never installed by NodeGuard
+- Machine-focused inventory reported by authenticated NodeGuard Agents
+- Search by machine, hostname, operating system, or package
+- Available, security-origin, reboot-required, unsupported, delayed, failed, stale, and offline states
+- Installed and candidate versions in an accessible machine-detail dialog
+- Dashboard, sidebar, and Agent-detail update summaries
+- Scheduled background checks with bounded retries and payloads
+- Read-only discovery: the Agent may refresh APT metadata, but never installs, removes, configures, upgrades, or reboots
 
 ### Settings and diagnostics
 
@@ -194,7 +195,6 @@ The demo environment contains fictional servers, Docker workloads, service state
 - Screenshot privacy mode
 - Diagnostics export
 - Session information and logout
-- Home Assistant update-source configuration
 - Account-enforced Live and Demo environments
 
 ## Architecture
@@ -203,14 +203,12 @@ The demo environment contains fictional servers, Docker workloads, service state
 flowchart LR
     B[Browser] -->|HTTPS + HTTP-only session| A["NodeGuard Web + API<br/>React / Express / TypeScript"]
 
-    A --> DB[("SQLite<br/>configuration, history, alerts")]
+    A --> DB[("SQLite<br/>configuration, latest inventories, history, alerts")]
     A --> LH["Local Linux host<br/>systeminformation"]
     A --> D["Docker Engine<br/>dockerode / read-only metadata"]
     A --> H["Domains and services<br/>HTTP + TLS checks"]
-    A --> HA["Home Assistant API<br/>update discovery"]
-
-    R1[Remote Linux / Docker host] -->|Outbound HTTPS<br/>unique agent credential| A
-    R2[Remote Linux / Docker host] -->|Outbound HTTPS<br/>unique agent credential| A
+    R1[Remote Linux / Docker host<br/>metrics, containers, APT updates] -->|Outbound HTTPS<br/>unique agent credential| A
+    R2[Remote Linux / Docker host<br/>metrics, containers, APT updates] -->|Outbound HTTPS<br/>unique agent credential| A
 ```
 
 ### Request and trust boundaries
@@ -230,7 +228,7 @@ NodeGuard focuses on visibility rather than remote administration. It does not e
 
 ### Outbound-only remote agent
 
-The Go agent does not open an inbound listener. It collects a fixed set of Linux and Docker data and sends reports to NodeGuard over outbound HTTPS. This avoids requiring inbound firewall rules or remote-shell access on monitored hosts.
+The Go agent does not open an inbound listener. It collects a fixed set of Linux, Docker, and APT update data and sends reports to NodeGuard over outbound HTTPS. This avoids requiring inbound firewall rules or remote-shell access on monitored hosts. Update discovery uses only hard-coded package-manager operations and cannot accept commands from the server.
 
 ### Separate human and machine authentication
 
@@ -251,7 +249,7 @@ Demo Mode is not just mock data selected in the browser. The account identity de
 | **Frontend** | React, Vite, TypeScript, TanStack Query, Zustand, Lucide, custom CSS |
 | **Backend** | Node.js, TypeScript, Express, SQLite, `better-sqlite3`, `systeminformation`, `dockerode` |
 | **Security** | HTTP-only sessions, scrypt password hashes, Helmet, rate limiting, origin controls |
-| **Agent** | Go 1.23+, Linux `/proc`, `/etc/os-release`, filesystem/network collectors, Docker Engine API |
+| **Agent** | Go 1.23+, Linux `/proc`, `/etc/os-release`, filesystem/network collectors, Docker Engine API, bounded APT discovery |
 | **Deployment** | Docker, Docker Compose, HTTPS reverse proxy, persistent volumes |
 
 ## Repository structure
@@ -385,7 +383,7 @@ sudo systemctl restart nodeguard-agent
 
 Running the installer again upgrades the binary while preserving `/etc/nodeguard-agent/config.json`; it does not create a duplicate host. Use `sudo nodeguard-agent uninstall` to remove the service and binary while preserving configuration, or `sudo nodeguard-agent uninstall --purge` to remove configuration after confirmation.
 
-Agent v0.1 has no inbound listener, remote shell, command execution, update installation, reboot, or Docker lifecycle endpoints.
+Agent v0.2 has no inbound listener, remote shell, generic command execution, update installation, reboot, or Docker lifecycle endpoints. It can refresh local APT metadata with fixed arguments so update discovery remains accurate.
 
 ## Configuration
 
@@ -404,7 +402,7 @@ Agent v0.1 has no inbound listener, remote shell, command execution, update inst
 | `SESSION_COOKIE_SECURE` | `auto`, `true`, or `false` cookie behavior |
 | `VITE_NODEGUARD_SUPPORT_URL` | Optional public HTTPS support link embedded in the frontend build |
 | `METRIC_HISTORY_RETENTION_DAYS` | Resource-history retention period |
-| `UPDATE_REFRESH_INTERVAL_MINUTES` | Scheduled update-discovery interval |
+| `AGENT_UPDATE_INTERVAL_SECONDS` | Agent package-update check interval; defaults to 6 hours and is clamped to the safe minimum |
 | `AGENT_STALE_AFTER_SECONDS` | Time before an agent is marked stale |
 | `AGENT_OFFLINE_AFTER_SECONDS` | Time before an agent is marked offline |
 
@@ -438,16 +436,15 @@ MONITORED_DOMAINS=https://example.com,https://status.example.com
 SERVER_DISPLAY_NAME=local-nodeguard-host
 LOG_PREVIEW_LINES=80
 DOMAIN_CHECK_TIMEOUT_MS=5000
-UPDATE_CHECK_TIMEOUT_MS=10000
-UPDATE_REFRESH_INTERVAL_MINUTES=15
 AGENT_INSTALLER_PATH=agent/install-agent.sh
 AGENT_RELEASE_DIR=agent-releases
-AGENT_RELEASE_VERSION=0.1.0
+AGENT_RELEASE_VERSION=0.2.0
 AGENT_ENROLLMENT_TTL_MINUTES=10
 AGENT_HEARTBEAT_INTERVAL_SECONDS=20
 AGENT_METRICS_INTERVAL_SECONDS=30
 AGENT_DOCKER_INTERVAL_SECONDS=60
 AGENT_INVENTORY_INTERVAL_SECONDS=21600
+AGENT_UPDATE_INTERVAL_SECONDS=21600
 AGENT_STALE_AFTER_SECONDS=75
 AGENT_OFFLINE_AFTER_SECONDS=180
 AGENT_TIMESTAMP_TOLERANCE_SECONDS=900
@@ -468,19 +465,11 @@ Never commit `.env` files, API keys, access tokens, passwords, private IP addres
 
 </details>
 
-## Home Assistant update discovery
+## Machine update discovery
 
-NodeGuard discovers Home Assistant `update.*` entities and maps them into a shared update model. It displays installed and available versions, category, state, source links, and release notes when Home Assistant provides them.
+NodeGuard Agents discover operating-system package updates on Debian, Ubuntu, and Proxmox VE machines. Each Agent refreshes APT metadata on its own schedule, simulates an upgrade to identify installed and candidate versions, reports security-origin packages and the standard reboot-required indicator, then sends a bounded inventory over its existing authenticated outbound connection.
 
-1. In Home Assistant, open **Profile → Security → Long-Lived Access Tokens**.
-2. Create a token.
-3. In NodeGuard, open **Settings → Update sources**.
-4. Enter the Home Assistant URL and token.
-5. Test the connection and save.
-
-The token is sent only to the backend, encrypted at rest in SQLite with `NODEGUARD_INTEGRATION_SECRET`, never returned to the browser, and never used to install updates.
-
-Changing `NODEGUARD_INTEGRATION_SECRET` after credentials have been stored makes those credentials unreadable. Reconnect integrations after an intentional secret rotation.
+The NodeGuard API reads only the latest report stored in SQLite. Opening the Updates page never runs APT, connects to a machine, or starts a remote command. NodeGuard does not install, remove, configure, or upgrade packages and cannot reboot a machine. See **[`docs/MACHINE_UPDATES.md`](docs/MACHINE_UPDATES.md)** for architecture, supported states, security boundaries, configuration, and troubleshooting.
 
 ## API overview
 
@@ -535,10 +524,7 @@ GET    /api/alerts?status=resolved
 GET    /api/alerts/:id
 DELETE /api/alerts/:id
 GET    /api/updates
-POST   /api/updates/refresh
-GET    /api/updates/settings/home-assistant
-PUT    /api/updates/settings/home-assistant
-POST   /api/updates/settings/home-assistant/test
+GET    /api/updates/machines/:agentId
 POST   /api/checks/run
 ```
 
@@ -566,6 +552,7 @@ POST /api/agent/heartbeat
 POST /api/agent/inventory
 POST /api/agent/metrics
 POST /api/agent/docker
+POST /api/agent/updates
 ```
 
 Protected application routes require a signed-in session. Optional `Authorization: Bearer <api-key>` and `x-api-key: <api-key>` support remains available for machine-to-machine callers.
@@ -595,6 +582,7 @@ npm test             # Run tests
 - The frontend never receives direct Docker-socket, shell, SSH, or privileged host access.
 - Agent enrollment tokens expire and become invalid after one use.
 - Long-term agent credentials are unique per host and can be rotated or revoked.
+- Agent update reports contain package metadata only; commands, repository credentials, raw command output, and environment variables are never accepted or exposed.
 - Docker-socket access is highly privileged even when mounted read-only. Review the source, restrict host access, and disable Docker collection where it is not needed.
 - Keep `.env` files, database files, logs, tokens, private IP addresses, and generated diagnostics out of version control.
 
@@ -603,14 +591,14 @@ npm test             # Run tests
 - SQLite targets a single NodeGuard instance and homelab-scale deployment.
 - Local-backend per-container CPU usage is unavailable; agents report it where the Docker Engine exposes a valid one-shot sample.
 - Push, email, and mobile notifications are not implemented yet.
-- Agent retry buffering is memory-only in v0.1 and does not survive an agent process restart.
+- Agent retry buffering is memory-only in v0.2 and does not survive an agent process restart.
 - Multi-user roles, password reset, and two-factor authentication are not yet available.
 - NodeGuard provides monitoring and diagnostics, not remote remediation.
 
 ## Roadmap
 
 - Native Proxmox integration for node, VM, and container visibility
-- Additional update sources for Ubuntu, Docker, Proxmox, FRITZ!Box, and NodeGuard Agent releases
+- Additional read-only package providers beyond APT and optional reliable Agent-to-Proxmox identity linking
 - Notification channels for critical and recovery events
 - Multi-user roles and stronger account-management flows
 - Expanded agent metrics and historical analysis
@@ -620,12 +608,12 @@ npm test             # Run tests
 
 1. Sign in with the public `demo` account and explain that its data boundary is enforced by the backend.
 2. Start on **Dashboard** and walk through the overall status, main issue, active incidents, fleet availability, Docker health, updates, and domain reachability.
-3. Open **Server** and change a resource-history time range to demonstrate persistent metrics.
+3. Open **Machines** and change a resource-history time range to demonstrate persistent metrics.
 4. Open **Agents**, select a host, and explain outbound-only reporting, inventory, heartbeats, and unique per-agent credentials.
 5. Open **Containers**, use the state/host/health filters, and inspect a monitored workload.
 6. Open **Domains**, expand an endpoint, and show expected HTTP responses, latency, rolling uptime, SSL state, and diagnostics.
 7. Open **Alerts**, select an incident, and explain first/last seen timestamps, occurrences, failed checks, likely cause, and suggested next steps.
-8. Open **Updates** and explain the shared, read-only source model and security-critical update state.
+8. Open **Updates** and inspect a machine's available packages, security-origin updates, reboot state, and last successful Agent check.
 9. Finish in **Settings** by showing the demo-only session, refresh controls, and hidden live configuration and diagnostics.
 
 ## Support NodeGuard

@@ -26,7 +26,7 @@ func (queue *Queue) Add(item Item) {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
 	queue.pruneLocked(time.Now())
-	if item.Path == "/api/agent/heartbeat" || item.Path == "/api/agent/inventory" || item.Path == "/api/agent/docker" {
+	if item.Path == "/api/agent/heartbeat" || item.Path == "/api/agent/inventory" || item.Path == "/api/agent/docker" || item.Path == "/api/agent/updates" {
 		filtered := queue.items[:0]
 		for _, existing := range queue.items {
 			if existing.Path != item.Path {

@@ -1,9 +1,11 @@
 import { env } from "../config/env.js";
-import type { AgentContainerInput, AgentDockerInput, AgentFilesystem, AgentHeartbeatInput, AgentInventoryInput, AgentMetricSampleInput, AgentMetricsInput, AgentRegistrationInput, ContainerHealth } from "../types/nodeguard.js";
+import type { AgentContainerInput, AgentDockerInput, AgentFilesystem, AgentHeartbeatInput, AgentInventoryInput, AgentMetricSampleInput, AgentMetricsInput, AgentPackageUpdateInput, AgentRegistrationInput, AgentUpdateCheckStatus, AgentUpdateInventoryInput, ContainerHealth } from "../types/nodeguard.js";
 
 export class AgentPayloadError extends Error {
   readonly code = "invalid_agent_payload";
 }
+
+export const agentUpdatePackageLimit = 500;
 
 function record(value: unknown, label = "Payload") {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -39,6 +41,32 @@ function optionalInteger(value: unknown, label: string, minimum = 0, maximum = N
   const parsed = optionalNumber(value, label, minimum, maximum);
   if (parsed !== null && !Number.isInteger(parsed)) throw new AgentPayloadError(`${label} must be an integer.`);
   return parsed;
+}
+
+function requiredInteger(value: unknown, label: string, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) {
+  const parsed = optionalInteger(value, label, minimum, maximum);
+  if (parsed === null) throw new AgentPayloadError(`${label} is required.`);
+  return parsed;
+}
+
+function requiredBoolean(value: unknown, label: string) {
+  if (typeof value !== "boolean") throw new AgentPayloadError(`${label} must be a boolean.`);
+  return value;
+}
+
+function optionalBoolean(value: unknown, label: string) {
+  if (value === undefined || value === null) return null;
+  return requiredBoolean(value, label);
+}
+
+function safeUpdateString(value: unknown, label: string, maxLength: number, required = true) {
+  const normalized = required
+    ? requiredString(value, label, maxLength)
+    : optionalString(value, label, maxLength);
+  if (normalized !== null && /[\u0000-\u001f\u007f]/.test(normalized)) {
+    throw new AgentPayloadError(`${label} contains unsupported control characters.`);
+  }
+  return normalized;
 }
 
 function stringList(value: unknown, label: string, maxItems = 64, maxLength = 255) {
@@ -193,5 +221,116 @@ export function parseAgentDocker(value: unknown): AgentDockerInput {
     version: optionalString(input.version, "Docker version", 120),
     inventoryHash: optionalString(input.inventoryHash, "inventoryHash", 128),
     containers: input.containers.map(parseContainer)
+  };
+}
+
+const updateStatuses = new Set<AgentUpdateCheckStatus>([
+  "ok",
+  "unsupported",
+  "package_manager_busy",
+  "metadata_refresh_failed",
+  "check_failed"
+]);
+
+function parseUpdateStatus(value: unknown): AgentUpdateCheckStatus {
+  if (typeof value !== "string" || !updateStatuses.has(value as AgentUpdateCheckStatus)) {
+    throw new AgentPayloadError("status is not a supported update-check status.");
+  }
+  return value as AgentUpdateCheckStatus;
+}
+
+function parseOptionalUpdateTimestamp(value: unknown, label: string) {
+  if (value === undefined || value === null || value === "") return null;
+  const timestamp = safeUpdateString(value, label, 64);
+  const time = Date.parse(timestamp as string);
+  if (!Number.isFinite(time)) throw new AgentPayloadError(`${label} must be a valid ISO-8601 value.`);
+  return new Date(time).toISOString();
+}
+
+function parseUpdatePackage(value: unknown): AgentPackageUpdateInput {
+  const input = record(value, "package update");
+  const source = safeUpdateString(input.source, "package source", 96, false);
+  if (source && !/^[A-Za-z0-9][A-Za-z0-9._+-]{0,95}$/.test(source)) {
+    throw new AgentPayloadError("package source must be a safe archive or suite label.");
+  }
+  return {
+    name: safeUpdateString(input.name, "package name", 255) as string,
+    installedVersion: safeUpdateString(input.installedVersion, "installedVersion", 255) as string,
+    candidateVersion: safeUpdateString(input.candidateVersion, "candidateVersion", 255) as string,
+    security: requiredBoolean(input.security, "package security"),
+    source
+  };
+}
+
+export function parseAgentUpdates(value: unknown): AgentUpdateInventoryInput {
+  const input = record(value);
+  if (input.schemaVersion !== 1) throw new AgentPayloadError("schemaVersion must be 1.");
+  if (input.provider !== "apt") throw new AgentPayloadError("provider must be apt.");
+
+  const supported = requiredBoolean(input.supported, "supported");
+  const status = parseUpdateStatus(input.status);
+  if ((status === "unsupported") !== !supported) {
+    throw new AgentPayloadError("supported and status are inconsistent.");
+  }
+
+  const os = record(input.os, "os");
+  const checkedAt = validateAgentTimestamp(input.checkedAt);
+  const lastSuccessfulAt = parseOptionalUpdateTimestamp(input.lastSuccessfulAt, "lastSuccessfulAt");
+  if (lastSuccessfulAt && Date.parse(lastSuccessfulAt) > Date.parse(checkedAt)) {
+    throw new AgentPayloadError("lastSuccessfulAt must not be later than checkedAt.");
+  }
+
+  const updateCount = requiredInteger(input.updateCount, "updateCount", 0, 1_000_000);
+  const securityUpdateCount = requiredInteger(input.securityUpdateCount, "securityUpdateCount", 0, 1_000_000);
+  if (securityUpdateCount > updateCount) {
+    throw new AgentPayloadError("securityUpdateCount must not exceed updateCount.");
+  }
+
+  if (!Array.isArray(input.packages) || input.packages.length > agentUpdatePackageLimit) {
+    throw new AgentPayloadError(`packages must contain at most ${agentUpdatePackageLimit} entries.`);
+  }
+  const packages = input.packages.map(parseUpdatePackage);
+  if (new Set(packages.map((entry) => entry.name)).size !== packages.length) {
+    throw new AgentPayloadError("packages must not contain duplicate package names.");
+  }
+
+  const rebootRequired = optionalBoolean(input.rebootRequired, "rebootRequired");
+  const truncated = requiredBoolean(input.truncated, "truncated");
+  if (status === "ok") {
+    if (rebootRequired === null) throw new AgentPayloadError("rebootRequired is required for a successful check.");
+    if (!lastSuccessfulAt) throw new AgentPayloadError("lastSuccessfulAt is required for a successful check.");
+    if (lastSuccessfulAt !== checkedAt) throw new AgentPayloadError("lastSuccessfulAt must equal checkedAt for a successful check.");
+    if ((!truncated && packages.length !== updateCount) || (truncated && packages.length > updateCount)) {
+      throw new AgentPayloadError("package details do not match updateCount.");
+    }
+    const securityPackages = packages.filter((entry) => entry.security).length;
+    if ((!truncated && securityPackages !== securityUpdateCount) || securityPackages > securityUpdateCount) {
+      throw new AgentPayloadError("security package details do not match securityUpdateCount.");
+    }
+  } else if (status === "unsupported") {
+    if (lastSuccessfulAt || updateCount !== 0 || securityUpdateCount !== 0 || rebootRequired !== null || truncated || packages.length > 0) {
+      throw new AgentPayloadError("unsupported inventories must not contain update results.");
+    }
+  } else if (rebootRequired !== null || packages.length > 0) {
+    throw new AgentPayloadError("failed checks must not contain new package or reboot results.");
+  }
+
+  return {
+    schemaVersion: 1,
+    provider: "apt",
+    supported,
+    status,
+    os: {
+      id: safeUpdateString(os.id, "os id", 120, false),
+      versionId: safeUpdateString(os.versionId, "os versionId", 120, false),
+      prettyName: safeUpdateString(os.prettyName, "os prettyName", 255, false)
+    },
+    checkedAt,
+    lastSuccessfulAt,
+    updateCount,
+    securityUpdateCount,
+    rebootRequired,
+    truncated,
+    packages
   };
 }

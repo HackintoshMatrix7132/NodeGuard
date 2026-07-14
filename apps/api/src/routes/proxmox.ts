@@ -32,6 +32,10 @@ function authContext(req: Request, res: Response): Record<string, unknown> {
 }
 
 function readMode(req: Request, res: Response): "demo" | "live" | "unknown" {
+  if (res.locals.dataMode === "demo" || res.locals.dataMode === "live") {
+    return res.locals.dataMode;
+  }
+
   const context = authContext(req, res);
   const nested = context.user && typeof context.user === "object" ? context.user as Record<string, unknown> : {};
   const value = context.dataMode ?? context.data_mode ?? context.mode ?? nested.dataMode ?? nested.data_mode;
@@ -39,11 +43,14 @@ function readMode(req: Request, res: Response): "demo" | "live" | "unknown" {
 }
 
 function requireLive(req: Request, res: Response): boolean {
-  if (readMode(req, res) === "demo") {
-    res.status(403).json({ error: "Proxmox integration settings are unavailable in Demo Mode." });
-    return false;
-  }
-  return true;
+  const mode = readMode(req, res);
+  if (mode === "live") return true;
+  res.status(403).json({
+    error: mode === "demo"
+      ? "Proxmox integration settings are unavailable in Demo Mode."
+      : "Proxmox integration settings require an authenticated Live Mode session."
+  });
+  return false;
 }
 
 function inputFromBody(body: unknown): ProxmoxConnectionInput {
@@ -66,7 +73,16 @@ function errorResponse(res: Response, error: unknown, fallback: string): void {
 }
 
 router.get("/", (req, res) => {
-  res.json(readMode(req, res) === "demo" ? getDemoProxmoxSnapshot() : getProxmoxSnapshot());
+  const mode = readMode(req, res);
+  if (mode === "demo") {
+    res.json(getDemoProxmoxSnapshot());
+    return;
+  }
+  if (mode === "live") {
+    res.json(getProxmoxSnapshot());
+    return;
+  }
+  res.status(403).json({ error: "Proxmox inventory requires an authenticated data mode." });
 });
 
 router.get("/connections", (req, res) => {
