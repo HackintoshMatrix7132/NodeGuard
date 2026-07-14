@@ -18,16 +18,24 @@ Create a dedicated Proxmox user and API token. The exact commands may vary with 
 
 ```bash
 pveum user add nodeguard@pve --comment "NodeGuard read-only monitoring"
-pveum acl modify / --users nodeguard@pve --roles PVEAuditor
+pveum acl modify / --user nodeguard@pve --role PVEAuditor
 pveum user token add nodeguard@pve nodeguard --privsep 1
+pveum acl modify / --token 'nodeguard@pve!nodeguard' --role PVEAuditor
 ```
 
 Record the token secret when Proxmox displays it. Proxmox shows the secret only once.
+With privilege separation enabled, both the backing user and the token need the read-only ACL. Verify the effective permissions with:
+
+```bash
+pveum user permissions nodeguard@pve
+pveum user token permissions nodeguard@pve nodeguard
+```
 
 Use these values in NodeGuard:
 
 ```text
-Token ID: nodeguard@pve!nodeguard
+Token user: nodeguard@pve
+Token ID: nodeguard
 Token secret: the value returned by Proxmox
 ```
 
@@ -37,8 +45,8 @@ Keep privilege separation enabled. Do not grant NodeGuard administrative roles.
 
 1. Open **Settings** in NodeGuard.
 2. Find **Integrations** and choose **Add Proxmox connection**.
-3. Enter a display name and the Proxmox endpoint, for example `https://pve.example.net:8006`.
-4. Enter the token ID and token secret.
+3. Enter a connection name and the Proxmox API URL, for example `https://pve.example.net:8006`.
+4. Enter the token user, token ID, and token secret as separate values.
 5. If Proxmox uses a private CA, paste its PEM certificate into the custom CA field.
 6. Test the connection.
 7. Save the connection after the test succeeds.
@@ -101,7 +109,7 @@ Changing this key after credentials have been stored prevents NodeGuard from dec
 The following backend environment variables are optional:
 
 ```env
-NODEGUARD_PROXMOX_SYNC_INTERVAL_SECONDS=60
+NODEGUARD_PROXMOX_SYNC_INTERVAL_SECONDS=300
 NODEGUARD_PROXMOX_FAILURE_THRESHOLD=3
 NODEGUARD_PROXMOX_STORAGE_WARNING_PERCENT=80
 NODEGUARD_PROXMOX_STORAGE_CRITICAL_PERCENT=90
@@ -162,4 +170,3 @@ NodeGuard is showing the last successful snapshot because recent synchronization
 - No console, shell, migration, backup, or update controls
 - No task-history or performance-series collection from Proxmox
 - No automatic certificate enrollment
-

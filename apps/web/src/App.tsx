@@ -101,9 +101,9 @@ function StatusPill({ status }: { status: HealthStatus | Alert["severity"] }) {
   return <span className={`pill ${getStatusTone(status)}`}>{getStatusLabel(status)}</span>;
 }
 
-function Panel({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
+function Panel({ title, children, action, className = "" }: { title: string; children: React.ReactNode; action?: React.ReactNode; className?: string }) {
   return (
-    <section className="panel">
+    <section className={`panel ${className}`.trim()}>
       <div className="panel-header">
         <h2>{title}</h2>
         {action}
@@ -638,8 +638,8 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
         <ProxmoxDashboardCard onOpen={() => setView("proxmox")} />
       </div>
       <div className="two-col">
-        <Panel title="Recent alerts" action={<button className="dashboard-panel-action" onClick={() => setView("alerts")}>View all</button>}>
-          {activeAlerts.length === 0 ? <StateBlock title="No alerts" message="No active alerts were generated." /> : activeAlerts.map((alert) => <AlertRow key={alert.id} alert={alert} />)}
+        <Panel title="Recent alerts" action={<button className="dashboard-panel-action" onClick={() => setView("alerts")}>View all</button>} className={activeAlerts.length === 0 ? "recent-alerts-card" : undefined}>
+          {activeAlerts.length === 0 ? <div className="recent-alerts-body"><StateBlock title="No alerts" message="No active alerts were generated." /></div> : activeAlerts.map((alert) => <AlertRow key={alert.id} alert={alert} />)}
         </Panel>
         <Panel title="Domain reachability" action={<button className="dashboard-panel-action" onClick={() => setView("domains")}>Open</button>}>
           {(domains.data ?? []).slice(0, 4).map((domain) => <DomainRow key={domain.id} domain={domain} />)}

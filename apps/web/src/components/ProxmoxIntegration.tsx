@@ -25,10 +25,12 @@ import {
   ReactNode,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 type ProxmoxStatus =
   | "available"
@@ -48,6 +50,8 @@ type ProxmoxConnection = {
   id: string;
   name: string;
   endpoint: string;
+  tokenUser?: string;
+  tokenId?: string;
   enabled: boolean;
   status: ProxmoxStatus;
   version?: string | null;
@@ -185,27 +189,58 @@ function asNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function normalizeConnection(value: unknown): ProxmoxConnection {
+  const connection = asRecord(value);
+  return {
+    ...connection,
+    id: asString(connection.id),
+    name: asString(connection.name),
+    endpoint: asString(connection.endpoint ?? connection.baseUrl),
+    tokenUser: asString(connection.tokenUser) || undefined,
+    tokenId: asString(connection.tokenId) || undefined,
+    enabled: connection.enabled !== false,
+    status: asString(connection.status, "unknown") as ProxmoxStatus,
+    lastSuccessfulSyncAt:
+      asString(connection.lastSuccessfulSyncAt ?? connection.lastSuccessAt) || null,
+    errorMessage: asString(connection.errorMessage ?? connection.lastError) || null,
+    nodeCount: asNumber(connection.nodeCount, asArray(connection.nodes).length),
+    guestCount: asNumber(connection.guestCount, asArray(connection.guests).length),
+    storageCount: asNumber(connection.storageCount, asArray(connection.storage).length),
+  };
+}
+
 function normalizeSnapshot(value: unknown): ProxmoxSnapshot {
   const wrapped = asRecord(value);
   const body = asRecord(wrapped.data ?? wrapped);
   const summary = asRecord(body.summary);
-  const connections = asArray<ProxmoxConnection>(body.connections);
-  const nodes = asArray<ProxmoxNode>(body.nodes);
-  const guests = asArray<ProxmoxGuest>(body.guests);
-  const storage = asArray<ProxmoxStorage>(body.storage);
+  const rawConnections = asArray<unknown>(body.connections);
+  const connections = rawConnections.map(normalizeConnection);
+  const nodes = asArray<ProxmoxNode>(body.nodes).length
+    ? asArray<ProxmoxNode>(body.nodes)
+    : rawConnections.flatMap((connection) => asArray<ProxmoxNode>(asRecord(connection).nodes));
+  const guests = asArray<ProxmoxGuest>(body.guests).length
+    ? asArray<ProxmoxGuest>(body.guests)
+    : rawConnections.flatMap((connection) => asArray<ProxmoxGuest>(asRecord(connection).guests));
+  const storage = asArray<ProxmoxStorage>(body.storage).length
+    ? asArray<ProxmoxStorage>(body.storage)
+    : rawConnections.flatMap((connection) => asArray<ProxmoxStorage>(asRecord(connection).storage));
 
   return {
     configured: Boolean(body.configured ?? connections.length > 0),
     demoMode: Boolean(body.demoMode),
     enabledConnections: asNumber(
-      body.enabledConnections,
+      body.enabledConnections ?? body.enabledCount,
       connections.filter((connection) => connection.enabled).length,
     ),
     connections,
     nodes,
     guests,
     storage,
-    lastSyncAt: typeof body.lastSyncAt === "string" ? body.lastSyncAt : null,
+    lastSyncAt: asString(body.lastSyncAt ?? body.lastCheckedAt) || null,
     summary: {
       connections: asNumber(summary.connections, connections.length),
       enabledConnections: asNumber(
@@ -213,7 +248,7 @@ function normalizeSnapshot(value: unknown): ProxmoxSnapshot {
         connections.filter((connection) => connection.enabled).length,
       ),
       availableConnections: asNumber(
-        summary.availableConnections,
+        summary.availableConnections ?? summary.connectionsAvailable,
         connections.filter((connection) => connection.status === "available").length,
       ),
       nodesOnline: asNumber(
@@ -265,8 +300,8 @@ function normalizeSnapshot(value: unknown): ProxmoxSnapshot {
 function normalizeConnections(value: unknown): ProxmoxConnection[] {
   const wrapped = asRecord(value);
   const body = wrapped.data ?? wrapped;
-  if (Array.isArray(body)) return body as ProxmoxConnection[];
-  return asArray<ProxmoxConnection>(asRecord(body).connections);
+  if (Array.isArray(body)) return body.map(normalizeConnection);
+  return asArray<unknown>(asRecord(body).connections).map(normalizeConnection);
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -292,6 +327,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     const nestedError = asRecord(record.error);
     const message =
       (typeof record.message === "string" && record.message) ||
+      (typeof record.error === "string" && record.error) ||
       (typeof nestedError.message === "string" && nestedError.message) ||
       `Request failed with HTTP ${response.status}.`;
     throw new Error(message);
@@ -897,71 +933,140 @@ export function ProxmoxPage() {
 
 function Dialog({
   title,
+  description,
+  icon,
   children,
   onClose,
+  returnFocus,
   closeDisabled = false,
 }: {
   title: string;
-  children: ReactNode;
+  description?: string;
+  icon?: ReactNode;
+  children: (close: () => void) => ReactNode;
   onClose: () => void;
+  returnFocus?: HTMLElement | null;
   closeDisabled?: boolean;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  const returnFocusRef = useRef(returnFocus);
+  const closeDisabledRef = useRef(closeDisabled);
+  const closeTimerRef = useRef<number | null>(null);
+  const [isClosing, setIsClosing] = useState(false);
+  const reactId = useId().replace(/:/g, "");
+  const titleId = `proxmox-dialog-title-${reactId}`;
+  const descriptionId = description ? `proxmox-dialog-description-${reactId}` : undefined;
 
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    dialogRef.current?.querySelector<HTMLElement>("input, button, textarea")?.focus();
+    onCloseRef.current = onClose;
+    returnFocusRef.current = returnFocus;
+    closeDisabledRef.current = closeDisabled;
+  }, [closeDisabled, onClose, returnFocus]);
+
+  const close = useCallback(() => {
+    if (closeTimerRef.current !== null) return;
+    setIsClosing(true);
+    closeTimerRef.current = window.setTimeout(() => onCloseRef.current(), 170);
+  }, []);
+
+  const requestClose = useCallback(() => {
+    if (!closeDisabledRef.current) close();
+  }, [close]);
+
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const body = document.body;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyPaddingRight = body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    const computedPaddingRight = Number.parseFloat(window.getComputedStyle(body).paddingRight) || 0;
+    body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) body.style.paddingRight = `${computedPaddingRight + scrollbarWidth}px`;
+
+    const focusableSelector =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusInitialControl = () => {
+      const dialog = dialogRef.current;
+      const initial = dialog?.querySelector<HTMLElement>("[data-autofocus]")
+        ?? dialog?.querySelector<HTMLElement>(focusableSelector);
+      (initial ?? dialog)?.focus();
+    };
+    const animationFrame = window.requestAnimationFrame(focusInitialControl);
+
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !closeDisabled) onClose();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        requestClose();
+        return;
+      }
       if (event.key !== "Tab" || !dialogRef.current) return;
       const focusable = Array.from(
-        dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [href]',
-        ),
+        dialogRef.current.querySelectorAll<HTMLElement>(focusableSelector),
       );
-      if (focusable.length === 0) return;
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current.focus();
+        return;
+      }
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      if (event.shiftKey && (document.activeElement === first || !dialogRef.current.contains(document.activeElement))) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && (document.activeElement === last || !dialogRef.current.contains(document.activeElement))) {
         event.preventDefault();
         first.focus();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => {
+      window.cancelAnimationFrame(animationFrame);
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
       document.removeEventListener("keydown", handleKeyDown);
-      previous?.focus();
+      body.style.overflow = previousBodyOverflow;
+      body.style.paddingRight = previousBodyPaddingRight;
+      (returnFocusRef.current ?? previous)?.focus();
     };
-  }, [closeDisabled, onClose]);
+  }, [requestClose]);
 
-  return (
-    <div className="proxmox-dialog-backdrop" onMouseDown={() => !closeDisabled && onClose()}>
+  return createPortal(
+    <div
+      className={`proxmox-dialog-backdrop${isClosing ? " is-closing" : ""}`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) requestClose();
+      }}
+      role="presentation"
+    >
       <div
-        aria-labelledby="proxmox-dialog-title"
+        aria-describedby={descriptionId}
+        aria-labelledby={titleId}
         aria-modal="true"
         className="proxmox-dialog"
-        onMouseDown={(event) => event.stopPropagation()}
         ref={dialogRef}
         role="dialog"
+        tabIndex={-1}
       >
         <header className="proxmox-dialog__header">
-          <h2 id="proxmox-dialog-title">{title}</h2>
+          {icon ? <span className="proxmox-dialog__icon" aria-hidden="true">{icon}</span> : null}
+          <div className="proxmox-dialog__heading">
+            <h2 id={titleId}>{title}</h2>
+            {description ? <p id={descriptionId}>{description}</p> : null}
+          </div>
           <button
-            aria-label="Close"
+            aria-label="Close dialog"
             className="proxmox-icon-button"
             disabled={closeDisabled}
-            onClick={onClose}
+            onClick={requestClose}
             type="button"
           >
             <X size={18} />
           </button>
         </header>
-        {children}
+        {children(close)}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -969,15 +1074,18 @@ function ConnectionFormDialog({
   initial,
   onClose,
   onSaved,
+  returnFocus,
 }: {
   initial: ConnectionForm;
   onClose: () => void;
   onSaved: () => Promise<void>;
+  returnFocus?: HTMLElement | null;
 }) {
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const update = <K extends keyof ConnectionForm>(key: K, value: ConnectionForm[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -986,7 +1094,7 @@ function ConnectionFormDialog({
 
   const payload = () => ({
     name: form.name.trim(),
-    endpoint: form.endpoint.trim(),
+    baseUrl: form.endpoint.trim(),
     tokenUser: form.tokenUser.trim(),
     tokenId: form.tokenId.trim(),
     ...(form.tokenSecret ? { tokenSecret: form.tokenSecret } : {}),
@@ -995,12 +1103,13 @@ function ConnectionFormDialog({
   });
 
   const testConnection = async () => {
+    if (saving || testing || !formRef.current?.reportValidity()) return;
     setTesting(true);
     setMessage(null);
     try {
       await requestJson("/api/proxmox/connections/test", {
         method: "POST",
-        body: JSON.stringify({ ...payload(), ...(form.id ? { connectionId: form.id } : {}) }),
+        body: JSON.stringify({ ...payload(), ...(form.id ? { id: form.id } : {}) }),
       });
       setMessage({ tone: "success", text: "Connection test succeeded." });
     } catch (caught) {
@@ -1013,8 +1122,9 @@ function ConnectionFormDialog({
     }
   };
 
-  const submit = async (event: FormEvent) => {
+  const submit = async (event: FormEvent, closeDialog: () => void) => {
     event.preventDefault();
+    if (saving || testing) return;
     setSaving(true);
     setMessage(null);
     try {
@@ -1026,7 +1136,7 @@ function ConnectionFormDialog({
         },
       );
       await onSaved();
-      onClose();
+      closeDialog();
     } catch (caught) {
       setMessage({
         tone: "error",
@@ -1039,116 +1149,119 @@ function ConnectionFormDialog({
 
   const busy = saving || testing;
   return (
-    <Dialog title={form.id ? "Edit Proxmox connection" : "Add Proxmox connection"} onClose={onClose} closeDisabled={busy}>
-      <form className="proxmox-connection-form" onSubmit={submit}>
-        <p className="proxmox-form-intro">
-          Use a dedicated, read-only Proxmox API token with the PVEAuditor role. Secrets are encrypted by
-          the NodeGuard backend and are never returned to this browser.
-        </p>
-        <div className="proxmox-form-grid">
-          <label>
-            <span>Display name</span>
-            <input
-              autoComplete="off"
-              onChange={(event) => update("name", event.target.value)}
-              placeholder="Primary cluster"
-              required
-              value={form.name}
-            />
-          </label>
-          <label>
-            <span>Proxmox URL</span>
-            <input
-              autoComplete="url"
-              inputMode="url"
-              onChange={(event) => update("endpoint", event.target.value)}
-              placeholder="https://proxmox.example.net:8006"
-              required
-              type="url"
-              value={form.endpoint}
-            />
-          </label>
-          <label>
-            <span>Token user</span>
-            <input
-              autoComplete="off"
-              onChange={(event) => update("tokenUser", event.target.value)}
-              placeholder="nodeguard@pve"
-              required
-              value={form.tokenUser}
-            />
-          </label>
-          <label>
-            <span>Token ID</span>
-            <input
-              autoComplete="off"
-              onChange={(event) => update("tokenId", event.target.value)}
-              placeholder="monitoring"
-              required
-              value={form.tokenId}
-            />
-          </label>
-          <label className="proxmox-form-grid__wide">
-            <span>Token secret</span>
-            <input
-              autoComplete="new-password"
-              onChange={(event) => update("tokenSecret", event.target.value)}
-              placeholder={form.id ? "Leave blank to keep the current secret" : "Paste token secret"}
-              required={!form.id}
-              type="password"
-              value={form.tokenSecret}
-            />
-          </label>
-          <label className="proxmox-form-grid__wide">
-            <span>Custom CA certificate (optional)</span>
-            <textarea
-              onChange={(event) => update("customCa", event.target.value)}
-              placeholder="-----BEGIN CERTIFICATE-----"
-              rows={4}
-              value={form.customCa}
-            />
-            <small>Use a trusted PEM certificate chain for private PKI. TLS verification is never disabled.</small>
-          </label>
-        </div>
-        <label className="proxmox-checkbox-row">
-          <input
-            checked={form.enabled}
-            onChange={(event) => update("enabled", event.target.checked)}
-            type="checkbox"
-          />
-          <span className="proxmox-checkbox" aria-hidden="true">
-            <Check size={13} />
-          </span>
-          <span>Enable scheduled monitoring</span>
-        </label>
-        {message ? (
-          <div
-            className={`proxmox-notice proxmox-notice--${message.tone}`}
-            role={message.tone === "error" ? "alert" : "status"}
-          >
-            {message.tone === "success" ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}
-            <span>{message.text}</span>
+    <Dialog
+      title={form.id ? "Edit Proxmox connection" : "Add Proxmox connection"}
+      description="Connect a Proxmox VE cluster using a read-only PVEAuditor API token. Credentials are encrypted and stored only by the NodeGuard backend."
+      icon={<CloudCog size={20} />}
+      onClose={onClose}
+      returnFocus={returnFocus}
+      closeDisabled={busy}
+    >
+      {(closeDialog) => <form className="proxmox-connection-form" onSubmit={(event) => void submit(event, closeDialog)} ref={formRef}>
+        <div className="proxmox-dialog__body">
+          <div className="proxmox-form-grid">
+            <label className="proxmox-form-grid__wide">
+              <span>Connection name</span>
+              <input
+                autoComplete="off"
+                data-autofocus
+                onChange={(event) => update("name", event.target.value)}
+                placeholder="Primary cluster"
+                required
+                value={form.name}
+              />
+            </label>
+            <label className="proxmox-form-grid__wide">
+              <span>Proxmox API URL</span>
+              <input
+                autoComplete="url"
+                inputMode="url"
+                onChange={(event) => update("endpoint", event.target.value)}
+                placeholder="https://proxmox.example.net:8006"
+                required
+                type="url"
+                value={form.endpoint}
+              />
+            </label>
+            <label>
+              <span>Token user</span>
+              <input
+                autoComplete="off"
+                onChange={(event) => update("tokenUser", event.target.value)}
+                placeholder="nodeguard@pve"
+                required
+                value={form.tokenUser}
+              />
+            </label>
+            <label>
+              <span>Token ID</span>
+              <input
+                autoComplete="off"
+                onChange={(event) => update("tokenId", event.target.value)}
+                placeholder="monitoring"
+                required
+                value={form.tokenId}
+              />
+            </label>
+            <label className="proxmox-form-grid__wide">
+              <span>Token secret</span>
+              <input
+                autoComplete="new-password"
+                onChange={(event) => update("tokenSecret", event.target.value)}
+                placeholder={form.id ? "Leave blank to keep the current secret" : "Paste token secret"}
+                required={!form.id}
+                type="password"
+                value={form.tokenSecret}
+              />
+            </label>
+            <label className="proxmox-form-grid__wide">
+              <span>Custom CA certificate (optional)</span>
+              <textarea
+                onChange={(event) => update("customCa", event.target.value)}
+                placeholder="-----BEGIN CERTIFICATE-----"
+                value={form.customCa}
+              />
+              <small>Paste the trusted PEM certificate chain for private PKI. TLS verification is never disabled.</small>
+            </label>
           </div>
-        ) : null}
-        <div className="proxmox-dialog__actions">
-          <button className="proxmox-button proxmox-button--secondary" disabled={busy} onClick={onClose} type="button">
+          <label className="proxmox-checkbox-row">
+            <input
+              checked={form.enabled}
+              onChange={(event) => update("enabled", event.target.checked)}
+              type="checkbox"
+            />
+            <span className="proxmox-checkbox" aria-hidden="true"><Check size={13} /></span>
+            <span>Enable scheduled monitoring</span>
+          </label>
+          {message ? (
+            <div
+              className={`proxmox-notice proxmox-notice--${message.tone}`}
+              role={message.tone === "error" ? "alert" : "status"}
+            >
+              {message.tone === "success" ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}
+              <span>{message.text}</span>
+            </div>
+          ) : null}
+        </div>
+        <footer className="proxmox-dialog__actions">
+          <button className="proxmox-button proxmox-button--secondary" disabled={busy} onClick={closeDialog} type="button">
             Cancel
           </button>
           <button
             className="proxmox-button proxmox-button--secondary"
-            disabled={busy || !form.endpoint || !form.tokenUser || !form.tokenId || (!form.id && !form.tokenSecret)}
-            onClick={testConnection}
+            disabled={busy}
+            onClick={() => void testConnection()}
             type="button"
           >
             {testing ? <LoaderCircle className="proxmox-spin" size={16} /> : <ShieldCheck size={16} />}
-            {testing ? "Testing" : "Test connection"}
+            {testing ? "Testing…" : "Test connection"}
           </button>
           <button className="proxmox-button proxmox-button--primary" disabled={busy} type="submit">
             {saving ? <LoaderCircle className="proxmox-spin" size={16} /> : <LockKeyhole size={16} />}
-            {saving ? "Saving" : "Save connection"}
+            {saving ? (form.id ? "Saving…" : "Adding…") : (form.id ? "Save changes" : "Add connection")}
           </button>
-        </div>
-      </form>
+        </footer>
+      </form>}
     </Dialog>
   );
 }
@@ -1164,7 +1277,7 @@ function DeleteConnectionDialog({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const remove = async () => {
+  const remove = async (closeDialog: () => void) => {
     setBusy(true);
     setError(null);
     try {
@@ -1172,7 +1285,7 @@ function DeleteConnectionDialog({
         method: "DELETE",
       });
       await onDeleted();
-      onClose();
+      closeDialog();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to remove the connection.");
     } finally {
@@ -1181,23 +1294,25 @@ function DeleteConnectionDialog({
   };
   return (
     <Dialog title="Remove Proxmox connection" onClose={onClose} closeDisabled={busy}>
-      <div className="proxmox-delete-dialog">
-        <AlertTriangle size={22} />
-        <p>
-          Remove <strong>{connection.name}</strong> and its cached Proxmox inventory from NodeGuard?
-        </p>
-        <p>This does not change anything in Proxmox VE. This action cannot be undone.</p>
-        {error ? <ErrorBanner message={error} /> : null}
-        <div className="proxmox-dialog__actions">
-          <button className="proxmox-button proxmox-button--secondary" disabled={busy} onClick={onClose} type="button">
+      {(closeDialog) => <div className="proxmox-delete-dialog">
+        <div className="proxmox-dialog__body">
+          <AlertTriangle size={22} />
+          <p>
+            Remove <strong>{connection.name}</strong> and its cached Proxmox inventory from NodeGuard?
+          </p>
+          <p>This does not change anything in Proxmox VE. This action cannot be undone.</p>
+          {error ? <ErrorBanner message={error} /> : null}
+        </div>
+        <footer className="proxmox-dialog__actions">
+          <button className="proxmox-button proxmox-button--secondary" disabled={busy} onClick={closeDialog} type="button">
             Cancel
           </button>
-          <button className="proxmox-button proxmox-button--danger" disabled={busy} onClick={remove} type="button">
+          <button className="proxmox-button proxmox-button--danger" disabled={busy} onClick={() => void remove(closeDialog)} type="button">
             {busy ? <LoaderCircle className="proxmox-spin" size={16} /> : <Trash2 size={16} />}
-            {busy ? "Removing" : "Remove connection"}
+            {busy ? "Removing…" : "Remove connection"}
           </button>
-        </div>
-      </div>
+        </footer>
+      </div>}
     </Dialog>
   );
 }
@@ -1210,6 +1325,7 @@ export function ProxmoxSettingsPanel() {
   const [editing, setEditing] = useState<ConnectionForm | null>(null);
   const [deleting, setDeleting] = useState<ProxmoxConnection | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -1262,8 +1378,8 @@ export function ProxmoxSettingsPanel() {
       id: connection.id,
       name: connection.name,
       endpoint: connection.endpoint,
-      tokenUser: "",
-      tokenId: "",
+      tokenUser: connection.tokenUser ?? "",
+      tokenId: connection.tokenId ?? "",
       tokenSecret: "",
       customCa: "",
       enabled: connection.enabled,
@@ -1276,7 +1392,7 @@ export function ProxmoxSettingsPanel() {
           <h2>Integrations</h2>
           <p>Connect read-only infrastructure APIs. Credentials are encrypted and stored only by the NodeGuard backend.</p>
         </div>
-        <button className="proxmox-button proxmox-button--primary" onClick={() => setEditing(emptyForm)} type="button">
+        <button className="proxmox-button proxmox-button--primary" onClick={() => setEditing(emptyForm)} ref={addButtonRef} type="button">
           <Plus size={16} />
           Add Proxmox connection
         </button>
@@ -1284,10 +1400,13 @@ export function ProxmoxSettingsPanel() {
       <div className="proxmox-settings-section__body">
         <div className="proxmox-integration-heading">
           <span className="proxmox-integration-heading__icon"><CloudCog size={19} /></span>
-          <div>
+          <div className="proxmox-integration-heading__copy">
             <strong>Proxmox VE</strong>
-            <span>Monitors clusters, nodes, VMs, LXC containers, and storage using a PVEAuditor token.</span>
+            <p>Monitor clusters, nodes, VMs, LXC containers, and storage using a PVEAuditor token.</p>
           </div>
+          <span className={`proxmox-configuration-badge${connections.length ? " is-configured" : ""}`}>
+            {loading ? "Checking…" : connections.length ? "Configured" : "Not configured"}
+          </span>
         </div>
         {notice ? (
           <div className="proxmox-notice proxmox-notice--success" role="status">
@@ -1374,7 +1493,7 @@ export function ProxmoxSettingsPanel() {
         )}
       </div>
       {editing ? (
-        <ConnectionFormDialog initial={editing} onClose={() => setEditing(null)} onSaved={load} />
+        <ConnectionFormDialog initial={editing} onClose={() => setEditing(null)} onSaved={load} returnFocus={editing.id ? undefined : addButtonRef.current} />
       ) : null}
       {deleting ? (
         <DeleteConnectionDialog connection={deleting} onClose={() => setDeleting(null)} onDeleted={load} />
@@ -1442,4 +1561,3 @@ export function ProxmoxDashboardCard({
     <article className="proxmox-dashboard-card">{content}</article>
   );
 }
-
