@@ -6,6 +6,7 @@ import { getCurrentSession, logout as logoutSession } from "./api/endpoints";
 import { normalizeApiError } from "./api/errors";
 import { NodeGuardSelect } from "./components/NodeGuardSelect";
 import { ProxmoxDashboardCard, ProxmoxPage, ProxmoxSettingsPanel } from "./components/ProxmoxIntegration";
+import { appConfig } from "./config/appConfig";
 import {
   useAddContainerMonitor,
   useAddDomain,
@@ -2194,10 +2195,21 @@ function SettingsPage() {
       </Panel> : null}
       <Panel title="About NodeGuard">
         <div className="settings-content about-content">
-          <p className="muted settings-description">NodeGuard is a cross-platform infrastructure monitoring app for web, iOS, and Android. Monitor hosts, containers, domains, and alerts from one secure dashboard. Human users sign in with password-backed sessions; API keys are reserved for future agents and integrations.</p>
+          <p className="muted settings-description">NodeGuard is a self-hosted, read-only infrastructure monitoring platform for Linux servers, Docker containers, domains, updates, alerts, and Proxmox infrastructure. It combines a React dashboard, TypeScript API, SQLite persistence, and a lightweight Go monitoring agent.</p>
           <div className="about-actions">
             <a className="secondary-button" href="https://github.com/HackintoshMatrix7132/NodeGuard" target="_blank" rel="noreferrer" title="Open NodeGuard on GitHub"><Github size={15} /> GitHub</a>
-            <button className="secondary-button" type="button" disabled title="Support NodeGuard is coming soon"><Heart size={15} /> Support NodeGuard <span>Coming soon</span></button>
+            {appConfig.supportUrl ? <a
+              className="secondary-button about-support-link"
+              href={appConfig.supportUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Support NodeGuard development on Ko-fi"
+              title="Help support NodeGuard development and hosting."
+            >
+              <Heart size={15} aria-hidden="true" />
+              <span>Support NodeGuard</span>
+              <ExternalLink size={13} aria-hidden="true" />
+            </a> : null}
           </div>
         </div>
       </Panel>

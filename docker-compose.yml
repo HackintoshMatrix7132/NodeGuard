@@ -1,6 +1,9 @@
 services:
   nodeguard:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_NODEGUARD_SUPPORT_URL: ${VITE_NODEGUARD_SUPPORT_URL:-}
     container_name: nodeguard
     restart: unless-stopped
     env_file:

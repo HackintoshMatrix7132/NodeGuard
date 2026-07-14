@@ -402,10 +402,13 @@ Agent v0.1 has no inbound listener, remote shell, command execution, update inst
 | `ALLOWED_ORIGINS` | Allowed separate frontend origins |
 | `TRUST_PROXY` | Enables trusted reverse-proxy handling |
 | `SESSION_COOKIE_SECURE` | `auto`, `true`, or `false` cookie behavior |
+| `VITE_NODEGUARD_SUPPORT_URL` | Optional public HTTPS support link embedded in the frontend build |
 | `METRIC_HISTORY_RETENTION_DAYS` | Resource-history retention period |
 | `UPDATE_REFRESH_INTERVAL_MINUTES` | Scheduled update-discovery interval |
 | `AGENT_STALE_AFTER_SECONDS` | Time before an agent is marked stale |
 | `AGENT_OFFLINE_AFTER_SECONDS` | Time before an agent is marked offline |
+
+`VITE_NODEGUARD_SUPPORT_URL` is public build-time configuration. NodeGuard shows the support action only for a valid `https://` URL; a missing or invalid value hides it. Never place PayPal credentials or other secrets in `VITE_*` variables.
 
 <details>
 <summary><strong>View the full environment-variable reference</strong></summary>
@@ -413,6 +416,7 @@ Agent v0.1 has no inbound listener, remote shell, command execution, update inst
 ```env
 NODE_ENV=development
 PORT=3000
+VITE_NODEGUARD_SUPPORT_URL=https://ko-fi.com/hackintoshmatrix
 NODEGUARD_ADMIN_USERNAME=admin
 NODEGUARD_ADMIN_PASSWORD=replace_me
 NODEGUARD_DEMO_USERNAME=demo
@@ -623,6 +627,12 @@ npm test             # Run tests
 7. Open **Alerts**, select an incident, and explain first/last seen timestamps, occurrences, failed checks, likely cause, and suggested next steps.
 8. Open **Updates** and explain the shared, read-only source model and security-critical update state.
 9. Finish in **Settings** by showing the demo-only session, refresh controls, and hidden live configuration and diagnostics.
+
+## Support NodeGuard
+
+NodeGuard is an independent project. Support helps cover hosting costs and continued development of new integrations, performance improvements, and features.
+
+[![Support NodeGuard on Ko-fi](https://img.shields.io/badge/Support-NodeGuard-29ABE0?logo=ko-fi&logoColor=white)](https://ko-fi.com/hackintoshmatrix)
 
 ---
 
