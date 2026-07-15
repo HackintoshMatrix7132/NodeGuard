@@ -579,8 +579,18 @@
   background: rgba(8, 17, 34, 0.48);
 }
 
-.proxmox-settings-row__identity,
+.proxmox-settings-row__identity {
+  min-width: 0;
+}
+
 .proxmox-connection-row__identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.proxmox-connection-row__identity > div {
   min-width: 0;
 }
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import test from "node:test";
 
 process.env.DATABASE_URL = ":memory:";
@@ -12,6 +13,8 @@ function register(displayName: string, hostname: string) {
   const enrollment = agentService.createAgentEnrollmentToken(displayName);
   return agentService.registerAgent({
     enrollmentToken: enrollment.token,
+    machineIdentity: crypto.randomUUID(),
+    replaceExisting: false,
     hostname,
     agentVersion: "0.2.0",
     osName: "Debian GNU/Linux",

@@ -9,7 +9,7 @@
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run typecheck"
+    "test": "npm run typecheck && tsx --test src/components/MonitoredExternalLink.test.tsx src/utils/agentCommand.test.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.81.5",

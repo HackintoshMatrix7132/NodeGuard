@@ -7,6 +7,7 @@ import { recordMetricSnapshot } from "./metricHistoryService.js";
 
 type AgentRow = {
   id: string;
+  machine_identity: string | null;
   display_name: string;
   hostname: string;
   status: AgentStatus;
@@ -278,55 +279,137 @@ function getAgentRow(id: string) {
   return database.prepare("SELECT * FROM agents WHERE id = ?").get(id) as AgentRow | undefined;
 }
 
-export function registerAgent(input: AgentRegistrationInput): AgentRegistrationResponse {
-  const tokenHash = hashSecret(input.enrollmentToken);
-  const enrollment = database.prepare("SELECT * FROM agent_enrollment_tokens WHERE token_hash = ?").get(tokenHash) as EnrollmentRow | undefined;
-  if (!enrollment || enrollment.used_at || enrollment.revoked_at || Date.parse(enrollment.expires_at) <= Date.now()) {
-    throw new AgentServiceError("invalid_enrollment_token", "Enrollment token is invalid, expired, revoked, or already used.", 401);
-  }
+function getAgentRowByMachineIdentity(machineIdentity: string) {
+  return database.prepare("SELECT * FROM agents WHERE machine_identity = ?").get(machineIdentity) as AgentRow | undefined;
+}
 
-  const credential = `ng_agent_${crypto.randomBytes(32).toString("base64url")}`;
+function machineIdentityConstraint(error: unknown) {
+  return error instanceof Error && error.message.includes("agents.machine_identity");
+}
+
+function machineIdentityConflict() {
+  return new AgentServiceError(
+    "machine_identity_conflict",
+    "This machine is already registered. Re-enroll with replaceExisting enabled to rotate its credential.",
+    409
+  );
+}
+
+function invalidEnrollmentToken() {
+  return new AgentServiceError(
+    "invalid_enrollment_token",
+    "Enrollment token is invalid, expired, revoked, already used, or does not match this registration request.",
+    401
+  );
+}
+
+export function registerAgent(input: AgentRegistrationInput): AgentRegistrationResponse {
+  const credential = input.requestedCredential ?? `ng_agent_${crypto.randomBytes(32).toString("base64url")}`;
   const credentialHash = hashSecret(credential);
   const timestamp = nowIso();
-  const agentId = enrollment.purpose === "rotate" && enrollment.agent_id ? enrollment.agent_id : crypto.randomUUID();
-  const existing = enrollment.purpose === "rotate" ? getAgentRow(agentId) : undefined;
-  if (enrollment.purpose === "rotate" && (!existing || existing.revoked_at)) {
-    throw new AgentServiceError("agent_not_found", "The agent for this rotation token is no longer active.", 404);
-  }
-  const displayName = enrollment.display_name ?? input.displayName?.trim() ?? existing?.display_name ?? input.hostname;
-
   const consume = database.transaction(() => {
+    const tokenHash = hashSecret(input.enrollmentToken);
+    const enrollment = database.prepare("SELECT * FROM agent_enrollment_tokens WHERE token_hash = ?").get(tokenHash) as EnrollmentRow | undefined;
+    if (!enrollment || enrollment.revoked_at) throw invalidEnrollmentToken();
+
+    if (enrollment.used_at) {
+      if (!input.requestedCredential || !input.machineIdentity || !enrollment.agent_id) throw invalidEnrollmentToken();
+      const registeredAgent = getAgentRow(enrollment.agent_id);
+      if (!registeredAgent || registeredAgent.revoked_at
+        || registeredAgent.machine_identity !== input.machineIdentity
+        || !secretsMatch(input.requestedCredential, registeredAgent.credential_hash)) {
+        throw invalidEnrollmentToken();
+      }
+      return { agentId: registeredAgent.id, displayName: registeredAgent.display_name };
+    }
+    if (Date.parse(enrollment.expires_at) <= Date.now()) throw invalidEnrollmentToken();
+
+    const machineIdentity = input.machineIdentity;
+    const identityMatch = machineIdentity ? getAgentRowByMachineIdentity(machineIdentity) : undefined;
+    let existing: AgentRow | undefined;
+    let agentId: string;
+
+    if (enrollment.purpose === "rotate") {
+      agentId = enrollment.agent_id ?? "";
+      existing = agentId ? getAgentRow(agentId) : undefined;
+      if (!existing || existing.revoked_at) {
+        throw new AgentServiceError("agent_not_found", "The agent for this rotation token is no longer active.", 404);
+      }
+      if (existing.machine_identity && !machineIdentity) {
+        throw new AgentServiceError(
+          "machine_identity_required",
+          "This Agent is identity-bound. Upgrade the Agent and retry credential rotation.",
+          400
+        );
+      }
+      if (existing.machine_identity && existing.machine_identity !== machineIdentity) {
+        throw new AgentServiceError(
+          "machine_identity_mismatch",
+          "The rotation token belongs to a different machine identity.",
+          409
+        );
+      }
+      if (identityMatch && identityMatch.id !== agentId) throw machineIdentityConflict();
+    } else if (!machineIdentity) {
+      throw new AgentServiceError(
+        "machine_identity_required",
+        "A stable machine identity is required for enrollment. Upgrade the Agent and retry.",
+        400
+      );
+    } else if (identityMatch) {
+      if (!input.replaceExisting) throw machineIdentityConflict();
+      existing = identityMatch;
+      agentId = identityMatch.id;
+    } else {
+      agentId = crypto.randomUUID();
+    }
+
+    const displayName = enrollment.display_name ?? input.displayName?.trim() ?? existing?.display_name ?? input.hostname;
     const claimed = database.prepare(`
       UPDATE agent_enrollment_tokens SET used_at = ?
       WHERE id = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?
     `).run(timestamp, enrollment.id, timestamp);
-    if (claimed.changes !== 1) throw new AgentServiceError("invalid_enrollment_token", "Enrollment token was already used.", 401);
+    if (claimed.changes !== 1) throw invalidEnrollmentToken();
 
     if (existing) {
       database.prepare(`
-        UPDATE agents SET display_name = ?, hostname = ?, agent_version = ?, os_name = ?, os_version = ?, kernel = ?,
-          architecture = ?, credential_hash = ?, status = 'online', last_seen_at = ?, updated_at = ?
+        UPDATE agents SET machine_identity = ?, display_name = ?, hostname = ?, agent_version = ?, os_name = ?,
+          os_version = ?, kernel = ?, architecture = ?, credential_hash = ?, status = ?, last_seen_at = ?,
+          revoked_at = NULL, updated_at = ?
         WHERE id = ?
-      `).run(displayName, input.hostname, input.agentVersion, input.osName ?? existing.os_name, input.osVersion ?? existing.os_version,
-        input.kernel ?? existing.kernel, input.architecture ?? existing.architecture, credentialHash, timestamp, timestamp, agentId);
+      `).run(machineIdentity ?? existing.machine_identity, displayName, input.hostname, input.agentVersion, input.osName ?? existing.os_name,
+        input.osVersion ?? existing.os_version, input.kernel ?? existing.kernel, input.architecture ?? existing.architecture,
+        credentialHash, "offline", null, timestamp, agentId);
+
+      database.prepare(`
+        UPDATE agent_enrollment_tokens SET revoked_at = ?
+        WHERE agent_id = ? AND id != ? AND used_at IS NULL AND revoked_at IS NULL
+      `).run(timestamp, agentId, enrollment.id);
     } else {
       database.prepare(`
         INSERT INTO agents (
-          id, display_name, hostname, status, agent_version, os_name, os_version, kernel, architecture,
+          id, machine_identity, display_name, hostname, status, agent_version, os_name, os_version, kernel, architecture,
           credential_hash, registered_at, last_seen_at, created_at, updated_at
-        ) VALUES (?, ?, ?, 'offline', ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-      `).run(agentId, displayName, input.hostname, input.agentVersion, input.osName ?? null, input.osVersion ?? null,
+        ) VALUES (?, ?, ?, ?, 'offline', ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+      `).run(agentId, machineIdentity, displayName, input.hostname, input.agentVersion, input.osName ?? null, input.osVersion ?? null,
         input.kernel ?? null, input.architecture ?? null, credentialHash, timestamp, timestamp, timestamp);
     }
 
     database.prepare("UPDATE agent_enrollment_tokens SET agent_id = ? WHERE id = ?").run(agentId, enrollment.id);
+    return { agentId, displayName };
   });
-  consume();
+  let registered: { agentId: string; displayName: string };
+  try {
+    registered = consume();
+  } catch (error) {
+    if (machineIdentityConstraint(error)) throw machineIdentityConflict();
+    throw error;
+  }
 
   return {
-    agentId,
+    agentId: registered.agentId,
     credential,
-    displayName,
+    displayName: registered.displayName,
     heartbeatIntervalSeconds: env.agentHeartbeatIntervalSeconds,
     metricsIntervalSeconds: env.agentMetricsIntervalSeconds,
     dockerIntervalSeconds: env.agentDockerIntervalSeconds,
@@ -345,11 +428,36 @@ export function authenticateAgent(agentId: string, credential: string) {
 export function recordAgentHeartbeat(agentId: string, input: AgentHeartbeatInput) {
   if (input.agentId && input.agentId !== agentId) throw new AgentServiceError("agent_id_mismatch", "Payload agentId does not match the authenticated agent.", 400);
   const timestamp = nowIso();
-  const result = database.prepare(`
-    UPDATE agents SET status = 'online', agent_version = ?, last_seen_at = ?, updated_at = ?
-    WHERE id = ? AND revoked_at IS NULL
-  `).run(input.agentVersion, timestamp, timestamp, agentId);
-  if (result.changes !== 1) throw new AgentServiceError("agent_not_found", "Agent not found.", 404);
+  const record = database.transaction(() => {
+    const agent = getAgentRow(agentId);
+    if (!agent || agent.revoked_at) throw new AgentServiceError("agent_not_found", "Agent not found.", 404);
+
+    if (input.machineIdentity) {
+      if (agent.machine_identity && agent.machine_identity !== input.machineIdentity) {
+        throw new AgentServiceError(
+          "machine_identity_mismatch",
+          "The reported machine identity does not match this Agent registration.",
+          409
+        );
+      }
+      if (!agent.machine_identity) {
+        try {
+          database.prepare("UPDATE agents SET machine_identity = ? WHERE id = ? AND machine_identity IS NULL")
+            .run(input.machineIdentity, agentId);
+        } catch (error) {
+          if (machineIdentityConstraint(error)) throw machineIdentityConflict();
+          throw error;
+        }
+      }
+    }
+
+    const result = database.prepare(`
+      UPDATE agents SET status = 'online', agent_version = ?, last_seen_at = ?, updated_at = ?
+      WHERE id = ? AND revoked_at IS NULL
+    `).run(input.agentVersion, timestamp, timestamp, agentId);
+    if (result.changes !== 1) throw new AgentServiceError("agent_not_found", "Agent not found.", 404);
+  });
+  record();
   return { ok: true, receivedAt: timestamp };
 }
 

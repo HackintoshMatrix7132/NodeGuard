@@ -37,6 +37,24 @@ func TestGracefulShutdown(t *testing.T) {
 	}
 }
 
+func TestHeartbeatIncludesStableMachineIdentity(t *testing.T) {
+	cfg := config.Config{
+		ServerURL: "http://127.0.0.1:1", AgentID: "agent", Credential: "secret", DisplayName: "agent",
+		HeartbeatIntervalSeconds: 20, MetricsIntervalSeconds: 30, DockerIntervalSeconds: 60,
+		InventoryIntervalSeconds: 3600, UpdateIntervalSeconds: config.DefaultUpdateIntervalSeconds,
+	}
+	instance := New(cfg, "test", slog.New(slog.NewTextHandler(io.Discard, nil))).WithMachineIdentity("78c1d45d-ddd3-4b12-9bf7-7da129950502")
+	instance.heartbeat()
+	item, found := instance.queue.Peek()
+	if !found {
+		t.Fatal("heartbeat was not queued")
+	}
+	heartbeat, ok := item.Payload.(model.Heartbeat)
+	if !ok || heartbeat.MachineIdentity != "78c1d45d-ddd3-4b12-9bf7-7da129950502" {
+		t.Fatalf("heartbeat missing machine identity: %#v", item.Payload)
+	}
+}
+
 type blockingUpdateProvider struct {
 	started chan struct{}
 	calls   atomic.Int32

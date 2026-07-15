@@ -2,20 +2,26 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-readonly INSTALLER_VERSION="0.2.0"
+readonly INSTALLER_VERSION="0.3.0"
 readonly INSTALL_PATH="/usr/local/bin/nodeguard-agent"
 readonly CONFIG_DIR="/etc/nodeguard-agent"
 readonly CONFIG_PATH="${CONFIG_DIR}/config.json"
+readonly STATE_DIR="/var/lib/nodeguard-agent"
+readonly MACHINE_ID_PATH="${STATE_DIR}/machine-id"
 readonly UNIT_PATH="/etc/systemd/system/nodeguard-agent.service"
 readonly SERVICE_NAME="nodeguard-agent.service"
 
 SERVER_URL=""
-ENROLLMENT_TOKEN=""
+ENROLLMENT_TOKEN=${NODEGUARD_ENROLLMENT_TOKEN:-}
+unset NODEGUARD_ENROLLMENT_TOKEN || true
 DISPLAY_NAME=""
 REQUESTED_VERSION="latest"
 ASSUME_YES=0
 VERBOSE=0
 NO_COLOR_REQUESTED=0
+FORCE_REINSTALL=0
+REPLACE_EXISTING=0
+TOKEN_FROM_ARGUMENT=0
 TEMP_DIR=""
 COMMAND_LOG=""
 STATUS_OUTPUT=""
@@ -27,28 +33,39 @@ INSTALL_COMPLETE=0
 SERVICE_WAS_ACTIVE=0
 HAD_BINARY=0
 HAD_UNIT=0
+HAD_MACHINE_ID=0
+PREVIOUS_SERVICE_STOPPED=0
 
 usage() {
   cat <<'USAGE'
 NodeGuard Agent Installer
 
 Usage:
-  install-agent.sh --server URL --token TOKEN [options]
+  install-agent.sh --server URL [options]
 
 Required for a new registration:
   --server URL       NodeGuard HTTPS URL
-  --token TOKEN      Short-lived one-time enrollment token
+
+Enrollment token (choose one):
+  secure prompt      Used automatically on an interactive terminal
+  environment        NODEGUARD_ENROLLMENT_TOKEN (preferred for automation)
+  --token TOKEN      Compatibility option; may be visible in process listings
 
 Options:
   --name NAME        Agent display name
-  --version VERSION  Agent version to install (default: latest)
+  --agent-version V  Agent version to install (default: latest)
+  --version [V]      Print installer version, or install V for compatibility
   --yes              Accept safe non-interactive defaults
+  --non-interactive  Alias for --yes
+  --force-reinstall  Reinstall even when the current binary is verified
+  --replace-existing Re-enroll only the record with this stable machine identity
   --verbose          Show additional diagnostics when a step fails
   --no-color         Disable color and animated terminal output
   --help              Show this help text
 
-An existing /etc/nodeguard-agent/config.json is always preserved. In that case
-the installer upgrades the binary and service without registering again.
+Normal upgrades preserve the stable identity and valid credentials. If stale
+credentials are detected, provide a new token to re-enroll. Replacing a healthy
+registration requires --replace-existing and a valid one-time token.
 USAGE
 }
 
@@ -62,6 +79,7 @@ while (($# > 0)); do
     --token)
       (($# >= 2)) || { printf '%s\n' "Error: --token requires a value." >&2; exit 2; }
       ENROLLMENT_TOKEN=$2
+      TOKEN_FROM_ARGUMENT=1
       shift 2
       ;;
     --name)
@@ -70,12 +88,33 @@ while (($# > 0)); do
       shift 2
       ;;
     --version)
-      (($# >= 2)) || { printf '%s\n' "Error: --version requires a value." >&2; exit 2; }
+      if (($# >= 2)) && [[ $2 != --* ]]; then
+        REQUESTED_VERSION=${2#v}
+        shift 2
+      else
+        printf 'NodeGuard Agent Installer %s\n' "$INSTALLER_VERSION"
+        exit 0
+      fi
+      ;;
+    --agent-version)
+      (($# >= 2)) || { printf '%s\n' "Error: --agent-version requires a value." >&2; exit 2; }
       REQUESTED_VERSION=${2#v}
       shift 2
       ;;
     --yes)
       ASSUME_YES=1
+      shift
+      ;;
+    --non-interactive)
+      ASSUME_YES=1
+      shift
+      ;;
+    --force-reinstall)
+      FORCE_REINSTALL=1
+      shift
+      ;;
+    --replace-existing)
+      REPLACE_EXISTING=1
       shift
       ;;
     --verbose)
@@ -98,7 +137,8 @@ while (($# > 0)); do
   esac
 done
 
-# Remove parsed secrets from the shell positional parameters immediately.
+# Drop parsed shell positional references. This cannot conceal an argument from
+# the kernel process list, so the environment or secure prompt is preferred.
 set --
 
 if [[ -t 1 && $NO_COLOR_REQUESTED -eq 0 && -z ${NO_COLOR:-} && ${TERM:-} != "dumb" ]]; then
@@ -141,6 +181,19 @@ warn() { printf '%s%s%s %s\n' "$AMBER" "$WARN_SYMBOL" "$RESET" "$1"; }
 detail() { printf '  %s%s%s\n' "$MUTED" "$1" "$RESET"; }
 section() { printf '\n%s%s%s\n\n' "$BOLD" "$1" "$RESET"; }
 
+require_enrollment_token() {
+  if [[ -n $ENROLLMENT_TOKEN ]]; then
+    return 0
+  fi
+  if ((ASSUME_YES)) || [[ ! -r /dev/tty || ! -w /dev/tty ]]; then
+    fatal "No enrollment token was provided. Set NODEGUARD_ENROLLMENT_TOKEN for non-interactive installation." 2
+  fi
+  printf '%sEnrollment token:%s ' "$BOLD" "$RESET" >/dev/tty
+  IFS= read -r -s ENROLLMENT_TOKEN </dev/tty || fatal "Could not read the enrollment token from the terminal." 2
+  printf '\n' >/dev/tty
+  [[ -n $ENROLLMENT_TOKEN ]] || fatal "The enrollment token cannot be empty." 2
+}
+
 cleanup() {
   rm -f -- "${INSTALL_PATH}.new.$$" 2>/dev/null || true
   if [[ -n $TEMP_DIR && -d $TEMP_DIR ]]; then
@@ -165,8 +218,9 @@ rollback() {
     fi
     systemctl daemon-reload >/dev/null 2>&1 || true
   fi
-  if ((SERVICE_WAS_ACTIVE)); then
+  if ((PREVIOUS_SERVICE_STOPPED)); then
     systemctl restart "$SERVICE_NAME" >/dev/null 2>&1 || true
+    PREVIOUS_SERVICE_STOPPED=0
   fi
 }
 
@@ -178,19 +232,33 @@ show_failure_log() {
 }
 
 fatal() {
-  rollback
   show_failure_log
   printf '%s%s%s %s\n' "$RED" "$ERROR_SYMBOL" "$RESET" "$1" >&2
   exit "${2:-1}"
 }
 
 handle_signal() {
-  rollback
   printf '\n%s%s%s Installation interrupted.\n' "$RED" "$ERROR_SYMBOL" "$RESET" >&2
   exit 130
 }
 
-trap cleanup EXIT
+handle_error() {
+  local status=$1
+  local line=$2
+  printf '%s%s%s Unexpected installer failure near line %s (exit %s). Rolling back safely.\n' "$RED" "$ERROR_SYMBOL" "$RESET" "$line" "$status" >&2
+}
+
+finish() {
+  local status=$?
+  if ((status != 0 && INSTALL_COMPLETE == 0)); then
+    rollback
+  fi
+  cleanup
+  return "$status"
+}
+
+trap finish EXIT
+trap 'handle_error "$?" "$LINENO"' ERR
 trap handle_signal INT TERM HUP
 
 run_step() {
@@ -241,6 +309,8 @@ After=network-online.target
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/nodeguard-agent run --config /etc/nodeguard-agent/config.json
+StateDirectory=nodeguard-agent
+StateDirectoryMode=0700
 Restart=on-failure
 RestartSec=10s
 TimeoutStopSec=30s
@@ -264,10 +334,21 @@ WantedBy=multi-user.target
 UNIT
 }
 
-register_agent() {
-  local args=(register --server "$SERVER_URL" --config "$CONFIG_PATH")
+enroll_agent() {
+  local args=(enroll --server "$SERVER_URL" --config "$CONFIG_PATH" --state-dir "$STATE_DIR")
   if [[ -n $DISPLAY_NAME ]]; then
     args+=(--name "$DISPLAY_NAME")
+  fi
+  NODEGUARD_ENROLLMENT_TOKEN="$ENROLLMENT_TOKEN" "$INSTALL_PATH" "${args[@]}"
+}
+
+reenroll_agent() {
+  local args=(re-enroll --server "$SERVER_URL" --config "$CONFIG_PATH" --state-dir "$STATE_DIR")
+  if [[ -n $DISPLAY_NAME ]]; then
+    args+=(--name "$DISPLAY_NAME")
+  fi
+  if ((REPLACE_EXISTING)); then
+    args+=(--replace-existing)
   fi
   NODEGUARD_ENROLLMENT_TOKEN="$ENROLLMENT_TOKEN" "$INSTALL_PATH" "${args[@]}"
 }
@@ -276,7 +357,9 @@ wait_for_online() {
   local deadline=$((SECONDS + 90))
   while ((SECONDS < deadline)); do
     if "$INSTALL_PATH" status --config "$CONFIG_PATH" >"$STATUS_OUTPUT" 2>/dev/null; then
-      if grep -qi '^Status: online$' "$STATUS_OUTPUT"; then
+      if grep -Eqi '^Enrollment[[:space:]]+Active$' "$STATUS_OUTPUT" &&
+        grep -Eqi '^Connection[[:space:]]+Online$' "$STATUS_OUTPUT" &&
+        systemctl is-active --quiet "$SERVICE_NAME"; then
         return 0
       fi
     fi
@@ -307,6 +390,9 @@ fi
 if [[ -z $SERVER_URL ]]; then
   fatal "Missing --server. Provide the HTTPS URL of your NodeGuard instance." 2
 fi
+if ((TOKEN_FROM_ARGUMENT)); then
+  warn "--token may be visible in the process list. Prefer the secure prompt or NODEGUARD_ENROLLMENT_TOKEN."
+fi
 SERVER_URL=${SERVER_URL%/}
 if [[ ! $SERVER_URL =~ ^https://[^/?#]+([/][^?#]*)?$ ]] || [[ $SERVER_URL == *"@"* ]]; then
   fatal "The NodeGuard server must be an HTTPS URL without credentials, a query, or a fragment." 2
@@ -314,7 +400,7 @@ fi
 if [[ ! -d /run/systemd/system ]] || ! command -v systemctl >/dev/null 2>&1; then
   fatal "systemd is required. Install the Agent manually on a supported systemd-based distribution." 5
 fi
-for command in curl sha256sum install mktemp awk grep sed uname; do
+for command in curl sha256sum install mktemp awk grep sed uname cat cp mv cmp tr chmod chown rm sleep id; do
   command -v "$command" >/dev/null 2>&1 || fatal "Required command '$command' is not installed. Install it and run the installer again." 6
 done
 
@@ -375,7 +461,7 @@ fi
 
 INSTALLED_VERSION=""
 if [[ -x $INSTALL_PATH ]]; then
-  INSTALLED_VERSION=$($INSTALL_PATH version 2>/dev/null | awk 'NR == 1 { print $2 }' || true)
+  INSTALLED_VERSION=$($INSTALL_PATH version 2>/dev/null | awk '/^Version:/ { print $2; exit }' || true)
 fi
 
 ASSET="nodeguard-agent-linux-$ARCH"
@@ -392,7 +478,7 @@ INSTALLED_SHA=""
 if [[ -x $INSTALL_PATH ]]; then
   INSTALLED_SHA=$(sha256sum "$INSTALL_PATH" | awk '{ print $1 }')
 fi
-if [[ $INSTALLED_VERSION == "$REQUESTED_VERSION" && $INSTALLED_SHA == "$EXPECTED_SHA" ]]; then
+if [[ $INSTALLED_VERSION == "$REQUESTED_VERSION" && $INSTALLED_SHA == "$EXPECTED_SHA" && $FORCE_REINSTALL -eq 0 ]]; then
   ok "Agent v$REQUESTED_VERSION is already installed"
   ok "Installed Agent checksum verified"
 else
@@ -405,6 +491,13 @@ else
   fi
   ok "SHA-256 checksum verified"
 
+  if ((SERVICE_WAS_ACTIVE)); then
+    if ! systemctl stop "$SERVICE_NAME" >"$COMMAND_LOG" 2>&1; then
+      fatal "Could not stop the existing NodeGuard Agent safely; no binary was replaced." 13
+    fi
+    PREVIOUS_SERVICE_STOPPED=1
+    ok "Stopped previous Agent service"
+  fi
   install -m 0755 "$TEMP_DIR/$ASSET" "${INSTALL_PATH}.new.$$"
   BINARY_CHANGED=1
   mv -f "${INSTALL_PATH}.new.$$" "$INSTALL_PATH"
@@ -414,28 +507,123 @@ fi
 
 section "Installation"
 install -d -o root -g root -m 0700 "$CONFIG_DIR"
+if [[ -f $MACHINE_ID_PATH ]]; then
+  HAD_MACHINE_ID=1
+fi
+install -d -o root -g root -m 0700 "$STATE_DIR"
+if ! run_step "Prepared stable machine identity" "$INSTALL_PATH" identity ensure --state-dir "$STATE_DIR"; then
+  fatal "Could not create or validate $MACHINE_ID_PATH. Check ownership, permissions, and available disk space." 13
+fi
 if [[ -f $CONFIG_PATH ]]; then
   chown root:root "$CONFIG_PATH"
   chmod 0600 "$CONFIG_PATH"
-  ok "Preserved existing Agent registration"
-  detail "$CONFIG_PATH"
-  if [[ -n $ENROLLMENT_TOKEN ]]; then
-    warn "The supplied enrollment token was not used because this host is already registered."
+  ok "Existing NodeGuard Agent detected"
+  ok "Preserved machine identity"
+
+  EXISTING_STATUS_CODE=0
+  if "$INSTALL_PATH" status --config "$CONFIG_PATH" >"$STATUS_OUTPUT" 2>"$COMMAND_LOG"; then
+    EXISTING_STATUS_CODE=0
+  else
+    EXISTING_STATUS_CODE=$?
+  fi
+
+  SHOULD_REENROLL=0
+  if ((REPLACE_EXISTING)); then
+    require_enrollment_token
+    SHOULD_REENROLL=1
+  elif ((EXISTING_STATUS_CODE == 6)); then
+    require_enrollment_token
+    SHOULD_REENROLL=1
+    REPLACE_EXISTING=1
+    warn "Stored Agent credential is stale and will be replaced."
+  elif ((EXISTING_STATUS_CODE == 0)); then
+    ok "Existing Agent registration is active"
+    if [[ -n $ENROLLMENT_TOKEN ]]; then
+      warn "The supplied token was not used because this registration is healthy. Use --replace-existing to rotate it explicitly."
+    fi
+  elif ((EXISTING_STATUS_CODE == 5)); then
+    warn "NodeGuard is temporarily unreachable; the existing credential was preserved."
+  else
+    fatal "Existing Agent configuration is invalid. Run 'nodeguard-agent config validate' before reinstalling." 12
+  fi
+
+  if ((SHOULD_REENROLL)); then
+    if ! run_step "Re-enrolled this machine" reenroll_agent; then
+      if grep -qi 'new credentials were saved and the service restarted' "$COMMAND_LOG"; then
+        BINARY_CHANGED=0
+        PREVIOUS_SERVICE_STOPPED=0
+        fatal "Re-enrollment succeeded and the new binary, configuration, and running service were kept, but connectivity is not verified. Run 'sudo nodeguard-agent status' and 'sudo nodeguard-agent doctor'; inspect 'sudo journalctl -u nodeguard-agent -n 100 --no-pager' if it remains offline." 14
+      fi
+      if grep -qi 'new credentials were saved, but the service could not restart' "$COMMAND_LOG"; then
+        # Credential rotation is already committed. Do not roll the binary back
+        # or automatically restart a service with assumptions from the old
+        # installation state.
+        BINARY_CHANGED=0
+        PREVIOUS_SERVICE_STOPPED=0
+        fatal "Re-enrollment succeeded and new credentials were saved, but systemd could not restart the Agent. The new binary and configuration were kept and the service remains stopped. Run 'sudo systemctl restart nodeguard-agent'; if it still fails, inspect 'sudo journalctl -u nodeguard-agent -n 100 --no-pager'." 13
+      fi
+      if grep -qiE 'protected recovery configuration|stale service was left stopped' "$COMMAND_LOG"; then
+        BINARY_CHANGED=0
+        PREVIOUS_SERVICE_STOPPED=0
+        fatal "NodeGuard issued a new credential, but it could not become active. Inspect ${CONFIG_DIR}/.config-recovery-* (mode 0600); the stale service was left stopped." 13
+      fi
+      if grep -qiE 'already registered|machine identity conflict' "$COMMAND_LOG"; then
+        fatal "This stable machine identity is already registered. Generate a new token and retry with --replace-existing." 12
+      fi
+      if grep -qiE 'does not match this machine|identity mismatch' "$COMMAND_LOG"; then
+        fatal "Replacement was refused because the token does not match this machine registration. No unrelated Agent was changed." 12
+      fi
+      if grep -qiE 'token is invalid|invalid.*token|expired|revoked|already used' "$COMMAND_LOG"; then
+        fatal "Re-enrollment failed because the token is invalid, expired, revoked, or already used. Generate a new token and retry." 12
+      fi
+      fatal "Re-enrollment failed. The previous local configuration was preserved; verify the token, URL, clock, and connectivity." 12
+    fi
+    ENROLLMENT_TOKEN=""
+    ok "Rotated Agent credentials"
   fi
 else
-  if [[ -z $ENROLLMENT_TOKEN ]]; then
-    fatal "Missing --token. Generate a one-time enrollment token from Agents → Add Agent." 2
+  require_enrollment_token
+  ENROLL_FUNCTION=enroll_agent
+  ENROLL_LABEL="Enrolled this machine"
+  if ((HAD_MACHINE_ID)); then
+    REPLACE_EXISTING=1
+    ENROLL_FUNCTION=reenroll_agent
+    ENROLL_LABEL="Re-enrolled this machine"
+    ok "Existing machine identity detected after an earlier installation"
+  elif ((REPLACE_EXISTING)); then
+    fatal "--replace-existing requires a preserved stable machine identity from an earlier installation." 2
   fi
-  if ! run_step "Registered host" register_agent; then
-    if grep -q 'invalid_enrollment_token' "$COMMAND_LOG"; then
+  if ! run_step "$ENROLL_LABEL" "$ENROLL_FUNCTION"; then
+    if grep -qi 'new credentials were saved and the service restarted' "$COMMAND_LOG"; then
+      BINARY_CHANGED=0
+      PREVIOUS_SERVICE_STOPPED=0
+      fatal "Re-enrollment succeeded and the new binary, configuration, and running service were kept, but connectivity is not verified. Run 'sudo nodeguard-agent status' and 'sudo nodeguard-agent doctor'; inspect 'sudo journalctl -u nodeguard-agent -n 100 --no-pager' if it remains offline." 14
+    fi
+    if grep -qi 'new credentials were saved, but the service could not restart' "$COMMAND_LOG"; then
+      BINARY_CHANGED=0
+      PREVIOUS_SERVICE_STOPPED=0
+      fatal "Re-enrollment succeeded and new credentials were saved, but systemd could not restart the Agent. The new binary and configuration were kept and the service remains stopped. Run 'sudo systemctl restart nodeguard-agent'; if it still fails, inspect 'sudo journalctl -u nodeguard-agent -n 100 --no-pager'." 13
+    fi
+    if grep -qiE 'protected recovery configuration|stale service was left stopped' "$COMMAND_LOG"; then
+      BINARY_CHANGED=0
+      PREVIOUS_SERVICE_STOPPED=0
+      fatal "NodeGuard issued a new credential, but it could not become active. Inspect ${CONFIG_DIR}/.config-recovery-* (mode 0600); the stale service was left stopped." 13
+    fi
+    if grep -qi 'already registered' "$COMMAND_LOG"; then
+      fatal "This stable machine identity is already registered. Generate a new token and retry with --replace-existing." 12
+    fi
+    if grep -qiE 'does not match this machine|identity mismatch' "$COMMAND_LOG"; then
+      fatal "Replacement was refused because the token does not match this machine registration. No unrelated Agent was changed." 12
+    fi
+    if grep -qiE 'token is invalid|invalid.*token|expired|revoked|already used' "$COMMAND_LOG"; then
       fatal "The enrollment token is invalid, expired, revoked, or already used. Generate a new token and try again." 12
     fi
-    fatal "Agent registration failed. Verify the NodeGuard URL, system clock, and enrollment token." 12
+    fatal "Agent enrollment failed. Verify the NodeGuard URL, system clock, and enrollment token." 12
   fi
   ENROLLMENT_TOKEN=""
   chmod 0600 "$CONFIG_PATH"
   chown root:root "$CONFIG_PATH"
-  detail "A unique Agent credential was saved with mode 0600."
+  detail "A unique Agent credential was saved with root ownership and mode 0600."
 fi
 
 write_service_unit
@@ -470,8 +658,8 @@ if ! run_step "Connected to NodeGuard" wait_for_online; then
   fatal "NodeGuard did not report the Agent online within 90 seconds. Check outbound HTTPS, DNS, system time, and the service journal." 14
 fi
 
-HOST_NAME=$(awk -F': ' '/^Host:/ { print $2; exit }' "$STATUS_OUTPUT")
-AGENT_NAME=$(awk -F': ' '/^Agent:/ { print $2; exit }' "$STATUS_OUTPUT")
+HOST_NAME=$(hostname 2>/dev/null || true)
+AGENT_NAME=$DISPLAY_NAME
 
 INSTALL_COMPLETE=1
 printf '\n%s%s%s\n\n' "$BLUE" "$SEPARATOR" "$RESET"

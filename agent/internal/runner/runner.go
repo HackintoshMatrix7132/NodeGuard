@@ -24,6 +24,7 @@ type Runner struct {
 	queue            *queue.Queue
 	logger           *slog.Logger
 	version          string
+	machineIdentity  string
 	startedAt        time.Time
 	nextAttempt      time.Time
 	failures         int
@@ -32,6 +33,11 @@ type Runner struct {
 	updateProvider   updates.UpdateProvider
 	updateWaitGroup  sync.WaitGroup
 	updateStartDelay func(time.Duration) time.Duration
+}
+
+func (runner *Runner) WithMachineIdentity(machineIdentity string) *Runner {
+	runner.machineIdentity = machineIdentity
+	return runner
 }
 
 func New(cfg config.Config, version string, logger *slog.Logger) *Runner {
@@ -50,7 +56,7 @@ func (runner *Runner) enqueue(path string, payload any) {
 
 func (runner *Runner) heartbeat() {
 	runner.enqueue("/api/agent/heartbeat", model.Heartbeat{
-		AgentID: runner.config.AgentID, AgentVersion: runner.version,
+		AgentID: runner.config.AgentID, MachineIdentity: runner.machineIdentity, AgentVersion: runner.version,
 		ProcessUptimeSeconds: int64(time.Since(runner.startedAt).Seconds()), Timestamp: time.Now().UTC(),
 	})
 }

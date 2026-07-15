@@ -33,6 +33,8 @@ test("Agent update ingestion and owner update reads enforce their separate trust
   const enrollment = agentService.createAgentEnrollmentToken("Route update machine");
   const registered = agentService.registerAgent({
     enrollmentToken: enrollment.token,
+    machineIdentity: "e4aa351d-3f94-4ab6-8d18-0b2b68870b28",
+    replaceExisting: false,
     hostname: "route-update-machine",
     agentVersion: "0.2.0",
     osName: "Debian GNU/Linux",

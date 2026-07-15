@@ -1,9 +1,9 @@
-ARG AGENT_VERSION=0.2.0
+ARG AGENT_VERSION=0.3.0
 
 FROM golang:1.23-bookworm AS agent-build
 
 ARG AGENT_VERSION
-ARG AGENT_COMMIT=container-build
+ARG AGENT_COMMIT=unknown
 WORKDIR /src/agent
 COPY agent/go.mod ./
 COPY agent ./

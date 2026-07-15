@@ -86,6 +86,9 @@ export type CreateAgentEnrollmentInput = {
 
 export type AgentRegistrationInput = {
   enrollmentToken: string;
+  requestedCredential?: string;
+  machineIdentity?: string;
+  replaceExisting: boolean;
   displayName?: string;
   hostname: string;
   agentVersion: string;
@@ -108,6 +111,7 @@ export type AgentRegistrationResponse = {
 
 export type AgentHeartbeatInput = {
   agentId?: string;
+  machineIdentity?: string;
   agentVersion: string;
   processUptimeSeconds: number;
   timestamp: string;

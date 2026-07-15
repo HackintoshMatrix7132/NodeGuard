@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { getDefaultBackendUrl, normalizeBackendUrl } from "./api/client";
 import { getCurrentSession, logout as logoutSession } from "./api/endpoints";
 import { normalizeApiError } from "./api/errors";
+import { MonitoredExternalLink } from "./components/MonitoredExternalLink";
 import { NodeGuardSelect } from "./components/NodeGuardSelect";
 import { ProxmoxIcon } from "./components/ProxmoxIcon";
 import { ProxmoxDashboardCard, ProxmoxPage, ProxmoxSettingsPanel } from "./components/ProxmoxIntegration";
@@ -49,6 +50,7 @@ import {
 import { useSettingsStore } from "./store/settingsStore";
 import type { AgentEnrollmentProgress, AgentStatus, AgentSummary, Alert, Container, ContainerMonitorStatus, CreatedAgentEnrollmentToken, DomainCheck, HealthStatus, MachinePackageUpdate, MachineUpdateSummary, MetricHistory, MetricHistoryPoint, MetricHistoryRange, MetricHistorySummary, MonitoredServerStatus, Server as NodeGuardServer } from "./types/nodeguard";
 import { getContainerImageRepositoryUrl } from "./utils/containerImage";
+import { buildAgentCommand } from "./utils/agentCommand";
 import { formatBytes, formatDateTime, formatPercentage, formatRelativeTime, formatResponseTime, formatUptime } from "./utils/format";
 import { getStatusLabel, getStatusTone } from "./utils/status";
 
@@ -304,15 +306,6 @@ function latencyTrend(domain: DomainCheck) {
 
 function fullDomainUrl(domain: DomainCheck) {
   return `${domain.domain}${domain.path === "/" ? "" : domain.path}`;
-}
-
-function launchHref(value: string) {
-  const trimmed = value.trim();
-  if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed;
-  }
-
-  return `http://${trimmed}`;
 }
 
 function parseExpectedStatusCodes(value: string) {
@@ -2727,22 +2720,6 @@ function DockerUnavailable({ message }: { message: string }) {
   );
 }
 
-function LaunchLink({ href, label }: { href: string; label: string }) {
-  return (
-    <a
-      className="launch-link"
-      href={launchHref(href)}
-      target="_blank"
-      rel="noreferrer"
-      aria-label={label}
-      title={label}
-      onClick={(event) => event.stopPropagation()}
-    >
-      <ExternalLink size={14} />
-    </a>
-  );
-}
-
 function DomainRow({ domain, onCheck, onDuplicate, onEdit, onRemove }: { domain: DomainCheck; onCheck?: () => void; onDuplicate?: () => void; onEdit?: () => void; onRemove?: () => void }) {
   const hasActions = Boolean(onCheck || onDuplicate || onEdit || onRemove);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -2769,8 +2746,12 @@ function DomainRow({ domain, onCheck, onDuplicate, onEdit, onRemove }: { domain:
       <div className="data-row domain-summary-row">
         <span className="resource-cell">
           <span className="resource-title">
-            <strong>{displayUrl}</strong>
-            <LaunchLink href={displayUrl} label={`Open ${displayUrl}`} />
+            <MonitoredExternalLink
+              emphasis="strong"
+              href={displayUrl}
+              label={`Open ${displayUrl}`}
+              text={displayUrl}
+            />
           </span>
           <small>{domain.error ?? `${domain.https ? "HTTPS" : "HTTP"} · Expected ${domain.expectedStatusCodes.join(", ")} · Last checked ${formatRelativeTime(domain.lastCheckedAt)}`}</small>
         </span>
@@ -2787,8 +2768,12 @@ function DomainRow({ domain, onCheck, onDuplicate, onEdit, onRemove }: { domain:
       <div className="data-row domain-action-row">
         <span className="resource-cell">
           <span className="resource-title">
-            <strong>{displayUrl}</strong>
-            <LaunchLink href={displayUrl} label={`Open ${displayUrl}`} />
+            <MonitoredExternalLink
+              emphasis="strong"
+              href={displayUrl}
+              label={`Open ${displayUrl}`}
+              text={displayUrl}
+            />
           </span>
           <small>{domain.error ?? `${domain.https ? "HTTPS" : "HTTP"} · Expected ${domain.expectedStatusCodes.join(", ")} · Last checked ${formatRelativeTime(domain.lastCheckedAt)}`}</small>
         </span>
@@ -2872,9 +2857,12 @@ function ServerMonitorRow({ monitor, onDuplicate, onEdit, onRemove }: { monitor:
       <span className="resource-cell">
         <strong>{monitor.name}</strong>
         <small className="resource-meta">
-          <span className="resource-url" title={monitor.backendUrl}>{monitor.backendUrl}</span>
+          <MonitoredExternalLink
+            href={monitor.backendUrl}
+            label={`Open ${monitor.backendUrl}`}
+            text={monitor.backendUrl}
+          />
           <span className="resource-context" title={monitor.lastError ?? `Checked ${formatDateTime(monitor.lastCheckedAt)}`}>· {monitor.lastError ?? `checked ${formatRelativeTime(monitor.lastCheckedAt)}`}</span>
-          <LaunchLink href={monitor.backendUrl} label={`Open ${monitor.backendUrl}`} />
         </small>
       </span>
       <StatusPill status={monitor.status} />
@@ -2981,10 +2969,6 @@ function shortAgentId(value: string) {
   return value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
 }
 
-function shellQuote(value: string) {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
-
 function enrollmentCountdown(expiresAt: string, now: number) {
   const seconds = Math.max(0, Math.ceil((Date.parse(expiresAt) - now) / 1000));
   const minutes = Math.floor(seconds / 60);
@@ -3019,13 +3003,15 @@ function RegistrationCommand({ enrollment, serverUrl, progress, onCopyError, onV
   onCopyError: (message: string) => void;
   onViewAgent?: (agentId: string) => void;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [copiedValue, setCopiedValue] = useState<"command" | "token" | null>(null);
   const [now, setNow] = useState(Date.now());
   const copyTimer = useRef<number | null>(null);
   const isRotation = enrollment.purpose === "rotate";
-  const command = isRotation
-    ? `sudo nodeguard-agent register --server ${shellQuote(serverUrl)} --token ${shellQuote(enrollment.token)}${enrollment.displayName ? ` --name ${shellQuote(enrollment.displayName)}` : ""}`
-    : `curl -fsSL ${shellQuote(`${serverUrl}/install-agent.sh`)} | sudo bash -s -- --server ${shellQuote(serverUrl)} --token ${shellQuote(enrollment.token)}${enrollment.displayName ? ` --name ${shellQuote(enrollment.displayName)}` : ""}`;
+  const command = buildAgentCommand({
+    serverUrl,
+    displayName: enrollment.displayName,
+    rotation: isRotation,
+  });
   const countdown = enrollmentCountdown(enrollment.expiresAt, now);
   const expired = countdown === "Expired" || progress?.state === "expired" || progress?.state === "revoked";
 
@@ -3038,14 +3024,14 @@ function RegistrationCommand({ enrollment, serverUrl, progress, onCopyError, onV
     if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
   }, []);
 
-  const copy = async () => {
+  const copy = async (value: string, kind: "command" | "token") => {
     try {
-      await navigator.clipboard.writeText(command);
-      setCopied(true);
+      await navigator.clipboard.writeText(value);
+      setCopiedValue(kind);
       if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
-      copyTimer.current = window.setTimeout(() => setCopied(false), 2200);
+      copyTimer.current = window.setTimeout(() => setCopiedValue(null), 2200);
     } catch {
-      onCopyError("The browser could not copy the installation command.");
+      onCopyError(`The browser could not copy the ${kind}.`);
     }
   };
 
@@ -3056,6 +3042,14 @@ function RegistrationCommand({ enrollment, serverUrl, progress, onCopyError, onV
         <span className={expired ? "expired" : ""}>{expired ? "Expired" : `Expires in ${countdown}`}</span>
       </div>
       <code>{command}</code>
+      <div className="agent-enrollment-token">
+        <span><strong>One-time enrollment token</strong><small>Paste this token at the secure prompt. It is never added to the command or process arguments.</small></span>
+        <code>{enrollment.token}</code>
+        <button className="secondary-button" type="button" onClick={() => void copy(enrollment.token, "token")} disabled={expired}>
+          <span key={copiedValue === "token" ? "copied" : "copy"} className="copy-state-icon">{copiedValue === "token" ? <Check size={15} /> : <Copy size={15} />}</span>
+          {copiedValue === "token" ? "Token copied" : "Copy token"}
+        </button>
+      </div>
       {!isRotation ? <div className="agent-installer-checklist">
         <span><Check size={13} /> Download the correct Agent</span>
         <span><ShieldCheck size={13} /> Verify the binary</span>
@@ -3064,12 +3058,12 @@ function RegistrationCommand({ enrollment, serverUrl, progress, onCopyError, onV
         <span><RadioTower size={13} /> Start monitoring automatically</span>
       </div> : null}
       <div className="agent-command-actions">
-        <button className="secondary-button" type="button" onClick={() => void copy()} disabled={expired}><span key={copied ? "copied" : "copy"} className="copy-state-icon">{copied ? <Check size={15} /> : <Copy size={15} />}</span>{copied ? "Copied" : "Copy command"}</button>
+        <button className="secondary-button" type="button" onClick={() => void copy(command, "command")} disabled={expired}><span key={copiedValue === "command" ? "copied" : "copy"} className="copy-state-icon">{copiedValue === "command" ? <Check size={15} /> : <Copy size={15} />}</span>{copiedValue === "command" ? "Command copied" : "Copy command"}</button>
         {!isRotation ? <a className="secondary-button" href={`${serverUrl}/install-agent.sh`} target="_blank" rel="noreferrer"><FileText size={15} /> View installation script</a> : null}
       </div>
       {!isRotation ? <details className="agent-manual-install">
         <summary><Download size={14} /> Manual installation</summary>
-        <p>Download the matching release binary and <code>checksums.txt</code>, verify SHA-256, install the binary at <code>/usr/local/bin/nodeguard-agent</code>, then register it with this one-time token.</p>
+        <p>Download the matching release binary and <code>checksums.txt</code>, verify SHA-256, install the binary at <code>/usr/local/bin/nodeguard-agent</code>, then enroll it with this one-time token.</p>
         <a href="https://github.com/HackintoshMatrix7132/NodeGuard/tree/main/agent" target="_blank" rel="noreferrer">Open the manual installation guide <ExternalLink size={13} /></a>
       </details> : null}
       {!isRotation ? <EnrollmentProgress progress={progress} /> : null}

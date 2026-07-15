@@ -59,6 +59,28 @@ function optionalBoolean(value: unknown, label: string) {
   return requiredBoolean(value, label);
 }
 
+const machineIdentityPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const requestedCredentialPattern = /^ng_agent_[A-Za-z0-9_-]{43}$/;
+
+function machineIdentity(value: unknown, required: true): string;
+function machineIdentity(value: unknown, required: false): string | undefined;
+function machineIdentity(value: unknown, required: boolean) {
+  if (!required && (value === undefined || value === null || value === "")) return undefined;
+  const normalized = requiredString(value, "machineIdentity", 36).toLowerCase();
+  if (!machineIdentityPattern.test(normalized)) {
+    throw new AgentPayloadError("machineIdentity must be a canonical random UUID.");
+  }
+  return normalized;
+}
+
+function requestedCredential(value: unknown) {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string" || value.length > 64 || !requestedCredentialPattern.test(value)) {
+    throw new AgentPayloadError("requestedCredential must be a valid NodeGuard Agent credential.");
+  }
+  return value;
+}
+
 function safeUpdateString(value: unknown, label: string, maxLength: number, required = true) {
   const normalized = required
     ? requiredString(value, label, maxLength)
@@ -102,6 +124,9 @@ export function parseAgentRegistration(value: unknown): AgentRegistrationInput {
   const input = record(value);
   return {
     enrollmentToken: requiredString(input.enrollmentToken, "enrollmentToken", 256),
+    requestedCredential: requestedCredential(input.requestedCredential),
+    machineIdentity: machineIdentity(input.machineIdentity, false),
+    replaceExisting: optionalBoolean(input.replaceExisting, "replaceExisting") ?? false,
     displayName: optionalString(input.displayName, "displayName", 120) ?? undefined,
     hostname: requiredString(input.hostname, "hostname", 255),
     agentVersion: requiredString(input.agentVersion, "agentVersion", 64),
@@ -116,6 +141,7 @@ export function parseAgentHeartbeat(value: unknown): AgentHeartbeatInput {
   const input = record(value);
   return {
     agentId: optionalString(input.agentId, "agentId", 64) ?? undefined,
+    machineIdentity: machineIdentity(input.machineIdentity, false),
     agentVersion: requiredString(input.agentVersion, "agentVersion", 64),
     processUptimeSeconds: optionalInteger(input.processUptimeSeconds, "processUptimeSeconds", 0, 365 * 86400) ?? 0,
     timestamp: validateAgentTimestamp(input.timestamp)

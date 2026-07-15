@@ -13,6 +13,8 @@ function registerAgent() {
   const enrollment = agentService.createAgentEnrollmentToken("Route test agent");
   return agentService.registerAgent({
     enrollmentToken: enrollment.token,
+    machineIdentity: "f502dcfa-e1de-4c21-aae2-ff4059d1fd2b",
+    replaceExisting: false,
     hostname: "route-test-host",
     agentVersion: "0.1.0",
     osName: "Ubuntu",

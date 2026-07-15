@@ -35,6 +35,7 @@ import { createPortal } from "react-dom";
 import { apiFetch, getDefaultBackendUrl } from "../api/client";
 import { ApiError } from "../api/errors";
 import { useSettingsStore } from "../store/settingsStore";
+import { MonitoredExternalLink } from "./MonitoredExternalLink";
 
 type ProxmoxStatus =
   | "available"
@@ -715,10 +716,11 @@ function ConnectionsOverview({ connections }: { connections: ProxmoxConnection[]
             <Server size={18} />
             <div>
               <strong>{connection.name}</strong>
-              <a href={connection.endpoint} rel="noreferrer" target="_blank">
-                {connection.endpoint}
-                <ExternalLink size={13} />
-              </a>
+              <MonitoredExternalLink
+                href={connection.endpoint}
+                label={`Open ${connection.name} at ${connection.endpoint}`}
+                text={connection.endpoint}
+              />
             </div>
           </div>
           <div className="proxmox-connection-row__meta">

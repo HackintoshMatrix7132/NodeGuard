@@ -3,6 +3,73 @@ import test from "node:test";
 
 const validation = await import("./agentValidation.js");
 
+test("Agent registration validates optional machine identity and explicit replacement flag", () => {
+  const valid = validation.parseAgentRegistration({
+    enrollmentToken: "ng_join_test",
+    requestedCredential: `ng_agent_${"A".repeat(43)}`,
+    machineIdentity: "7A216DA5-C4E2-4EC2-9D45-83FEFD890134",
+    replaceExisting: true,
+    hostname: "machine.example",
+    agentVersion: "0.2.0"
+  });
+  assert.equal(valid.machineIdentity, "7a216da5-c4e2-4ec2-9d45-83fefd890134");
+  assert.equal(valid.replaceExisting, true);
+  assert.equal(valid.requestedCredential, `ng_agent_${"A".repeat(43)}`);
+
+  assert.equal(validation.parseAgentRegistration({
+    enrollmentToken: "ng_join_test",
+    machineIdentity: "2509c555-0dc8-4764-b0f9-dc60fa38c238",
+    hostname: "machine.example",
+    agentVersion: "0.2.0"
+  }).replaceExisting, false);
+
+  assert.equal(validation.parseAgentRegistration({
+    enrollmentToken: "ng_rotate_legacy",
+    hostname: "legacy.example",
+    agentVersion: "0.1.0"
+  }).machineIdentity, undefined);
+
+  for (const machineIdentity of ["machine.example", "00000000-0000-0000-0000-000000000000"]) {
+    assert.throws(() => validation.parseAgentRegistration({
+      enrollmentToken: "ng_join_test",
+      machineIdentity,
+      hostname: "machine.example",
+      agentVersion: "0.2.0"
+    }), validation.AgentPayloadError);
+  }
+  assert.throws(() => validation.parseAgentRegistration({
+    enrollmentToken: "ng_join_test",
+    machineIdentity: "2509c555-0dc8-4764-b0f9-dc60fa38c238",
+    replaceExisting: "true",
+    hostname: "machine.example",
+    agentVersion: "0.2.0"
+  }), validation.AgentPayloadError);
+
+  for (const requestedCredential of ["ng_agent_short", `ng_join_${"A".repeat(43)}`, ` ng_agent_${"A".repeat(43)}`]) {
+    assert.throws(() => validation.parseAgentRegistration({
+      enrollmentToken: "ng_join_test",
+      requestedCredential,
+      machineIdentity: "2509c555-0dc8-4764-b0f9-dc60fa38c238",
+      hostname: "machine.example",
+      agentVersion: "0.2.0"
+    }), validation.AgentPayloadError);
+  }
+});
+
+test("legacy heartbeats may omit machine identity while upgraded Agents send a validated UUID", () => {
+  const base = {
+    agentVersion: "0.2.0",
+    processUptimeSeconds: 1,
+    timestamp: new Date().toISOString()
+  };
+  assert.equal(validation.parseAgentHeartbeat(base).machineIdentity, undefined);
+  assert.equal(validation.parseAgentHeartbeat({
+    ...base,
+    machineIdentity: "9ac23db6-614a-423b-ac47-dd0bc25e0354"
+  }).machineIdentity, "9ac23db6-614a-423b-ac47-dd0bc25e0354");
+  assert.throws(() => validation.parseAgentHeartbeat({ ...base, machineIdentity: "hostname" }), validation.AgentPayloadError);
+});
+
 test("agent metric payload rejects invalid ranges and stale timestamps", () => {
   assert.throws(() => validation.parseAgentMetrics({ samples: [{
     timestamp: new Date().toISOString(),

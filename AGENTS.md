@@ -2,9 +2,7 @@
 
 ## Scope
 
-NodeGuard is a cross-platform infrastructure monitoring app with an active web dashboard and planned iOS/Android clients. Keep work inside this folder unless the user explicitly asks otherwise.
-
-React Native / Expo is no longer part of the active project.
+NodeGuard is a self-hosted infrastructure monitoring platform with an active web dashboard and Linux Agent. Keep work inside this folder unless the user explicitly asks otherwise. React Native / Expo is no longer part of the active project.
 
 ## Active Structure
 
@@ -26,6 +24,7 @@ React Native / Expo is no longer part of the active project.
 - Use username/password session authentication for human dashboard access.
 - Require an explicit owner password in production; `SESSION_COOKIE_SECURE=auto` follows Express request security so direct LAN HTTP and reverse-proxied HTTPS both work correctly.
 - Give every NodeGuard Agent its own credential. Enrollment tokens are hashed, single-use, short-lived, and revocable; agent credentials are stored as hashes server-side.
+- Give every Agent installation a random stable identity stored separately from credentials. It is non-secret, must never be inferred from hostname/display name, and may scope replacement only when a valid enrollment token authorizes an exact-identity re-enrollment.
 - Keep integration credentials encrypted on the backend and never return stored secrets to clients or logs.
 - Use Cloudflare Access, VPN-only access, or another real auth layer before public exposure.
 
@@ -118,7 +117,6 @@ GET /api/alerts/:id
 DELETE /api/alerts/:id
 GET /api/updates
 GET /api/updates/machines/:agentId
-POST /api/agent/updates
 POST /api/checks/run
 ```
 
@@ -148,9 +146,10 @@ POST /api/agent/heartbeat
 POST /api/agent/inventory
 POST /api/agent/metrics
 POST /api/agent/docker
+POST /api/agent/updates
 ```
 
-Use `Authorization: Bearer <api-key>`. `x-api-key` is also accepted.
+Agent ingestion uses `Authorization: Bearer <agent-credential>`. Optional application machine callers may use the separately configured legacy API key where supported.
 
 ## Persistence
 
@@ -162,7 +161,7 @@ SQLite stores:
 - Minute-sampled CPU, RAM, disk, and swap history with configurable retention of at least 30 days.
 - Alert history with first seen, last seen, occurrence count, active/resolved status, troubleshooting detail, and persistent active-alert dismissal.
 - Encrypted integration settings and normalized cached Agent update inventories.
-- Agent enrollment records, hashed per-agent credentials, inventory, heartbeats, metrics, and host-scoped Docker inventory.
+- Agent enrollment records, unique stable machine identities, hashed per-Agent credentials, inventory, heartbeats, metrics, and host-scoped Docker/update inventory.
 
 Legacy JSON monitor files may be imported once if they still exist, but SQLite is authoritative.
 
@@ -187,6 +186,8 @@ Legacy JSON monitor files may be imported once if they still exist, but SQLite i
 - Preserve read-only behavior.
 - Handle Docker unavailable, metrics unavailable, domain timeout, invalid login/session, invalid API key, and backend unreachable states.
 - Keep API errors safe and useful.
+- Keep Agent enrollment/re-enrollment transactional and idempotent. Credential replacement must require a valid token, match only the same stable machine identity, invalidate the old credential, and never use hostname or display name as identity.
+- Preserve `/var/lib/nodeguard-agent/machine-id` during normal reinstall/uninstall; only explicit confirmed purge removes it.
 - Update docs when setup, commands, API endpoints, env vars, deployment, or architecture change.
 - Run typecheck/build/test where relevant.
 - Keep `.env`, SQLite data, logs, and generated output out of git.
@@ -209,5 +210,5 @@ Legacy JSON monitor files may be imported once if they still exist, but SQLite i
 - Local-backend per-container CPU usage is not implemented; agents may report it when Docker supplies a valid one-shot sample.
 - Alert history is persisted, but push/email notifications are not implemented yet.
 - Server monitors check other NodeGuard backends or plain health URLs. Public sites and reverse proxies belong in Domains / Services.
-- Agent v0.1 buffers unsent reports in memory only; reports are lost on process restart.
-- Agent v0.1 runs as root in the packaged service so it can read protected configuration and Docker metadata. Docker socket access remains highly privileged and is not claimed to be least-privilege isolation.
+- The Agent buffers unsent reports in memory only; reports are lost on process restart.
+- The packaged Agent service runs as root so it can read protected configuration and Docker metadata. Docker socket access remains highly privileged and is not claimed to be least-privilege isolation.

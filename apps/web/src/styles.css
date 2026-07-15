@@ -771,26 +771,53 @@ button {
   flex: 0 1 auto;
 }
 
-.launch-link {
+.monitored-external-link {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.monitored-external-link__text {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: 1px;
+  text-overflow: ellipsis;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+  transition: color 160ms ease, text-decoration-color 160ms ease;
+}
+
+.monitored-external-link__icon {
   width: 25px;
   height: 25px;
   flex: 0 0 25px;
   display: inline-grid;
   place-items: center;
+  box-sizing: border-box;
   border: 1px solid rgba(56, 217, 255, 0.18);
   border-radius: 8px;
   color: #7dd3fc;
   background: rgba(15, 23, 42, 0.54);
   opacity: 0;
-  pointer-events: none;
   transform: translateX(-6px) scale(0.72);
   transition: opacity 160ms ease, transform 180ms cubic-bezier(0.2, 0.9, 0.25, 1.25), border-color 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
-.data-row:hover .launch-link,
-.data-row:focus-within .launch-link {
+.data-row:hover .monitored-external-link__icon,
+.data-row:focus-within .monitored-external-link__icon,
+.proxmox-connection-row:hover .monitored-external-link__icon,
+.proxmox-connection-row:focus-within .monitored-external-link__icon,
+.monitored-external-link:hover .monitored-external-link__icon,
+.monitored-external-link:focus-visible .monitored-external-link__icon {
   opacity: 1;
-  pointer-events: auto;
   transform: translateX(0) scale(1);
 }
 
@@ -802,21 +829,32 @@ button {
   text-decoration-color: rgba(125, 211, 252, 0.72);
 }
 
-.launch-link:hover,
-.launch-link:focus-visible {
+.proxmox-connection-row:hover .monitored-external-link__text,
+.proxmox-connection-row:focus-within .monitored-external-link__text,
+.monitored-external-link:hover .monitored-external-link__text,
+.monitored-external-link:focus-visible .monitored-external-link__text {
+  color: #e0f2fe;
+  text-decoration-color: rgba(125, 211, 252, 0.72);
+}
+
+.monitored-external-link:focus-visible {
   outline: none;
+}
+
+.monitored-external-link:hover .monitored-external-link__icon,
+.monitored-external-link:focus-visible .monitored-external-link__icon {
   border-color: rgba(56, 217, 255, 0.68);
   color: #f8fafc;
   background: rgba(56, 217, 255, 0.14);
   box-shadow: 0 0 0 3px rgba(56, 217, 255, 0.10);
 }
 
-.launch-link svg {
+.monitored-external-link__icon svg {
   transition: transform 160ms ease;
 }
 
-.launch-link:hover svg,
-.launch-link:focus-visible svg {
+.monitored-external-link:hover svg,
+.monitored-external-link:focus-visible svg {
   transform: translate(1px, -1px);
 }
 
@@ -5630,6 +5668,44 @@ button.agent-view-button:disabled {
   user-select: all;
 }
 
+.agent-enrollment-token {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px 10px !important;
+  border: 1px solid rgba(56, 217, 255, 0.18);
+  border-radius: 6px;
+  padding: 10px;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.agent-enrollment-token > span {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 2px;
+}
+
+.agent-enrollment-token strong {
+  color: var(--ng-text);
+  font-size: 12px;
+}
+
+.agent-enrollment-token small {
+  color: var(--ng-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.agent-enrollment-token code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.agent-enrollment-token > button {
+  min-height: 36px;
+  justify-self: end;
+}
+
 .agent-installer-checklist {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5801,6 +5877,14 @@ button.agent-view-button:disabled {
 
   .agent-installer-checklist {
     grid-template-columns: 1fr;
+  }
+
+  .agent-enrollment-token {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-enrollment-token > button {
+    width: 100%;
   }
 }
 
@@ -6369,12 +6453,11 @@ button.modal-submit:disabled {
 }
 
 @media (hover: none), (pointer: coarse) {
-  .launch-link {
+  .monitored-external-link__icon {
     width: 32px;
     height: 32px;
     flex-basis: 32px;
     opacity: 1;
-    pointer-events: auto;
     transform: none;
   }
 

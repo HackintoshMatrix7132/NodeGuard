@@ -102,10 +102,12 @@ The API validates schema version, state, timestamps, counts, field lengths, pack
 
 Machine update discovery requires Agent v0.2.0 or newer. Rebuilding the NodeGuard server makes the versioned installer assets available but does not silently replace Agents on monitored machines.
 
-For each selected machine, generate or reuse the normal installer workflow and rerun the checksum-verified installer. Existing `/etc/nodeguard-agent/config.json` credentials are preserved. Then confirm:
+For each selected machine, generate or reuse the normal checksum-verified installer workflow. A healthy upgrade preserves `/etc/nodeguard-agent/config.json` and its credential. If the stored credential was revoked/deleted or rejected, Agent v0.3's recovery flow preserves the stable machine identity and rotates the credential with a fresh one-time token instead of creating a duplicate machine. Then confirm:
 
 ```bash
 sudo nodeguard-agent version
+sudo nodeguard-agent config validate
+sudo nodeguard-agent doctor
 sudo systemctl status nodeguard-agent
 sudo journalctl -u nodeguard-agent --since '30 minutes ago'
 ```
@@ -132,7 +134,7 @@ Check repository reachability, DNS, certificate trust, repository signatures, an
 
 ### Service sandbox denies writes
 
-Upgrade with the v0.2.0 installer so the packaged systemd unit and embedded installer unit include the narrow APT metadata/cache `ReadWritePaths`. Do not weaken `ProtectSystem=strict` globally.
+Upgrade with the current installer (Agent v0.2.0 or newer) so the packaged systemd unit and embedded installer unit include the narrow APT metadata/cache `ReadWritePaths`. Do not weaken `ProtectSystem=strict` globally.
 
 ### Old data after a failure
 

@@ -22,12 +22,15 @@ if [ ! -f "$SERVICE" ]; then
 fi
 
 install -d -m 0700 /etc/nodeguard-agent
+install -d -m 0700 /var/lib/nodeguard-agent
 install -m 0755 "$BINARY" /usr/local/bin/nodeguard-agent
+"/usr/local/bin/nodeguard-agent" identity ensure
 install -m 0644 "$SERVICE" /etc/systemd/system/nodeguard-agent.service
 systemctl daemon-reload
 
 printf '%s\n' "Installed /usr/local/bin/nodeguard-agent"
 printf '%s\n' "Installed /etc/systemd/system/nodeguard-agent.service"
 printf '%s\n' "No service was started and no credentials were created."
-printf '%s\n' "Generate an enrollment token in NodeGuard, register this host, then run:"
+printf '%s\n' "Created or preserved /var/lib/nodeguard-agent/machine-id."
+printf '%s\n' "Generate an enrollment token in NodeGuard, enroll this machine, then run:"
 printf '%s\n' "  systemctl enable --now nodeguard-agent"

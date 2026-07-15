@@ -49,7 +49,7 @@ NodeGuard brings those answers into one focused, read-only dashboard. The projec
 | | Capability | What it provides |
 |---|---|---|
 | **01** | **Unified infrastructure overview** | Health, active issues, resource status, recent alerts, monitored services, and update totals in one dashboard. |
-| **02** | **Secure remote monitoring** | An outbound-only Go agent with one-time enrollment, unique per-agent credentials, heartbeats, retry buffering, and systemd integration. |
+| **02** | **Secure remote monitoring** | An outbound-only Go agent with one-time enrollment, stable machine identity, rotating per-agent credentials, diagnostics, safe reinstall, and systemd integration. |
 | **03** | **Deep Docker visibility** | Searchable and sortable inventory with runtime state, health, image, stack, IP, ports, uptime, details, and bounded log previews. |
 | **04** | **Service and domain monitoring** | Expected status codes, custom paths, latency trends, rolling 30-day uptime, SSL state, diagnostics, and manual checks. |
 | **05** | **Persistent alert lifecycle** | Active and resolved incidents with first/last seen timestamps, occurrence counts, failed checks, likely causes, and suggested actions. |
@@ -132,6 +132,7 @@ The demo environment contains fictional servers, Docker workloads, service state
 ### Linux and Docker agents
 
 - Secure one-time enrollment tokens
+- Stable Agent-managed machine identity that is never inferred from a hostname
 - Unique long-term credential per agent
 - Outbound HTTPS communication only
 - Heartbeats with online, stale, and offline states
@@ -141,10 +142,10 @@ The demo environment contains fictional servers, Docker workloads, service state
 - Security-origin package and reboot-required reporting with bounded package details
 - Bounded in-memory retry queue during temporary outages
 - Static Linux `amd64` and `arm64` releases
-- Automated installation, checksum verification, systemd setup, upgrades, and uninstallation
+- Automated installation, checksum verification, systemd setup, upgrades, exact-identity re-enrollment, diagnostics, and safe uninstallation
 - Agent rename, credential rotation, revocation, and separately confirmed permanent deletion
 
-### Servers and resource history
+### Machines and resource history
 
 - Local host metrics through `systeminformation`
 - CPU, memory, disk, and swap summaries
@@ -216,7 +217,8 @@ flowchart LR
 - The browser never connects directly to Docker, SSH, a host shell, or the Docker socket.
 - Human users authenticate with username/password sessions stored in HTTP-only cookies.
 - Agents use separate machine credentials and never receive or reuse human passwords.
-- Each agent has its own credential; enrollment tokens are short-lived and single-use.
+- Each Agent has its own credential; enrollment tokens are short-lived and single-use.
+- Each Agent installation also has a root-owned random machine identity. It is not a secret or credential, is never inferred from the hostname, and only scopes token-authorized replacement to the same installation.
 - Demo sessions are rejected at the backend boundary for live infrastructure, configuration, integration, and diagnostic APIs.
 - Monitoring is intentionally read-only.
 
@@ -232,7 +234,7 @@ The Go agent does not open an inbound listener. It collects a fixed set of Linux
 
 ### Separate human and machine authentication
 
-Human sessions, optional legacy machine API keys, enrollment tokens, and per-agent credentials have distinct purposes. Agent credentials are shown only when issued, stored in root-owned mode-`0600` configuration on the host, and stored as hashes by NodeGuard.
+Human sessions, optional legacy machine API keys, enrollment tokens, stable machine identities, and per-Agent credentials have distinct purposes. The stable identity is a non-secret UUID stored separately under `/var/lib/nodeguard-agent`; it never authenticates a request. Agent credentials are stored in root-owned mode-`0600` configuration on the host and only as hashes by NodeGuard. Re-enrollment requires a valid one-time token, matches the exact stable identity, and rotates the credential transactionally without using hostname or display name as identity.
 
 ### Persistent but bounded monitoring history
 
@@ -359,31 +361,58 @@ From **Agents → Add Agent**, generate and run the one-command installer:
 
 ```bash
 curl -fsSL https://nodeguard.muthu.eu/install-agent.sh | sudo bash -s -- \
-  --server https://nodeguard.muthu.eu \
-  --token ng_join_REDACTED
+  --server https://nodeguard.muthu.eu
 ```
+
+Copy the short-lived token shown by NodeGuard separately; the installer requests it through a hidden terminal prompt.
 
 The installer:
 
 1. Detects the Linux distribution and CPU architecture.
 2. Downloads the matching `amd64` or `arm64` release.
 3. Verifies the SHA-256 checksum.
-4. Exchanges the one-time token for a unique agent credential.
-5. Installs the binary and root-owned configuration.
-6. Creates and starts the systemd service.
-7. Waits for the first successful heartbeat.
+4. Creates or preserves a protected stable machine identity.
+5. Exchanges the one-time token for a unique Agent credential.
+6. Installs the binary, root-owned configuration, and systemd service atomically.
+7. Starts the service and verifies authenticated connectivity.
+
+The installer prompts for the one-time token through the controlling terminal so it is not placed in the generated command or long-lived process arguments. For unattended automation, provide `NODEGUARD_ENROLLMENT_TOKEN` through a suitably protected environment and use `--non-interactive`.
+
+Managed local paths are:
+
+```text
+/usr/local/bin/nodeguard-agent              binary (0755)
+/etc/nodeguard-agent/config.json            credential/configuration (root, 0600)
+/var/lib/nodeguard-agent/machine-id         stable non-secret identity (root, 0600)
+/etc/systemd/system/nodeguard-agent.service systemd unit (0644)
+```
 
 Useful commands:
 
 ```bash
+nodeguard-agent --help
+nodeguard-agent version
+sudo nodeguard-agent status
+sudo nodeguard-agent status --json
+sudo nodeguard-agent doctor
+sudo nodeguard-agent config show
+sudo nodeguard-agent config validate
 sudo systemctl status nodeguard-agent
 sudo journalctl -u nodeguard-agent -f
 sudo systemctl restart nodeguard-agent
 ```
 
-Running the installer again upgrades the binary while preserving `/etc/nodeguard-agent/config.json`; it does not create a duplicate host. Use `sudo nodeguard-agent uninstall` to remove the service and binary while preserving configuration, or `sudo nodeguard-agent uninstall --purge` to remove configuration after confirmation.
+Running the installer again inspects the existing binary, service, configuration, credential, and stable identity. A healthy current installation is left intact unless `--force-reinstall` is requested. If the Agent was revoked/deleted or its credential is stale, a fresh one-time token re-enrolls the exact same machine identity and rotates the credential; hostname collisions never replace another Agent. A normal uninstall removes the service, binary, credential, configuration, and runtime cache but preserves `/var/lib/nodeguard-agent/machine-id` so a later reinstall can reclaim the same registration. Purge is explicit and destructive:
 
-Agent v0.2 has no inbound listener, remote shell, generic command execution, update installation, reboot, or Docker lifecycle endpoints. It can refresh local APT metadata with fixed arguments so update discovery remains accurate.
+```bash
+sudo nodeguard-agent uninstall
+sudo nodeguard-agent uninstall --purge
+sudo nodeguard-agent uninstall --purge --yes  # non-interactive confirmation
+```
+
+Normal uninstall is local-only and deliberately leaves the backend registration/history in NodeGuard. Revoke or permanently delete that record from **Agents** when appropriate. See the Agent guide for `enroll`, `re-enroll --replace-existing`, installer flags, recovery, exit codes, and troubleshooting.
+
+The Agent has no inbound listener, remote shell, generic command execution, update installation, reboot, or Docker lifecycle endpoints. It can refresh local APT metadata with fixed arguments so update discovery remains accurate.
 
 ## Configuration
 
@@ -438,7 +467,7 @@ LOG_PREVIEW_LINES=80
 DOMAIN_CHECK_TIMEOUT_MS=5000
 AGENT_INSTALLER_PATH=agent/install-agent.sh
 AGENT_RELEASE_DIR=agent-releases
-AGENT_RELEASE_VERSION=0.2.0
+AGENT_RELEASE_VERSION=0.3.0
 AGENT_ENROLLMENT_TTL_MINUTES=10
 AGENT_HEARTBEAT_INTERVAL_SECONDS=20
 AGENT_METRICS_INTERVAL_SECONDS=30
@@ -555,6 +584,8 @@ POST /api/agent/docker
 POST /api/agent/updates
 ```
 
+Agent v0.3 registration includes a stable non-secret machine identity and an idempotent client-generated credential. An exact retry can recover from a lost registration response; replacement still requires a valid token and can affect only the matching identity.
+
 Protected application routes require a signed-in session. Optional `Authorization: Bearer <api-key>` and `x-api-key: <api-key>` support remains available for machine-to-machine callers.
 
 </details>
@@ -581,7 +612,9 @@ npm test             # Run tests
 - Raw backend errors are hidden in production.
 - The frontend never receives direct Docker-socket, shell, SSH, or privileged host access.
 - Agent enrollment tokens expire and become invalid after one use.
+- Stable machine identities are random, non-secret, stored separately with root-only permissions, and never inferred from hostnames.
 - Long-term agent credentials are unique per host and can be rotated or revoked.
+- Re-enrollment is token-authorized and exact-identity scoped; it invalidates the previous credential without replacing unrelated Agents.
 - Agent update reports contain package metadata only; commands, repository credentials, raw command output, and environment variables are never accepted or exposed.
 - Docker-socket access is highly privileged even when mounted read-only. Review the source, restrict host access, and disable Docker collection where it is not needed.
 - Keep `.env` files, database files, logs, tokens, private IP addresses, and generated diagnostics out of version control.
@@ -591,13 +624,12 @@ npm test             # Run tests
 - SQLite targets a single NodeGuard instance and homelab-scale deployment.
 - Local-backend per-container CPU usage is unavailable; agents report it where the Docker Engine exposes a valid one-shot sample.
 - Push, email, and mobile notifications are not implemented yet.
-- Agent retry buffering is memory-only in v0.2 and does not survive an agent process restart.
+- Agent retry buffering is memory-only and does not survive an Agent process restart.
 - Multi-user roles, password reset, and two-factor authentication are not yet available.
 - NodeGuard provides monitoring and diagnostics, not remote remediation.
 
 ## Roadmap
 
-- Native Proxmox integration for node, VM, and container visibility
 - Additional read-only package providers beyond APT and optional reliable Agent-to-Proxmox identity linking
 - Notification channels for critical and recovery events
 - Multi-user roles and stronger account-management flows

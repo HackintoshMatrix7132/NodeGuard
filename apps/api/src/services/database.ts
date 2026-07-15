@@ -137,6 +137,7 @@ database.exec(`
 
   CREATE TABLE IF NOT EXISTS agents (
     id TEXT PRIMARY KEY,
+    machine_identity TEXT,
     display_name TEXT NOT NULL,
     hostname TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'offline',
@@ -308,10 +309,38 @@ export function removeLegacyHomeAssistantUpdateSchema(target: typeof database = 
 
 removeLegacyHomeAssistantUpdateSchema();
 
-function hasColumn(tableName: string, columnName: string) {
-  const columns = database.prepare(`PRAGMA table_info(${tableName})`).all() as { name: string }[];
+function hasColumn(tableName: string, columnName: string, target: typeof database = database) {
+  const columns = target.prepare(`PRAGMA table_info(${tableName})`).all() as { name: string }[];
   return columns.some((column) => column.name === columnName);
 }
+
+const agentMachineIdentityMigration = "2026-07-15-agent-machine-identity";
+
+export function ensureAgentMachineIdentitySchema(target: typeof database = database) {
+  target.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      name TEXT PRIMARY KEY,
+      applied_at TEXT NOT NULL
+    )
+  `);
+
+  const migrate = target.transaction(() => {
+    if (!hasColumn("agents", "machine_identity", target)) {
+      target.prepare("ALTER TABLE agents ADD COLUMN machine_identity TEXT").run();
+    }
+    target.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_machine_identity_unique
+      ON agents(machine_identity)
+      WHERE machine_identity IS NOT NULL
+    `);
+    const marker = target.prepare("INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?, ?)")
+      .run(agentMachineIdentityMigration, new Date().toISOString());
+    return marker.changes === 1;
+  });
+  return migrate.immediate();
+}
+
+ensureAgentMachineIdentitySchema();
 
 if (!hasColumn("server_monitors", "allow_insecure_tls")) {
   database.prepare("ALTER TABLE server_monitors ADD COLUMN allow_insecure_tls INTEGER NOT NULL DEFAULT 0").run();

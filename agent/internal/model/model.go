@@ -10,14 +10,17 @@ type Filesystem struct {
 }
 
 type RegistrationRequest struct {
-	EnrollmentToken string  `json:"enrollmentToken"`
-	DisplayName     string  `json:"displayName,omitempty"`
-	Hostname        string  `json:"hostname"`
-	AgentVersion    string  `json:"agentVersion"`
-	OSName          *string `json:"osName"`
-	OSVersion       *string `json:"osVersion"`
-	Kernel          *string `json:"kernel"`
-	Architecture    *string `json:"architecture"`
+	EnrollmentToken     string  `json:"enrollmentToken"`
+	RequestedCredential string  `json:"requestedCredential,omitempty"`
+	MachineIdentity     string  `json:"machineIdentity"`
+	ReplaceExisting     bool    `json:"replaceExisting,omitempty"`
+	DisplayName         string  `json:"displayName,omitempty"`
+	Hostname            string  `json:"hostname"`
+	AgentVersion        string  `json:"agentVersion"`
+	OSName              *string `json:"osName"`
+	OSVersion           *string `json:"osVersion"`
+	Kernel              *string `json:"kernel"`
+	Architecture        *string `json:"architecture"`
 }
 
 type RegistrationResponse struct {
@@ -33,6 +36,7 @@ type RegistrationResponse struct {
 
 type Heartbeat struct {
 	AgentID              string    `json:"agentId"`
+	MachineIdentity      string    `json:"machineIdentity,omitempty"`
 	AgentVersion         string    `json:"agentVersion"`
 	ProcessUptimeSeconds int64     `json:"processUptimeSeconds"`
 	Timestamp            time.Time `json:"timestamp"`

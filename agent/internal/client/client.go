@@ -3,11 +3,14 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -47,15 +50,54 @@ func New(cfg config.Config) *Client {
 }
 
 func Register(ctx context.Context, serverURL string, request model.RegistrationRequest) (model.RegistrationResponse, error) {
-	var response model.RegistrationResponse
 	client := &Client{serverURL: strings.TrimRight(serverURL, "/"), http: &http.Client{Timeout: 20 * time.Second}}
-	if err := client.doJSON(ctx, http.MethodPost, "/api/agent/register", request, &response, false); err != nil {
-		return response, err
+	var lastError error
+	for attempt := 0; attempt < 3; attempt++ {
+		var response model.RegistrationResponse
+		if err := client.doJSON(ctx, http.MethodPost, "/api/agent/register", request, &response, false); err != nil {
+			lastError = err
+			if !registrationRetryable(err) || attempt == 2 {
+				return response, err
+			}
+			timer := time.NewTimer(time.Duration(attempt+1) * 250 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return response, ctx.Err()
+			case <-timer.C:
+			}
+			continue
+		}
+		if response.AgentID == "" || response.Credential == "" {
+			return response, errors.New("registration response did not include agent credentials")
+		}
+		if request.RequestedCredential != "" && response.Credential != request.RequestedCredential {
+			return response, errors.New("registration response credential did not match the protected requested credential")
+		}
+		return response, nil
 	}
-	if response.AgentID == "" || response.Credential == "" {
-		return response, errors.New("registration response did not include agent credentials")
+	return model.RegistrationResponse{}, lastError
+}
+
+func registrationRetryable(err error) bool {
+	var apiError *APIError
+	if errors.As(err, &apiError) {
+		return apiError.StatusCode >= 500
 	}
-	return response, nil
+	var networkError *url.Error
+	if errors.As(err, &networkError) {
+		return true
+	}
+	var syntaxError *json.SyntaxError
+	return errors.As(err, &syntaxError) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+}
+
+func GenerateCredential() (string, error) {
+	random := make([]byte, 32)
+	if _, err := rand.Read(random); err != nil {
+		return "", fmt.Errorf("generate Agent credential: %w", err)
+	}
+	return "ng_agent_" + base64.RawURLEncoding.EncodeToString(random), nil
 }
 
 func (client *Client) Post(ctx context.Context, path string, payload any) error {

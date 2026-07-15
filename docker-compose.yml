@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        AGENT_VERSION: ${AGENT_RELEASE_VERSION:-0.2.0}
+        AGENT_VERSION: ${AGENT_RELEASE_VERSION:-0.3.0}
         VITE_NODEGUARD_SUPPORT_URL: ${VITE_NODEGUARD_SUPPORT_URL:-}
     container_name: nodeguard
     restart: unless-stopped
@@ -16,7 +16,7 @@ services:
       WEB_DIST_DIR: apps/web/dist
       AGENT_INSTALLER_PATH: agent/install-agent.sh
       AGENT_RELEASE_DIR: agent-releases
-      AGENT_RELEASE_VERSION: ${AGENT_RELEASE_VERSION:-0.2.0}
+      AGENT_RELEASE_VERSION: ${AGENT_RELEASE_VERSION:-0.3.0}
       TRUST_PROXY: "1"
       NODEGUARD_ADMIN_USERNAME: ${NODEGUARD_ADMIN_USERNAME:-admin}
       NODEGUARD_ADMIN_PASSWORD: ${NODEGUARD_ADMIN_PASSWORD:?Set NODEGUARD_ADMIN_PASSWORD in the root .env file}
