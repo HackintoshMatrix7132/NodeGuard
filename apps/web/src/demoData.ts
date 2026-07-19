@@ -284,14 +284,16 @@ export const demoMachineUpdates: MachineUpdateDetail[] = [
     provider: "apt",
     supported: true,
     status: "ok",
+    freshness: "current",
     os: { id: "debian", versionId: "12", prettyName: "Debian GNU/Linux 12" },
     checkedAt: ago({ minutes: 4 }),
     lastSuccessfulAt: ago({ minutes: 4 }),
     updateCount: 12,
     securityUpdateCount: 3,
     rebootRequired: false,
-    truncated: false,
+    truncated: true,
     lastError: null,
+    lastErrorCode: null,
     packages: [
       { name: "openssl", installedVersion: "3.0.16-1~deb12u1", candidateVersion: "3.0.17-1~deb12u2", security: true, source: "debian-security" },
       { name: "libssl3", installedVersion: "3.0.16-1~deb12u1", candidateVersion: "3.0.17-1~deb12u2", security: true, source: "debian-security" },
@@ -315,6 +317,7 @@ export const demoMachineUpdates: MachineUpdateDetail[] = [
     provider: "apt",
     supported: true,
     status: "ok",
+    freshness: "current",
     os: { id: "ubuntu", versionId: "24.04", prettyName: "Ubuntu 24.04.2 LTS" },
     checkedAt: ago({ minutes: 7 }),
     lastSuccessfulAt: ago({ minutes: 7 }),
@@ -323,6 +326,7 @@ export const demoMachineUpdates: MachineUpdateDetail[] = [
     rebootRequired: false,
     truncated: false,
     lastError: null,
+    lastErrorCode: null,
     packages: []
   },
   {
@@ -333,6 +337,7 @@ export const demoMachineUpdates: MachineUpdateDetail[] = [
     provider: "apt",
     supported: true,
     status: "ok",
+    freshness: "current",
     os: { id: "debian", versionId: "12", prettyName: "Proxmox VE 8.4" },
     checkedAt: ago({ minutes: 12 }),
     lastSuccessfulAt: ago({ minutes: 12 }),
@@ -341,6 +346,7 @@ export const demoMachineUpdates: MachineUpdateDetail[] = [
     rebootRequired: true,
     truncated: false,
     lastError: null,
+    lastErrorCode: null,
     packages: [
       { name: "openssl", installedVersion: "3.0.16-1~deb12u1", candidateVersion: "3.0.17-1~deb12u2", security: true, source: "debian-security" },
       { name: "pve-manager", installedVersion: "8.4.1", candidateVersion: "8.4.2", security: false, source: "proxmox" },
@@ -357,6 +363,7 @@ export const demoMachineUpdates: MachineUpdateDetail[] = [
     provider: "apt",
     supported: false,
     status: "unsupported",
+    freshness: "waiting",
     os: { id: "alpine", versionId: "3.21", prettyName: "Alpine Linux 3.21" },
     checkedAt: ago({ hours: 2 }),
     lastSuccessfulAt: null,
@@ -364,7 +371,8 @@ export const demoMachineUpdates: MachineUpdateDetail[] = [
     securityUpdateCount: null,
     rebootRequired: null,
     truncated: false,
-    lastError: null,
+    lastError: "Update discovery is not available for this operating system.",
+    lastErrorCode: "unsupported_os",
     packages: []
   },
   {
@@ -375,6 +383,7 @@ export const demoMachineUpdates: MachineUpdateDetail[] = [
     provider: "apt",
     supported: true,
     status: "ok",
+    freshness: "stale",
     os: { id: "ubuntu", versionId: "22.04", prettyName: "Ubuntu Server 22.04 LTS" },
     checkedAt: ago({ days: 2 }),
     lastSuccessfulAt: ago({ days: 2 }),
@@ -383,6 +392,7 @@ export const demoMachineUpdates: MachineUpdateDetail[] = [
     rebootRequired: false,
     truncated: false,
     lastError: null,
+    lastErrorCode: null,
     packages: []
   }
 ];
@@ -391,17 +401,19 @@ function demoMachineMatchesStatus(machine: MachineUpdateDetail, status: string) 
   if (status === "all") return true;
   if (status === "updates") return (machine.updateCount ?? 0) > 0;
   if (status === "security") return (machine.securityUpdateCount ?? 0) > 0;
-  if (status === "up_to_date") return machine.supported === true && machine.status === "ok" && machine.lastSuccessfulAt !== null && machine.updateCount === 0;
+  if (status === "up_to_date") return machine.freshness === "current" && machine.updateCount === 0;
   if (status === "reboot") return machine.rebootRequired === true;
   if (status === "unsupported") return machine.supported === false || machine.status === "unsupported";
   if (status === "check_failed") return ["package_manager_busy", "metadata_refresh_failed", "check_failed"].includes(machine.status);
-  if (status === "stale_offline") return machine.agentStatus === "stale" || machine.agentStatus === "offline" || machine.agentStatus === "revoked";
+  if (status === "stale_offline") return machine.freshness === "stale" || machine.agentStatus === "stale" || machine.agentStatus === "offline" || machine.agentStatus === "revoked";
   return true;
 }
 
 export function getDemoUpdateCenter(search = "", status = "all"): UpdateCenterSnapshot {
   const eligibleMachines = demoMachineUpdates.filter((machine) => machine.supported !== false && machine.status !== "unsupported");
-  const reportingMachines = eligibleMachines.filter((machine) => machine.status === "ok" && machine.agentStatus === "online" && machine.lastSuccessfulAt !== null);
+  const reportingMachines = eligibleMachines.filter((machine) => machine.lastSuccessfulAt !== null);
+  const currentMachines = reportingMachines.filter((machine) => machine.freshness === "current");
+  const retainedMachines = reportingMachines.filter((machine) => machine.freshness !== "current");
   const term = search.trim().toLowerCase();
   const machines = demoMachineUpdates.filter((machine) => {
     if (!demoMachineMatchesStatus(machine, status)) return false;
@@ -409,12 +421,26 @@ export function getDemoUpdateCenter(search = "", status = "all"): UpdateCenterSn
     return [machine.displayName, machine.hostname, machine.os.prettyName, machine.provider, ...machine.packages.flatMap((item) => [item.name, item.source])]
       .some((value) => value?.toLowerCase().includes(term));
   });
+  const latest = (values: Array<string | null>) => values.reduce<string | null>((result, value) => value && (!result || value > result) ? value : result, null);
+  const summaryState = eligibleMachines.length === 0
+    ? "empty"
+    : reportingMachines.length === 0
+      ? "waiting"
+      : currentMachines.length === eligibleMachines.length
+        ? "current"
+        : currentMachines.length === 0
+          ? "retained"
+          : "partial";
   return {
-    availableCount: reportingMachines.reduce((total, machine) => total + (machine.updateCount ?? 0), 0),
-    securityCriticalCount: reportingMachines.reduce((total, machine) => total + (machine.securityUpdateCount ?? 0), 0),
+    availableCount: reportingMachines.length ? reportingMachines.reduce((total, machine) => total + (machine.updateCount ?? 0), 0) : null,
+    securityCriticalCount: reportingMachines.length ? reportingMachines.reduce((total, machine) => total + (machine.securityUpdateCount ?? 0), 0) : null,
     reportingMachineCount: reportingMachines.length,
+    currentReportingMachineCount: currentMachines.length,
+    retainedMachineCount: retainedMachines.length,
     totalMachineCount: eligibleMachines.length,
-    lastCheckedAt: reportingMachines.reduce<string | null>((latest, machine) => !latest || (machine.checkedAt ?? "") > latest ? machine.checkedAt : latest, null),
+    lastCheckedAt: latest(demoMachineUpdates.map((machine) => machine.checkedAt)),
+    lastSuccessfulAt: latest(reportingMachines.map((machine) => machine.lastSuccessfulAt)),
+    summaryState,
     machines: machines.map((machine) => ({ ...machine, packages: machine.packages.map((item) => ({ ...item })) }))
   };
 }

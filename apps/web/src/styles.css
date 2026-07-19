@@ -4423,6 +4423,12 @@ button:hover {
   font-size: 12px;
 }
 
+.update-state-banner.warning {
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fde68a;
+  background: rgba(120, 53, 15, 0.1);
+}
+
 .update-state-banner.success {
   border-color: rgba(52, 211, 153, 0.28);
   color: #bbf7d0;
@@ -6380,19 +6386,13 @@ button.modal-submit:disabled {
 }
 
 @media (min-width: 981px) {
-  .dashboard-metric-grid:has(.proxmox-dashboard-card) {
+  .dashboard-metric-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
-@media (min-width: 1360px) {
-  .dashboard-metric-grid:not(:has(.proxmox-dashboard-card)) {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-}
-
 @media (min-width: 1600px) {
-  .dashboard-metric-grid:has(.proxmox-dashboard-card) {
+  .dashboard-metric-grid {
     grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 }
@@ -6511,7 +6511,47 @@ button.modal-submit:disabled {
   }
 
   .dashboard-metric-grid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-metric-grid > :last-child {
+    grid-column: 1 / -1;
+  }
+
+  .dashboard-metric-grid .metric-card,
+  .dashboard-metric-grid .proxmox-dashboard-card {
+    min-height: 132px;
+  }
+
+  .dashboard-metric-grid .metric-indicator {
+    min-height: 0;
+    padding: 5px;
+  }
+
+  .dashboard-metric-grid .metric-breakdown {
+    display: none;
+  }
+
+  .dashboard-metric-grid .metric-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dashboard-metric-grid .proxmox-dashboard-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .dashboard-metric-grid .proxmox-dashboard-card__heading,
+  .dashboard-metric-grid .proxmox-dashboard-card__value,
+  .dashboard-metric-grid .proxmox-dashboard-card__label {
+    grid-column: 1;
+  }
+
+  .dashboard-metric-grid .proxmox-dashboard-card__details {
+    grid-column: 2;
+    grid-row: 1 / span 3;
   }
 
   .modal {
@@ -6534,6 +6574,14 @@ button.modal-submit:disabled {
 @media (max-width: 460px) {
   .hero-status {
     font-size: 36px;
+  }
+
+  .dashboard-metric-grid .metric-value {
+    font-size: 34px;
+  }
+
+  .dashboard-metric-grid .subdued-value {
+    font-size: 25px;
   }
 }
 
@@ -7003,5 +7051,716 @@ button.modal-submit:disabled {
   .app-shell.sidebar-collapsed .workspace {
     grid-column: 1;
     grid-row: 2;
+  }
+}
+
+/* Density pass 2: one authoritative compact layer shared by every route. */
+:root {
+  --ng-density-page-x: 8px;
+  --ng-density-page-y: 6px;
+  --ng-density-section-gap: 6px;
+  --ng-density-panel-x: 7px;
+  --ng-density-panel-y: 6px;
+  --ng-density-header-height: 34px;
+  --ng-density-control-height: 32px;
+  --ng-density-row-height: 36px;
+}
+
+.workspace {
+  padding: var(--ng-density-page-y) var(--ng-density-page-x) 10px;
+}
+
+.workspace-topbar {
+  min-height: 36px;
+  margin-bottom: 6px;
+  padding-inline: 9px;
+}
+
+.topbar-title span {
+  width: 25px;
+  height: 25px;
+}
+
+.environment-badge {
+  padding: 3px 7px;
+  font-size: 12px;
+}
+
+.page-stack,
+.page-stack.compact,
+.settings-page,
+.server-info-groups,
+.agent-detail {
+  gap: var(--ng-density-section-gap);
+}
+
+.panel-header {
+  min-height: var(--ng-density-header-height);
+  padding: 5px 9px;
+}
+
+.panel-header h2,
+.panel h2 {
+  font-size: 14px;
+}
+
+.panel > :not(.panel-header) {
+  margin: var(--ng-density-panel-y) var(--ng-density-panel-x);
+}
+
+.hero-panel {
+  min-height: 82px;
+  padding: 8px 11px;
+}
+
+.hero-status {
+  margin: 1px 0;
+  font-size: 34px;
+}
+
+.hero-summary,
+.hero-main-issue,
+.hero-panel small {
+  margin-top: 3px !important;
+  line-height: 1.25;
+}
+
+.hero-main-issue span {
+  margin-right: 6px;
+}
+
+.metric-grid,
+.two-col {
+  gap: 6px;
+}
+
+.metric-card,
+.proxmox-dashboard-card {
+  padding: 7px;
+}
+
+.metric-value {
+  margin: 1px 0 3px;
+  font-size: 32px;
+  line-height: 1;
+}
+
+.subdued-value {
+  font-size: 25px;
+}
+
+.metric-label,
+.metric-detail {
+  font-size: 12px;
+}
+
+.metric-indicator {
+  min-height: 44px;
+  gap: 4px;
+  padding: 4px 5px;
+}
+
+.metric-breakdown {
+  gap: 2px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.meter-track {
+  height: 5px;
+}
+
+.metric-detail {
+  margin-top: 3px;
+  overflow: hidden;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-list {
+  gap: 2px;
+}
+
+.issue-row {
+  min-height: 30px;
+  padding: 3px 6px;
+}
+
+.state-block {
+  min-height: 48px;
+  gap: 2px;
+  padding: 6px;
+}
+
+.state-block svg {
+  width: 16px;
+  height: 16px;
+}
+
+.state-block p,
+.state-block small {
+  line-height: 1.3;
+}
+
+.data-row,
+.table-row {
+  min-height: var(--ng-density-row-height);
+  gap: 7px;
+  padding: 5px 8px;
+}
+
+.info-grid {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 5px;
+}
+
+.info {
+  min-height: 38px;
+  gap: 1px;
+  padding: 5px 7px;
+}
+
+.info span,
+.info small {
+  font-size: 11px;
+}
+
+.info strong {
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.server-info-group h3,
+.settings-subheading {
+  margin-bottom: 4px;
+}
+
+.panel button,
+.icon-button,
+.segmented button,
+.inline-form button,
+.search-field,
+.container-filter,
+.host-selector,
+.agent-toolbar > label,
+.nodeguard-select-trigger {
+  min-height: var(--ng-density-control-height);
+}
+
+.panel button,
+.icon-button,
+.segmented button,
+.inline-form button {
+  padding-block: 4px;
+  padding-inline: 8px;
+}
+
+.icon-only {
+  width: 32px;
+  min-height: 32px !important;
+  padding: 0 !important;
+}
+
+.pill {
+  min-height: 21px;
+  padding-inline: 6px;
+  font-size: 11px;
+}
+
+.inline-form,
+.modal-form,
+.confirmation-dialog,
+.container-table-tools,
+.host-selector-actions,
+.agent-toolbar,
+.alert-table-tools,
+.update-toolbar {
+  gap: 6px;
+}
+
+.inline-form label,
+.modal-form label {
+  gap: 3px;
+}
+
+.inline-form input,
+.search input,
+.search-field,
+.agent-delete-field input {
+  min-height: 34px;
+  padding-block: 4px;
+}
+
+.container-table-header,
+.alert-table-header {
+  min-height: 30px;
+  padding-inline: 8px;
+}
+
+.container-table-row {
+  min-height: 36px;
+  gap: 7px;
+  padding: 4px 7px;
+}
+
+.agents-table th,
+.agents-table td,
+.updates-table th,
+.updates-table td,
+.package-updates-table th,
+.package-updates-table td {
+  padding: 5px 7px;
+}
+
+.agent-lifecycle-actions > div {
+  min-height: 42px;
+  gap: 9px;
+  padding: 5px 0;
+}
+
+.agent-command-block,
+.root-cause,
+.diagnostic-panel,
+.alert-detail section,
+.domain-expanded-details {
+  padding: 7px;
+}
+
+.container-mobile-card,
+.agent-mobile-card,
+.update-mobile-card,
+.alert-mobile-card,
+.package-update-card {
+  gap: 5px;
+  padding: 7px;
+}
+
+.domain-action-row {
+  padding: 4px 6px;
+}
+
+.domain-compact-metrics,
+.domain-row-actions {
+  gap: 7px;
+}
+
+.panel .alert-table-row {
+  min-height: 38px;
+  padding: 4px 8px;
+}
+
+.alert-view-tabs,
+.alert-table-footer {
+  min-height: 32px;
+}
+
+.alert-view-tabs button {
+  min-height: 30px;
+  padding-inline: 7px;
+}
+
+.update-summary-strip > div {
+  gap: 1px;
+  padding: 6px 9px;
+}
+
+.update-summary-strip dd {
+  font-size: 17px;
+  line-height: 1.15;
+}
+
+.update-state-banner,
+.stale-notice {
+  padding: 6px 8px;
+  line-height: 1.3;
+}
+
+.settings-page .panel > .settings-content {
+  gap: 5px;
+  padding: 6px 7px;
+}
+
+.settings-page .settings-description {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.settings-control,
+.settings-list,
+.about-content,
+.about-actions {
+  gap: 5px;
+}
+
+.settings-inline-action {
+  gap: 8px;
+}
+
+.settings-page .segmented {
+  width: fit-content;
+}
+
+.settings-page .info-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.modal {
+  width: min(720px, calc(100vw - 24px));
+  max-height: calc(100vh - 20px);
+}
+
+.modal-header {
+  min-height: 36px;
+  padding-inline: 9px;
+}
+
+.modal > :not(.modal-header) {
+  margin: 7px;
+}
+
+.history-chart-grid {
+  gap: 7px;
+  padding: 7px;
+}
+
+.history-chart-heading {
+  gap: 9px;
+  padding: 7px 8px 4px;
+}
+
+.history-chart {
+  height: 190px;
+}
+
+.logs {
+  max-height: 180px;
+  padding: 8px;
+}
+
+@media (max-width: 760px) {
+  :root {
+    --ng-density-page-x: 6px;
+    --ng-density-page-y: 5px;
+    --ng-density-section-gap: 5px;
+    --ng-density-control-height: 40px;
+  }
+
+  .workspace-topbar {
+    min-height: 42px;
+    margin-bottom: 5px;
+  }
+
+  .panel-header {
+    padding: 5px 7px;
+  }
+
+  .panel > :not(.panel-header) {
+    margin: 5px 6px;
+  }
+
+  .hero-panel {
+    padding: 7px 9px;
+  }
+
+  .hero-status {
+    font-size: 30px;
+  }
+
+  .metric-card,
+  .proxmox-dashboard-card {
+    min-height: 112px !important;
+    padding: 6px;
+  }
+
+  .metric-value {
+    font-size: 29px;
+  }
+
+  .subdued-value {
+    font-size: 22px;
+  }
+
+  .dashboard-metric-grid .metric-indicator {
+    padding: 3px 4px;
+  }
+
+  .state-block {
+    min-height: 50px;
+    padding: 5px;
+  }
+
+  .info {
+    min-height: 42px;
+  }
+
+  .settings-page .panel > .settings-content {
+    gap: 4px;
+    padding: 5px;
+  }
+
+  .settings-inline-action {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .settings-inline-action button {
+    align-self: flex-start;
+  }
+
+  .modal {
+    width: calc(100vw - 12px);
+    max-height: calc(100vh - 12px);
+  }
+
+  .modal > :not(.modal-header) {
+    margin: 6px;
+  }
+
+  .history-chart {
+    height: 170px;
+  }
+
+  .container-mobile-list,
+  .agents-mobile-list,
+  .updates-mobile-list,
+  .alerts-mobile-list {
+    gap: 5px;
+  }
+}
+
+@media (max-width: 460px) {
+  .dashboard-metric-grid {
+    gap: 5px;
+  }
+
+  .dashboard-metric-grid .metric-detail {
+    font-size: 11px;
+  }
+
+  .settings-page .info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .about-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Shared action and type scale: compact controls without flattening hierarchy. */
+:root {
+  --ng-type-page-title: 16px;
+  --ng-type-section-title: 14px;
+  --ng-type-card-title: 13px;
+  --ng-type-body: 13px;
+  --ng-type-label: 11px;
+  --ng-type-helper: 12px;
+  --ng-type-button: 13px;
+  --ng-type-badge: 11px;
+  --ng-button-height: 32px;
+  --ng-button-compact-height: 30px;
+  --ng-button-icon-size: 32px;
+  --ng-button-padding-x: 10px;
+  --ng-button-gap: 6px;
+  --ng-button-radius: 6px;
+}
+
+.topbar-title h1 {
+  font-size: var(--ng-type-page-title);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.panel-header h2,
+.panel h2,
+.modal-header h2 {
+  font-size: var(--ng-type-section-title);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.server-info-group h3,
+.settings-subheading,
+.alert-detail h3,
+.diagnostic-panel h3,
+.root-cause h3 {
+  font-size: var(--ng-type-card-title);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.settings-description,
+.muted,
+.metric-detail,
+.resource-context,
+.table-row small,
+.data-row small {
+  font-size: var(--ng-type-helper);
+  line-height: 1.35;
+}
+
+.info span,
+.info small,
+.inline-form label,
+.modal-form label,
+.agent-toolbar > label,
+.container-table-header,
+.alert-table-header,
+.agents-table th,
+.updates-table th,
+.package-updates-table th {
+  font-size: var(--ng-type-label);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.info strong,
+.table-row strong,
+.data-row strong,
+.agents-table td,
+.updates-table td,
+.package-updates-table td {
+  font-size: var(--ng-type-body);
+  line-height: 1.3;
+}
+
+.pill,
+.environment-badge,
+.nav-count,
+.alert-count {
+  font-size: var(--ng-type-badge);
+  line-height: 1;
+}
+
+body .primary-button,
+body .secondary-button,
+body .danger-button,
+body .ghost-button,
+body .modal-submit,
+.dashboard-panel-action,
+.icon-button,
+.small-action-button,
+.panel-header > button,
+.inline-form button,
+.button-row button,
+.settings-inline-action button,
+button.agent-generate-button,
+button.agent-view-button,
+.agent-command-actions button,
+.agent-detail-actions > button,
+.agent-lifecycle-actions button,
+.machine-update-card > button,
+.agent-update-summary-footer button,
+.agent-update-empty button {
+  min-height: var(--ng-button-height);
+  gap: var(--ng-button-gap);
+  padding: 4px var(--ng-button-padding-x);
+  border-radius: var(--ng-button-radius);
+  font-size: var(--ng-type-button);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.panel-header > button,
+.dashboard-panel-action,
+.small-action-button,
+.container-table-header button,
+.history-ranges button,
+.alert-view-tabs button,
+.alert-pagination button {
+  min-height: var(--ng-button-compact-height);
+}
+
+.icon-only,
+.panel .icon-only,
+.alert-pagination .icon-only {
+  width: var(--ng-button-icon-size);
+  min-width: var(--ng-button-icon-size);
+  min-height: var(--ng-button-icon-size) !important;
+  height: var(--ng-button-icon-size);
+  padding: 0 !important;
+  border-radius: var(--ng-button-radius);
+}
+
+body .primary-button svg,
+body .secondary-button svg,
+body .danger-button svg,
+body .ghost-button svg,
+body .modal-submit svg,
+.dashboard-panel-action svg,
+.icon-button svg,
+.small-action-button svg,
+.panel-header > button svg,
+.inline-form button svg,
+.button-row button svg,
+.settings-inline-action button svg,
+.icon-only svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  stroke-width: 2;
+}
+
+.segmented button,
+.alert-view-tabs button,
+.history-ranges button,
+.container-table-header button,
+.alert-pagination button {
+  padding-inline: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.panel button:disabled,
+.icon-button:disabled,
+.dashboard-panel-action:disabled {
+  opacity: 0.48;
+}
+
+@media (max-width: 760px) {
+  body .primary-button,
+  body .secondary-button,
+  body .danger-button,
+  body .ghost-button,
+  body .modal-submit,
+  .dashboard-panel-action,
+  .icon-button,
+  .small-action-button,
+  .panel-header > button,
+  .inline-form button,
+  .button-row button,
+  .settings-inline-action button,
+  button.agent-generate-button,
+  button.agent-view-button,
+  .agent-command-actions button,
+  .agent-detail-actions > button,
+  .agent-lifecycle-actions button {
+    min-height: 38px;
+    font-size: var(--ng-type-button);
+  }
+
+  .panel-header > button,
+  .dashboard-panel-action,
+  .small-action-button,
+  .alert-view-tabs button,
+  .history-ranges button {
+    min-height: 34px;
+  }
+
+  .icon-only,
+  .panel .icon-only,
+  .alert-pagination .icon-only {
+    width: 36px;
+    min-width: 36px;
+    min-height: 36px !important;
+    height: 36px;
   }
 }

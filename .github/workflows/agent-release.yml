@@ -13,7 +13,7 @@ on:
       version:
         description: "Agent version without the v prefix"
         required: true
-        default: "0.3.0"
+        default: "0.3.1"
 
 permissions:
   contents: write
@@ -46,7 +46,7 @@ jobs:
           elif [[ -n "${{ inputs.version }}" ]]; then
             version="${{ inputs.version }}"
           else
-            version="0.3.0-ci"
+            version="0.3.1-ci"
           fi
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid agent version: $version" >&2

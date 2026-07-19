@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { MonitoredExternalLink, normalizeMonitoredHref } from "./MonitoredExternalLink";

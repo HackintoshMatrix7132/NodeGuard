@@ -6,9 +6,11 @@ import (
 )
 
 type Item struct {
-	Path      string
-	Payload   any
-	CreatedAt time.Time
+	Path                string
+	CoalesceKey         string
+	Payload             any
+	CreatedAt           time.Time
+	RetainUntilReplaced bool
 }
 
 type Queue struct {
@@ -26,18 +28,44 @@ func (queue *Queue) Add(item Item) {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
 	queue.pruneLocked(time.Now())
-	if item.Path == "/api/agent/heartbeat" || item.Path == "/api/agent/inventory" || item.Path == "/api/agent/docker" || item.Path == "/api/agent/updates" {
+	if item.CoalesceKey != "" || item.Path == "/api/agent/heartbeat" || item.Path == "/api/agent/inventory" || item.Path == "/api/agent/docker" || item.Path == "/api/agent/updates" {
+		coalesceKey := item.CoalesceKey
+		if coalesceKey == "" {
+			coalesceKey = item.Path
+		}
 		filtered := queue.items[:0]
 		for _, existing := range queue.items {
-			if existing.Path != item.Path {
+			existingKey := existing.CoalesceKey
+			if existingKey == "" {
+				existingKey = existing.Path
+			}
+			if existingKey != coalesceKey {
 				filtered = append(filtered, existing)
 			}
 		}
 		queue.items = filtered
 	}
 	queue.items = append(queue.items, item)
+	queue.trimLocked()
+}
+
+func (queue *Queue) trimLocked() {
+	if queue.maxItems <= 0 {
+		queue.items = nil
+		return
+	}
 	if len(queue.items) > queue.maxItems {
-		queue.items = queue.items[len(queue.items)-queue.maxItems:]
+		removeAt := -1
+		for index, item := range queue.items {
+			if !item.RetainUntilReplaced {
+				removeAt = index
+				break
+			}
+		}
+		if removeAt < 0 {
+			removeAt = 0
+		}
+		queue.items = append(queue.items[:removeAt], queue.items[removeAt+1:]...)
 	}
 }
 
@@ -68,9 +96,12 @@ func (queue *Queue) Len() int {
 
 func (queue *Queue) pruneLocked(now time.Time) {
 	cutoff := now.Add(-queue.maxAge)
-	first := 0
-	for first < len(queue.items) && queue.items[first].CreatedAt.Before(cutoff) {
-		first++
+	filtered := queue.items[:0]
+	for _, item := range queue.items {
+		if !item.RetainUntilReplaced && item.CreatedAt.Before(cutoff) {
+			continue
+		}
+		filtered = append(filtered, item)
 	}
-	queue.items = queue.items[first:]
+	queue.items = filtered
 }

@@ -74,6 +74,8 @@ When a synchronization fails, NodeGuard keeps the last successful snapshot and m
 
 The **Sync now** action requests an immediate refresh. Disabling a connection stops scheduled synchronization without deleting its saved inventory or credentials.
 
+The Dashboard reserves the Proxmox summary tile from its first render. Loading, unconfigured, disabled, unavailable, stale, warning, and healthy states update inside that fixed tile, so a slow or failed Proxmox request does not reorder the summary grid or shift the rest of the Dashboard. Previously loaded inventory remains visible during background refresh.
+
 ## Alerts
 
 The integration can create alerts for:

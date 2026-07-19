@@ -136,6 +136,7 @@ test("accepts the Agent-shaped bounded versioned APT update inventory", () => {
   assert.equal(payload.schemaVersion, 1);
   assert.equal(payload.provider, "apt");
   assert.equal(payload.packages[0]?.name, "openssl");
+  assert.equal(payload.errorCode, null);
 });
 
 test("successful inventories use one atomic check timestamp", () => {
@@ -150,6 +151,8 @@ test("rejects malformed, inconsistent, duplicate, and oversized update inventori
   assert.throws(() => validation.parseAgentUpdates(updatePayload({ schemaVersion: 2 })), validation.AgentPayloadError);
   assert.throws(() => validation.parseAgentUpdates(updatePayload({ provider: "shell" })), validation.AgentPayloadError);
   assert.throws(() => validation.parseAgentUpdates(updatePayload({ securityUpdateCount: 2 })), validation.AgentPayloadError);
+  assert.throws(() => validation.parseAgentUpdates(updatePayload({ errorCode: "unknown_failure" })), validation.AgentPayloadError);
+  assert.throws(() => validation.parseAgentUpdates(updatePayload({ errorCode: "apt_unavailable" })), validation.AgentPayloadError);
   const duplicate = updatePayload();
   duplicate.updateCount = 2;
   duplicate.securityUpdateCount = 2;
@@ -203,17 +206,54 @@ test("accepts explicit unsupported and failed states without package results", (
     updateCount: 0,
     securityUpdateCount: 0,
     rebootRequired: null,
-    packages: []
+    packages: [],
+    errorCode: "unsupported_os",
+    errorMessage: "Update discovery is not available."
   }));
   assert.equal(unsupported.status, "unsupported");
 
+  assert.equal(unsupported.errorCode, "unsupported_os");
   const failed = validation.parseAgentUpdates(updatePayload({
     status: "package_manager_busy",
     lastSuccessfulAt: null,
     updateCount: 0,
     securityUpdateCount: 0,
     rebootRequired: null,
-    packages: []
+    packages: [],
+    errorCode: "package_manager_busy",
+    errorMessage: "x".repeat(255)
   }));
   assert.equal(failed.status, "package_manager_busy");
+  assert.equal(failed.errorCode, "package_manager_busy");
+  assert.equal("errorMessage" in failed, false);
+
+  const metadataOutput = validation.parseAgentUpdates(updatePayload({
+    status: "metadata_refresh_failed",
+    lastSuccessfulAt: null,
+    updateCount: 0,
+    securityUpdateCount: 0,
+    rebootRequired: null,
+    packages: [],
+    errorCode: "metadata_output_too_large"
+  }));
+  assert.equal(metadataOutput.errorCode, "metadata_output_too_large");
+
+  const checkOutput = validation.parseAgentUpdates(updatePayload({
+    status: "check_failed",
+    lastSuccessfulAt: null,
+    updateCount: 0,
+    securityUpdateCount: 0,
+    rebootRequired: null,
+    packages: [],
+    errorCode: "check_output_too_large"
+  }));
+  assert.equal(checkOutput.errorCode, "check_output_too_large");
+  assert.throws(() => validation.parseAgentUpdates(updatePayload({
+    status: "check_failed", lastSuccessfulAt: null, updateCount: 0, securityUpdateCount: 0,
+    rebootRequired: null, packages: [], errorCode: "metadata_refresh_timeout"
+  })), validation.AgentPayloadError);
+  assert.throws(() => validation.parseAgentUpdates(updatePayload({
+    status: "check_failed", lastSuccessfulAt: null, updateCount: 0, securityUpdateCount: 0,
+    rebootRequired: null, packages: [], errorCode: "check_failed", errorMessage: "x".repeat(256)
+  })), validation.AgentPayloadError);
 });

@@ -87,9 +87,35 @@ test("Agent update ingestion and owner update reads enforce their separate trust
       });
       assert.equal(malformed.status, 400);
       assert.equal((await malformed.json() as { error: string }).error, "invalid_agent_payload");
+
+      const oversized = await fetch(`${baseUrl}/api/agent/updates`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${registered.credential}`,
+          "x-nodeguard-agent-id": registered.agentId
+        },
+        body: JSON.stringify({ padding: "x".repeat(600 * 1024) })
+      });
+      assert.equal(oversized.status, 413);
+      assert.equal(JSON.stringify(await oversized.json()).includes(registered.credential), false);
+
+      const waiting = await fetch(`${baseUrl}/api/updates`, { headers: { "x-test-mode": "live" } });
+      assert.equal(waiting.status, 200);
+      const waitingSnapshot = await waiting.json() as Record<string, unknown>;
+      assert.equal(waitingSnapshot.availableCount, null);
+      assert.equal(waitingSnapshot.securityCriticalCount, null);
+      assert.equal(waitingSnapshot.summaryState, "waiting");
+      assert.equal(waitingSnapshot.lastCheckedAt, null);
     });
 
     await context.test("an authenticated Agent can report a validated inventory", async () => {
+      agentService.recordAgentHeartbeat(registered.agentId, {
+        agentId: registered.agentId,
+        agentVersion: "0.3.0",
+        processUptimeSeconds: 30,
+        timestamp: new Date().toISOString()
+      });
       const response = await fetch(`${baseUrl}/api/agent/updates`, {
         method: "POST",
         headers: {
@@ -113,9 +139,24 @@ test("Agent update ingestion and owner update reads enforce their separate trust
     await context.test("an owner can search summaries and read bounded package details", async () => {
       const list = await fetch(`${baseUrl}/api/updates?search=openssl&status=security`, { headers: { "x-test-mode": "live" } });
       assert.equal(list.status, 200);
-      const snapshot = await list.json() as { totalMachineCount: number; machines: Array<{ agentId: string }> };
+      const snapshot = await list.json() as {
+        availableCount: number | null;
+        securityCriticalCount: number | null;
+        currentReportingMachineCount: number;
+        retainedMachineCount: number;
+        summaryState: string;
+        totalMachineCount: number;
+        machines: Array<{ agentId: string; freshness: string; lastErrorCode: string | null }>;
+      };
       assert.equal(snapshot.totalMachineCount, 1);
+      assert.equal(snapshot.availableCount, 1);
+      assert.equal(snapshot.securityCriticalCount, 1);
+      assert.equal(snapshot.currentReportingMachineCount, 1);
+      assert.equal(snapshot.retainedMachineCount, 0);
+      assert.equal(snapshot.summaryState, "current");
       assert.deepEqual(snapshot.machines.map((machine) => machine.agentId), [registered.agentId]);
+      assert.equal(snapshot.machines[0]?.freshness, "current");
+      assert.equal(snapshot.machines[0]?.lastErrorCode, null);
 
       const detail = await fetch(`${baseUrl}/api/updates/machines/${registered.agentId}`, { headers: { "x-test-mode": "live" } });
       assert.equal(detail.status, 200);

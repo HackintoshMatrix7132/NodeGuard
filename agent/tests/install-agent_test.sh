@@ -14,7 +14,7 @@ for option in --server --token --name --agent-version --version --yes --non-inte
 done
 
 bash "$INSTALLER" --version >"$TEMP_DIR/version.txt"
-grep -q '^NodeGuard Agent Installer 0.3.0$' "$TEMP_DIR/version.txt"
+grep -q '^NodeGuard Agent Installer 0.3.1$' "$TEMP_DIR/version.txt"
 
 if bash "$INSTALLER" --definitely-unknown >"$TEMP_DIR/unknown.txt" 2>&1; then
   printf '%s\n' "unknown installer options must fail" >&2

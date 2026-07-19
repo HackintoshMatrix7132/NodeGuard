@@ -237,6 +237,14 @@
   gap: 0.3rem;
 }
 
+.proxmox-dashboard-card__details .is-healthy {
+  color: #86efac;
+}
+
+.proxmox-dashboard-card__details .has-warning {
+  color: #fbbf24;
+}
+
 .proxmox-status {
   display: inline-flex;
   min-height: 1.6rem;
@@ -842,6 +850,7 @@
   border-top: 2px solid #35c9ee;
   cursor: pointer;
   transition: border-color 140ms ease, background-color 140ms ease;
+  animation: ngSoftRise 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .proxmox-dashboard-card:hover {
@@ -1152,7 +1161,7 @@
   margin-top: 0.25rem;
 }
 
-.proxmox-settings-row__details > a {
+.proxmox-settings-row__details > .monitored-external-link {
   display: inline-flex;
   min-width: 0;
   max-width: 100%;
@@ -1162,13 +1171,8 @@
   line-height: 1.4;
 }
 
-.proxmox-settings-row__details > a > span {
+.proxmox-settings-row__details .monitored-external-link__text {
   min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.proxmox-settings-row__details > a > svg {
-  flex: 0 0 auto;
 }
 
 .proxmox-settings-row__sync {
@@ -1189,4 +1193,217 @@
 .proxmox-settings-row__sync > span:last-child {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+/* Density pass 2: align Proxmox surfaces with the shared compact system. */
+.proxmox-page {
+  gap: 0.4rem;
+}
+
+.proxmox-panel__header,
+.proxmox-settings-section__header {
+  min-height: 2.15rem;
+  gap: 0.45rem;
+  padding: 0.38rem 0.55rem;
+}
+
+.proxmox-panel__title,
+.proxmox-panel__actions,
+.proxmox-settings-row__actions,
+.proxmox-dialog__actions {
+  gap: 0.38rem;
+}
+
+.proxmox-panel__body,
+.proxmox-settings-section__body {
+  padding: 0.45rem;
+}
+
+.proxmox-summary-grid {
+  gap: 0.4rem;
+}
+
+.proxmox-summary-card {
+  min-height: 4.65rem;
+  gap: 0.18rem;
+  padding: 0.48rem;
+}
+
+.proxmox-summary-card__value {
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.proxmox-summary-card__detail,
+.proxmox-summary-card__label {
+  line-height: 1.2;
+}
+
+.proxmox-filter-row {
+  gap: 0.4rem;
+  padding: 0.4rem;
+}
+
+.proxmox-filter-row input,
+.proxmox-button {
+  min-height: 2rem;
+}
+
+.proxmox-button {
+  gap: 0.3rem;
+  padding: 0.32rem 0.55rem;
+}
+
+.proxmox-table th {
+  padding: 0.38rem 0.48rem;
+}
+
+.proxmox-table td {
+  padding: 0.42rem 0.48rem;
+}
+
+.proxmox-settings-list,
+.proxmox-connection-list {
+  gap: 0.35rem;
+}
+
+.proxmox-settings-row,
+.proxmox-connection-row {
+  min-height: 3rem;
+  gap: 0.45rem;
+  padding: 0.45rem 0.55rem;
+}
+
+.proxmox-empty,
+.proxmox-loading {
+  min-height: 3.5rem;
+  gap: 0.2rem;
+  padding: 0.5rem;
+}
+
+.proxmox-dialog {
+  max-height: calc(100vh - 1rem);
+}
+
+.proxmox-dialog__header,
+.proxmox-dialog__body,
+.proxmox-dialog__actions {
+  padding: 0.55rem 0.65rem;
+}
+
+.proxmox-dialog__body,
+.proxmox-dialog > form {
+  gap: 0.48rem;
+}
+
+@media (max-width: 700px) {
+  .proxmox-page {
+    gap: 0.32rem;
+  }
+
+  .proxmox-panel__header,
+  .proxmox-settings-section__header {
+    padding: 0.35rem 0.45rem;
+  }
+
+  .proxmox-panel__body,
+  .proxmox-settings-section__body {
+    padding: 0.35rem;
+  }
+
+  .proxmox-summary-grid {
+    gap: 0.32rem;
+  }
+
+  .proxmox-summary-card {
+    min-height: 4.25rem;
+    padding: 0.4rem;
+  }
+
+  .proxmox-button,
+  .proxmox-filter-row input {
+    min-height: 2.5rem;
+  }
+
+  .proxmox-settings-row,
+  .proxmox-connection-row {
+    padding: 0.4rem;
+  }
+}
+
+/* Match Proxmox actions and typography to NodeGuard's shared scale. */
+.proxmox-panel__title h2,
+.proxmox-settings-section__header h2,
+.proxmox-dialog__header h2 {
+  font-size: var(--ng-type-section-title, 14px);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.proxmox-settings-section__header p,
+.proxmox-panel__title p,
+.proxmox-dialog__heading p,
+.proxmox-empty p {
+  font-size: var(--ng-type-helper, 12px);
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.proxmox-summary-card__label,
+.proxmox-table th,
+.proxmox-field > span,
+.proxmox-checkbox > span {
+  font-size: var(--ng-type-label, 11px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.proxmox-summary-card__detail,
+.proxmox-table td,
+.proxmox-settings-row__identity,
+.proxmox-connection-row__identity {
+  font-size: var(--ng-type-body, 13px);
+  line-height: 1.3;
+}
+
+.proxmox-button {
+  min-height: var(--ng-button-height, 32px);
+  gap: var(--ng-button-gap, 6px);
+  padding: 4px var(--ng-button-padding-x, 10px);
+  border-radius: var(--ng-button-radius, 6px);
+  font-size: var(--ng-type-button, 13px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.proxmox-icon-button {
+  width: var(--ng-button-icon-size, 32px);
+  min-width: var(--ng-button-icon-size, 32px);
+  min-height: var(--ng-button-icon-size, 32px);
+  height: var(--ng-button-icon-size, 32px);
+  flex-basis: var(--ng-button-icon-size, 32px);
+  border-radius: var(--ng-button-radius, 6px);
+}
+
+.proxmox-button svg,
+.proxmox-icon-button svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+@media (max-width: 700px) {
+  .proxmox-button {
+    min-height: 38px;
+  }
+
+  .proxmox-icon-button {
+    width: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    height: 36px;
+    flex-basis: 36px;
+  }
 }

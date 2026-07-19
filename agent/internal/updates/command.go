@@ -50,6 +50,7 @@ func (buffer *boundedBuffer) String() string {
 type SystemCommandRunner struct{}
 
 var commandPaths = map[string][]string{
+	"apt":        {"/usr/bin/apt", "/bin/apt"},
 	"apt-get":    {"/usr/bin/apt-get", "/bin/apt-get"},
 	"pveversion": {"/usr/bin/pveversion", "/usr/sbin/pveversion"},
 }

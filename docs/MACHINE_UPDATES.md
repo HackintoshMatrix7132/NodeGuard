@@ -41,7 +41,7 @@ On its scheduled check, the Agent:
 1. identifies the operating system and APT support;
 2. passively detects an APT/dpkg lock and delays if the package manager is busy;
 3. refreshes APT package metadata with fixed arguments;
-4. uses a simulated, non-installing upgrade operation to identify available packages;
+4. reads the fixed, non-mutating `apt list --upgradable` inventory to identify available packages;
 5. records installed and candidate versions;
 6. classifies security updates only from recognized security repository/archive metadata;
 7. checks the standard `/run/reboot-required` indicator;
@@ -59,11 +59,15 @@ The default update-check interval is 21,600 seconds (6 hours):
 AGENT_UPDATE_INTERVAL_SECONDS=21600
 ```
 
-The backend clamps the configured interval to a minimum of 900 seconds. A short randomized startup delay prevents many Agents from refreshing repositories at the same instant. A transient busy or failed check uses bounded retry timing, and only one update check may run per Agent at once.
+The backend clamps the configured interval to a minimum of 900 seconds.
+
+The first check starts independently about 5–30 seconds after Agent startup. That small jitter prevents many Agents from refreshing repositories at the same instant without making a new installation wait for the normal six-hour interval.
+
+A transient busy or failed check retries after approximately 30 seconds, 2 minutes, 5 minutes, and then 15 minutes, capped by the configured normal interval. Only one update check may run per Agent at once.
 
 Update collection runs independently from heartbeat, metrics, inventory, and Docker collection. A slow repository cannot block those reports or graceful Agent shutdown.
 
-The existing in-memory delivery queue keeps only the newest complete update inventory. It remains bounded to 100 total reports and 15 minutes and does not write a queue to disk.
+The bounded in-memory delivery queue retains at most the newest successful update snapshot and newest non-success state until delivered or replaced. Other telemetry keeps its normal bounded age/capacity behavior, so an outage cannot grow memory without limit or make a recovered backend wait six hours for the next update inventory. The queue is not written to disk and does not survive an Agent process restart.
 
 ## Report states
 
@@ -76,6 +80,10 @@ The existing in-memory delivery queue keeps only the newest complete update inve
 | `check_failed` | Discovery could not complete after support was detected. | The previous successful inventory remains visible with a safe failure message. |
 
 `checkedAt` is the latest attempted check. `lastSuccessfulAt` is kept separately so a failure cannot make old data look current. Stale and offline labels come from the existing Agent heartbeat status and do not erase prior update data.
+
+Per-machine freshness is explicit: `waiting` means no successful inventory exists yet; `current` means a recent successful inventory from an online Agent; `retained` means usable prior data remains after a failed check or unavailable Agent; `stale` means the last success is older than the configured freshness window; and `unsupported` means the operating system has no update provider.
+
+Headline totals are `unknown` until at least one successful inventory exists. With retained data, totals are clearly labeled as last-known/partial and current coverage is shown separately, so a failed or missing report never becomes a false zero.
 
 If more than 500 packages are available, summary counts still represent the full result, the first 500 normalized entries are stored, and the UI shows that the package list is truncated.
 
@@ -100,7 +108,7 @@ The API validates schema version, state, timestamps, counts, field lengths, pack
 
 ## Update the Agent
 
-Machine update discovery requires Agent v0.2.0 or newer. Rebuilding the NodeGuard server makes the versioned installer assets available but does not silently replace Agents on monitored machines.
+Machine update discovery requires Agent v0.2.0 or newer; the prompt startup check, read-only listing path, strict metadata failure handling, and outage-safe delivery require Agent v0.3.1. Rebuilding the NodeGuard server makes the versioned installer assets available but does not silently replace Agents on monitored machines.
 
 For each selected machine, generate or reuse the normal checksum-verified installer workflow. A healthy upgrade preserves `/etc/nodeguard-agent/config.json` and its credential. If the stored credential was revoked/deleted or rejected, Agent v0.3's recovery flow preserves the stable machine identity and rotates the credential with a fresh one-time token instead of creating a duplicate machine. Then confirm:
 
@@ -112,15 +120,15 @@ sudo systemctl status nodeguard-agent
 sudo journalctl -u nodeguard-agent --since '30 minutes ago'
 ```
 
-Older configuration files do not contain the update interval. Agent v0.2.0 supplies the safe six-hour default when loading them.
+Older configuration files do not contain the update interval. Current Agents supply the safe six-hour default when loading them.
 
 ## Troubleshooting
 
 ### Waiting for update inventory
 
-- Confirm the machine is running Agent v0.2.0 or newer.
+- Confirm the machine is running Agent v0.3.1 for the current startup, retry, and delivery behavior.
 - Confirm the Agent is online in NodeGuard.
-- Allow the randomized startup check to complete.
+- Allow approximately 5–30 seconds for the first check to start; repository refresh time is additional.
 - Review `journalctl` for the structured update-check event.
 - Confirm the machine can reach its configured APT repositories.
 
@@ -134,7 +142,7 @@ Check repository reachability, DNS, certificate trust, repository signatures, an
 
 ### Service sandbox denies writes
 
-Upgrade with the current installer (Agent v0.2.0 or newer) so the packaged systemd unit and embedded installer unit include the narrow APT metadata/cache `ReadWritePaths`. Do not weaken `ProtectSystem=strict` globally.
+Upgrade with the current installer so the packaged systemd unit and embedded installer unit include the narrow APT metadata/cache `ReadWritePaths`. Do not weaken `ProtectSystem=strict` globally.
 
 ### Old data after a failure
 

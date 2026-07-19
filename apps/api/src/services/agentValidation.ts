@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import type { AgentUpdateErrorCode } from "../types/nodeguard.js";
 import type { AgentContainerInput, AgentDockerInput, AgentFilesystem, AgentHeartbeatInput, AgentInventoryInput, AgentMetricSampleInput, AgentMetricsInput, AgentPackageUpdateInput, AgentRegistrationInput, AgentUpdateCheckStatus, AgentUpdateInventoryInput, ContainerHealth } from "../types/nodeguard.js";
 
 export class AgentPayloadError extends Error {
@@ -265,6 +266,46 @@ function parseUpdateStatus(value: unknown): AgentUpdateCheckStatus {
   return value as AgentUpdateCheckStatus;
 }
 
+const updateErrorCodes = new Set<AgentUpdateErrorCode>([
+  "unsupported_os",
+  "os_detection_failed",
+  "apt_unavailable",
+  "package_lock_check_failed",
+  "package_manager_busy",
+  "metadata_refresh_timeout",
+  "metadata_refresh_failed",
+  "metadata_output_too_large",
+  "check_output_too_large",
+  "check_timeout",
+  "check_failed",
+  "malformed_apt_output",
+  "reboot_state_unavailable"
+]);
+
+const updateErrorCodesByStatus: Record<Exclude<AgentUpdateCheckStatus, "ok">, ReadonlySet<AgentUpdateErrorCode>> = {
+  unsupported: new Set(["unsupported_os"]),
+  package_manager_busy: new Set(["package_manager_busy"]),
+  metadata_refresh_failed: new Set(["metadata_refresh_timeout", "metadata_refresh_failed", "metadata_output_too_large"]),
+  check_failed: new Set([
+    "os_detection_failed",
+    "apt_unavailable",
+    "package_lock_check_failed",
+    "check_timeout",
+    "check_failed",
+    "malformed_apt_output",
+    "check_output_too_large",
+    "reboot_state_unavailable"
+  ])
+};
+
+function parseUpdateErrorCode(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || !updateErrorCodes.has(value as AgentUpdateErrorCode)) {
+    throw new AgentPayloadError("errorCode is not a supported update error code.");
+  }
+  return value as AgentUpdateErrorCode;
+}
+
 function parseOptionalUpdateTimestamp(value: unknown, label: string) {
   if (value === undefined || value === null || value === "") return null;
   const timestamp = safeUpdateString(value, label, 64);
@@ -295,6 +336,14 @@ export function parseAgentUpdates(value: unknown): AgentUpdateInventoryInput {
 
   const supported = requiredBoolean(input.supported, "supported");
   const status = parseUpdateStatus(input.status);
+  const errorCode = parseUpdateErrorCode(input.errorCode);
+  const errorMessage = safeUpdateString(input.errorMessage, "errorMessage", 255, false);
+  if (status === "ok" && (errorCode || errorMessage)) {
+    throw new AgentPayloadError("successful inventories must not contain an update error.");
+  }
+  if (status !== "ok" && errorCode && !updateErrorCodesByStatus[status].has(errorCode)) {
+    throw new AgentPayloadError("errorCode is inconsistent with status.");
+  }
   if ((status === "unsupported") !== !supported) {
     throw new AgentPayloadError("supported and status are inconsistent.");
   }
@@ -357,6 +406,7 @@ export function parseAgentUpdates(value: unknown): AgentUpdateInventoryInput {
     securityUpdateCount,
     rebootRequired,
     truncated,
-    packages
+    packages,
+    errorCode
   };
 }

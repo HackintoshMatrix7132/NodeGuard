@@ -1,8 +1,10 @@
 # NodeGuard final UI/UX audit
 
+> **Current focused follow-up:** See [`UI_AUDIT.md`](UI_AUDIT.md) for the 2026-07-19 Chrome DevTools MCP button, typography, responsive, console, and network audit. This document records the earlier broad compactness pass and its historical tooling context.
+
 ## Audit context
 
-- **Audit date:** 2026-07-14
+- **Audit date:** 2026-07-19
 - **Environment:** isolated local NodeGuard API and Vite web app using a temporary SQLite database, fictional Demo Mode inventory, and a temporary local Live account for dialog-only checks. No production data or private infrastructure was read or changed.
 - **Browser tooling:** Firefox WebDriver/BiDi was used because Chrome DevTools MCP and Playwright MCP were unavailable. It provided real-browser DOM geometry, computed layout, exact viewport emulation, keyboard input, focus inspection, console/network events, and screenshots.
 - **Artifacts:** temporary evidence is under `/tmp/nodeguard-ui-audit-final`, `/tmp/ng-desktop-dense-final`, and `/tmp/nodeguard-final-mobile`. It is intentionally not tracked by Git.
@@ -46,7 +48,7 @@ The stylesheet contains overlapping historical layers. This pass used bounded ov
 
 ## Findings and implementation ledger
 
-Completed count: **3 P0, 16 P1, 3 P2**. No known P0 or P1 finding remains open.
+Completed count: **3 P0, 17 P1, 4 P2**. No known P0 or P1 finding remains open.
 
 | ID | Severity | Page/component | Issue and user impact | Root cause | Implemented fix | Verification |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -72,6 +74,8 @@ Completed count: **3 P0, 16 P1, 3 P2**. No known P0 or P1 finding remains open.
 | NG-UI-020 | P1 | Destructive actions | Several deletes were immediate; failed deletes displayed behind the modal. | Shared confirmation/error handling was incomplete. | Added reusable confirmations for server/container/domain/alert deletion and dialog-local error feedback. | Dialog browser checks and source review. |
 | NG-UI-021 | P1 | Proxmox dialog mutations | Save/delete controls briefly re-enabled during the exit animation. | Pending state reset before the 170ms unmount. | Keep mutation state busy until successful dialog unmount; failures re-enable controls with an alert. | Source review, typecheck, modal browser checks. |
 | NG-UI-022 | P1 | Dense responsive data | Containers/Alerts controls clipped at 1440; other dense tables failed at 1280/1024; Proxmox scrolled at tablet width. | Tables were selected by viewport rather than usable shell content, and card sorting was hidden with the table header. | Use measured card breakpoints, preserve two-column density where space allows, add card-mode container sort/direction controls, and convert Proxmox rows through 1100px. | Every target viewport has no page or visible component overflow. |
+| NG-UI-023 | P1 | Dashboard Proxmox summary | The Proxmox tile mounted only after its request resolved, causing late insertion and grid movement. | The card returned no element while loading, unconfigured, or disabled and used a separate request lifecycle. | Always mount the tile shell, move its snapshot to the shared query cache, retain previous data during refetch, remove staggered timing, and present explicit loading, unconfigured, disabled, unavailable, stale, warning, and healthy states in place. | Component state tests, direct/cached render source review, typecheck, and build pass. |
+| NG-UI-024 | P2 | Mobile Dashboard density | Summary metrics reverted to seven stacked full-width cards below 640px, pushing operational context far below the fold. | A late phone breakpoint overrode the otherwise responsive two-column grid. | Keep a two-column phone grid, collapse detailed breakdown rows to concise summaries, truncate secondary metadata safely, and let the final Proxmox summary span the row. | 390 × 844 and 360 × 800 responsive rule review; no horizontal page overflow. |
 
 ## Accessibility findings
 
@@ -89,6 +93,7 @@ This is a practical WCAG 2.2 AA-oriented audit, not a claim of formal certificat
 - Proxmox inventory becomes labeled cards through 1100px, avoiding tablet horizontal scrollers while retaining desktop tables.
 - Container sorting remains available in card mode.
 - Dashboard secondary panels stack at tablet width, preventing clipped reachability statuses.
+- Dashboard metrics remain in a compact two-column grid at phone widths; secondary breakdowns collapse to one-line summaries and the final Proxmox tile spans the row.
 - The phone shell no longer reserves a navigation rail; long names, image references, URLs, ports, causes, and action rows wrap or truncate with the full value available through title/link context.
 
 ## Loading, empty, stale, and error states

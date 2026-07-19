@@ -1,12 +1,14 @@
 import type {
   AgentStatus,
   AgentUpdateCheckStatus,
+  AgentUpdateErrorCode,
   AgentUpdateInventoryInput,
   MachineUpdateDetail,
   MachineUpdatePackage,
   MachineUpdateSummary,
   UpdateCenterSnapshot
 } from "../types/nodeguard.js";
+import { env } from "../config/env.js";
 import { AgentServiceError, calculateAgentStatus } from "./agentService.js";
 import { getDatabase } from "./database.js";
 
@@ -33,6 +35,7 @@ type InventoryRow = {
   os_version_id: string | null;
   os_pretty_name: string | null;
   last_error: string | null;
+  last_error_code: AgentUpdateErrorCode | null;
 };
 
 type PackageRow = {
@@ -60,14 +63,37 @@ export type UpdateMachineFilters = {
   status?: UpdateMachineFilterStatus;
 };
 
-const safeStatusMessages: Partial<Record<AgentUpdateCheckStatus, string>> = {
-  package_manager_busy: "The package manager is currently busy. NodeGuard will retry automatically.",
-  metadata_refresh_failed: "Package metadata could not be refreshed. NodeGuard will retry automatically.",
-  check_failed: "Operating-system updates could not be checked. NodeGuard will retry automatically."
+const defaultErrorCodes: Record<Exclude<AgentUpdateCheckStatus, "ok">, AgentUpdateErrorCode> = {
+  unsupported: "unsupported_os",
+  package_manager_busy: "package_manager_busy",
+  metadata_refresh_failed: "metadata_refresh_failed",
+  check_failed: "check_failed"
 };
 
-function nowIso() {
-  return new Date().toISOString();
+const safeErrorMessages: Record<AgentUpdateErrorCode, string> = {
+  unsupported_os: "Update discovery is not available for this operating system.",
+  os_detection_failed: "Operating system information could not be read safely.",
+  apt_unavailable: "APT is not available on this machine.",
+  package_lock_check_failed: "The package manager lock state could not be checked safely.",
+  package_manager_busy: "The package manager is currently busy. NodeGuard will retry automatically.",
+  metadata_refresh_timeout: "APT package metadata refresh timed out. NodeGuard will retry automatically.",
+  metadata_output_too_large: "APT package metadata output exceeded the safe limit.",
+  check_output_too_large: "APT update discovery output exceeded the safe limit.",
+  metadata_refresh_failed: "APT package metadata could not be refreshed. NodeGuard will retry automatically.",
+  check_timeout: "APT update discovery timed out. NodeGuard will retry automatically.",
+  check_failed: "Operating-system updates could not be checked. NodeGuard will retry automatically.",
+  malformed_apt_output: "APT returned an unexpected update list.",
+  reboot_state_unavailable: "The reboot-required state could not be read safely."
+};
+
+function resolvedError(status: AgentUpdateCheckStatus, errorCode: AgentUpdateErrorCode | null) {
+  if (status === "ok") return { code: null, message: null };
+  const code = errorCode ?? defaultErrorCodes[status];
+  return { code, message: safeErrorMessages[code] };
+}
+
+function nowIso(now = Date.now()) {
+  return new Date(now).toISOString();
 }
 
 function inventoryRow(agentId: string) {
@@ -80,11 +106,11 @@ const writeSuccessfulInventory = database.prepare(`
   INSERT INTO agent_update_inventories (
     agent_id, schema_version, provider, supported, status, checked_at, last_successful_at,
     update_count, security_update_count, reboot_required, truncated, os_id, os_version_id,
-    os_pretty_name, last_error, updated_at
+    os_pretty_name, last_error, last_error_code, updated_at
   ) VALUES (
     @agentId, @schemaVersion, @provider, @supported, @status, @checkedAt, @lastSuccessfulAt,
     @updateCount, @securityUpdateCount, @rebootRequired, @truncated, @osId, @osVersionId,
-    @osPrettyName, NULL, @updatedAt
+    @osPrettyName, @lastError, @lastErrorCode, @updatedAt
   )
   ON CONFLICT(agent_id) DO UPDATE SET
     schema_version = excluded.schema_version,
@@ -100,7 +126,8 @@ const writeSuccessfulInventory = database.prepare(`
     os_id = excluded.os_id,
     os_version_id = excluded.os_version_id,
     os_pretty_name = excluded.os_pretty_name,
-    last_error = NULL,
+    last_error = excluded.last_error,
+    last_error_code = excluded.last_error_code,
     updated_at = excluded.updated_at
 `);
 
@@ -120,6 +147,7 @@ export function recordAgentUpdates(agentId: string, input: AgentUpdateInventoryI
       return false;
     }
 
+    const error = resolvedError(input.status, input.errorCode);
     const values = {
       agentId,
       schemaVersion: input.schemaVersion,
@@ -135,6 +163,8 @@ export function recordAgentUpdates(agentId: string, input: AgentUpdateInventoryI
       osId: input.os.id,
       osVersionId: input.os.versionId,
       osPrettyName: input.os.prettyName,
+      lastError: error.message,
+      lastErrorCode: error.code,
       updatedAt: nowIso()
     };
 
@@ -166,12 +196,11 @@ export function recordAgentUpdates(agentId: string, input: AgentUpdateInventoryI
       return true;
     }
 
-    const lastError = safeStatusMessages[input.status] ?? "Operating-system updates could not be checked.";
     if (current) {
       database.prepare(`
         UPDATE agent_update_inventories SET
           schema_version = ?, provider = ?, supported = ?, status = ?, checked_at = ?,
-          os_id = ?, os_version_id = ?, os_pretty_name = ?, last_error = ?, updated_at = ?
+          os_id = ?, os_version_id = ?, os_pretty_name = ?, last_error = ?, last_error_code = ?, updated_at = ?
         WHERE agent_id = ?
       `).run(
         input.schemaVersion,
@@ -182,7 +211,8 @@ export function recordAgentUpdates(agentId: string, input: AgentUpdateInventoryI
         input.os.id,
         input.os.versionId,
         input.os.prettyName,
-        lastError,
+        error.message,
+        error.code,
         values.updatedAt,
         agentId
       );
@@ -191,8 +221,8 @@ export function recordAgentUpdates(agentId: string, input: AgentUpdateInventoryI
         INSERT INTO agent_update_inventories (
           agent_id, schema_version, provider, supported, status, checked_at, last_successful_at,
           update_count, security_update_count, reboot_required, truncated, os_id, os_version_id,
-          os_pretty_name, last_error, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, 0, 0, 0, ?, ?, ?, ?, ?)
+          os_pretty_name, last_error, last_error_code, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, 0, 0, 0, ?, ?, ?, ?, ?, ?)
       `).run(
         agentId,
         input.schemaVersion,
@@ -203,7 +233,8 @@ export function recordAgentUpdates(agentId: string, input: AgentUpdateInventoryI
         input.os.id,
         input.os.versionId,
         input.os.prettyName,
-        lastError,
+        error.message,
+        error.code,
         values.updatedAt
       );
     }
@@ -236,23 +267,49 @@ const inventorySelect = `
     agent_update_inventories.os_id,
     agent_update_inventories.os_version_id,
     agent_update_inventories.os_pretty_name,
-    agent_update_inventories.last_error
+    agent_update_inventories.last_error,
+    agent_update_inventories.last_error_code
   FROM agents
   LEFT JOIN agent_update_inventories ON agent_update_inventories.agent_id = agents.id
 `;
 
-function rowToMachine(row: InventoryRow): MachineUpdateSummary {
+function inventoryFreshness(
+  hasReport: boolean,
+  hasSuccessfulInventory: boolean,
+  supported: boolean | null,
+  status: AgentUpdateCheckStatus | null,
+  agentStatus: AgentStatus,
+  lastSuccessfulAt: string | null,
+  now: number
+): MachineUpdateSummary["freshness"] {
+  if (!hasReport) return "waiting";
+  if (supported === false || status === "unsupported") return "unsupported";
+  if (!hasSuccessfulInventory) return "waiting";
+  const successTime = Date.parse(lastSuccessfulAt ?? "");
+  const staleAfterSeconds = Math.max(
+    env.agentUpdateIntervalSeconds * 2,
+    env.agentUpdateIntervalSeconds + env.agentTimestampToleranceSeconds
+  );
+  if (!Number.isFinite(successTime) || now - successTime > staleAfterSeconds * 1000) return "stale";
+  if (status !== "ok" || agentStatus !== "online") return "retained";
+  return "current";
+}
+
+function rowToMachine(row: InventoryRow, now = Date.now()): MachineUpdateSummary {
   const hasReport = row.checked_at !== null;
   const hasSuccessfulInventory = row.last_successful_at !== null;
   const fallbackPrettyName = [row.agent_os_name, row.agent_os_version].filter(Boolean).join(" ") || null;
+  const agentStatus = calculateAgentStatus(row.last_seen_at, row.revoked_at, now);
+  const supported = hasReport ? Boolean(row.supported) : null;
   return {
     agentId: row.agent_id,
     displayName: row.display_name,
     hostname: row.hostname,
-    agentStatus: calculateAgentStatus(row.last_seen_at, row.revoked_at),
+    agentStatus,
     provider: hasReport ? row.provider : null,
-    supported: hasReport ? Boolean(row.supported) : null,
+    supported,
     status: row.status ?? "waiting",
+    freshness: inventoryFreshness(hasReport, hasSuccessfulInventory, supported, row.status, agentStatus, row.last_successful_at, now),
     os: {
       id: row.os_id,
       versionId: row.os_version_id,
@@ -264,7 +321,8 @@ function rowToMachine(row: InventoryRow): MachineUpdateSummary {
     truncated: hasSuccessfulInventory && Boolean(row.truncated),
     checkedAt: row.checked_at,
     lastSuccessfulAt: row.last_successful_at,
-    lastError: row.last_error
+    lastError: row.last_error,
+    lastErrorCode: row.last_error_code
   };
 }
 
@@ -298,38 +356,60 @@ function matchesStatus(machine: MachineUpdateSummary, status: UpdateMachineFilte
   switch (status) {
     case "updates": return (machine.updateCount ?? 0) > 0;
     case "security": return (machine.securityUpdateCount ?? 0) > 0;
-    case "up_to_date": return machine.status === "ok" && machine.updateCount === 0;
+    case "up_to_date": return machine.freshness === "current" && machine.updateCount === 0;
     case "reboot": return machine.rebootRequired === true;
     case "unsupported": return machine.status === "unsupported";
     case "check_failed": return ["package_manager_busy", "metadata_refresh_failed", "check_failed"].includes(machine.status);
-    case "stale_offline": return machine.agentStatus === "stale" || machine.agentStatus === "offline";
+    case "stale_offline": return machine.freshness === "stale" || machine.agentStatus === "stale" || machine.agentStatus === "offline";
     default: return true;
   }
 }
 
-export function getUpdateCenterSnapshot(filters: UpdateMachineFilters = {}): UpdateCenterSnapshot {
-  const allMachines = listMachineRows().map(rowToMachine);
-  const currentMachines = allMachines.filter((machine) =>
-    machine.status === "ok" && machine.agentStatus === "online" && machine.lastSuccessfulAt !== null
-  );
+function latestTimestamp(machines: MachineUpdateSummary[], select: (machine: MachineUpdateSummary) => string | null) {
+  return machines.reduce<string | null>((latest, machine) => {
+    const timestamp = select(machine);
+    return timestamp && (!latest || timestamp > latest) ? timestamp : latest;
+  }, null);
+}
+
+export function getUpdateCenterSnapshot(filters: UpdateMachineFilters = {}, now = Date.now()): UpdateCenterSnapshot {
+  const mapRow = (row: InventoryRow) => rowToMachine(row, now);
+  const allMachines = listMachineRows().map(mapRow);
   const eligibleMachines = allMachines.filter((machine) => machine.status !== "unsupported");
+  const successfulMachines = eligibleMachines.filter((machine) => machine.lastSuccessfulAt !== null);
+  const currentMachines = successfulMachines.filter((machine) => machine.freshness === "current");
+  const retainedMachines = successfulMachines.filter((machine) => machine.freshness !== "current");
   const status = filters.status ?? "all";
-  const searchedMachines = filters.search ? listMachineRows(filters.search).map(rowToMachine) : allMachines;
+  const searchedMachines = filters.search ? listMachineRows(filters.search).map(mapRow) : allMachines;
   const machines = status === "all" ? searchedMachines : searchedMachines.filter((machine) => matchesStatus(machine, status));
+  const summaryState = eligibleMachines.length === 0
+    ? "empty"
+    : successfulMachines.length === 0
+      ? "waiting"
+      : currentMachines.length === eligibleMachines.length
+        ? "current"
+        : currentMachines.length === 0
+          ? "retained"
+          : "partial";
   return {
     machines,
-    availableCount: currentMachines.reduce((total, machine) => total + (machine.updateCount ?? 0), 0),
-    securityCriticalCount: currentMachines.reduce((total, machine) => total + (machine.securityUpdateCount ?? 0), 0),
-    reportingMachineCount: currentMachines.length,
+    availableCount: successfulMachines.length
+      ? successfulMachines.reduce((total, machine) => total + (machine.updateCount ?? 0), 0)
+      : null,
+    securityCriticalCount: successfulMachines.length
+      ? successfulMachines.reduce((total, machine) => total + (machine.securityUpdateCount ?? 0), 0)
+      : null,
+    reportingMachineCount: successfulMachines.length,
+    currentReportingMachineCount: currentMachines.length,
+    retainedMachineCount: retainedMachines.length,
     totalMachineCount: eligibleMachines.length,
-    lastCheckedAt: currentMachines.reduce<string | null>((latest, machine) => {
-      if (!machine.lastSuccessfulAt) return latest;
-      return !latest || machine.lastSuccessfulAt > latest ? machine.lastSuccessfulAt : latest;
-    }, null)
+    lastCheckedAt: latestTimestamp(allMachines, (machine) => machine.checkedAt),
+    lastSuccessfulAt: latestTimestamp(successfulMachines, (machine) => machine.lastSuccessfulAt),
+    summaryState
   };
 }
 
-export function getMachineUpdateDetail(agentId: string): MachineUpdateDetail | null {
+export function getMachineUpdateDetail(agentId: string, now = Date.now()): MachineUpdateDetail | null {
   const row = database.prepare(`${inventorySelect}
     WHERE agents.id = ? AND agents.revoked_at IS NULL
   `).get(agentId) as InventoryRow | undefined;
@@ -350,18 +430,20 @@ export function getMachineUpdateDetail(agentId: string): MachineUpdateDetail | n
       }))
     : [];
 
-  return { ...rowToMachine(row), packages };
+  return { ...rowToMachine(row, now), packages };
 }
 
 export function getUpdateAlerts() {
   const snapshot = getUpdateCenterSnapshot();
-  if (snapshot.availableCount === 0) return [];
-  const checkedAt = snapshot.lastCheckedAt ?? nowIso();
-  const standardCount = snapshot.availableCount - snapshot.securityCriticalCount;
+  const availableCount = snapshot.availableCount;
+  if (!availableCount) return [];
+  const securityCount = snapshot.securityCriticalCount ?? 0;
+  const checkedAt = snapshot.lastSuccessfulAt ?? snapshot.lastCheckedAt ?? nowIso();
+  const standardCount = availableCount - securityCount;
   const alerts = [];
   if (standardCount > 0) alerts.push({ count: standardCount, securityCritical: false, checkedAt });
-  if (snapshot.securityCriticalCount > 0) {
-    alerts.push({ count: snapshot.securityCriticalCount, securityCritical: true, checkedAt });
+  if (securityCount > 0) {
+    alerts.push({ count: securityCount, securityCritical: true, checkedAt });
   }
   return alerts;
 }

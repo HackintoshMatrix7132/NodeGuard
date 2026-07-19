@@ -56,6 +56,7 @@ NodeGuard brings those answers into one focused, read-only dashboard. The projec
 | **06** | **Read-only update discovery** | Linux Agents discover APT package updates on Debian, Ubuntu, and Proxmox VE hosts, including security-origin and reboot-required status. |
 | **07** | **Safe public demonstration** | Demo users are restricted at the backend to isolated fictional data and cannot access live infrastructure or configuration APIs. |
 | **08** | **Production-style deployment** | A single Docker image serves the web UI and API, with SQLite persistence and HTTPS reverse-proxy support. |
+| **09** | **Compact operational interface** | A shared action and typography system keeps dense dashboards, forms, tables, and mobile cards consistent without reducing readable text or practical touch targets. |
 
 ## Product tour
 
@@ -123,8 +124,9 @@ The demo environment contains fictional servers, Docker workloads, service state
 
 - Overall infrastructure status and primary issue summary
 - Active issue count and real status breakdowns
-- Server, Docker, domain/service, alert, and update summaries
+- Coordinated server, Agent, Docker, domain/service, alert, update, and Proxmox summaries with stable loading states
 - Recent alerts and service reachability
+- Compact responsive composition that keeps summary metrics in a two-column phone grid without horizontal scrolling
 - Responsive dark interface with collapsible navigation
 - Subtle motion with `prefers-reduced-motion` support
 - Screenshot privacy mode for safer demos and portfolio captures
@@ -264,6 +266,7 @@ nodeguard/
 ├── agent/                   # Go monitoring agent and installer
 ├── agent-releases/          # Versioned agent binaries and checksums
 ├── docs/
+│   ├── UI_AUDIT.md          # Current button, typography, responsive, and browser audit
 │   └── screenshots/         # README product screenshots
 ├── docker-compose.yml       # Production deployment
 ├── Dockerfile               # Combined web/API image
@@ -467,7 +470,7 @@ LOG_PREVIEW_LINES=80
 DOMAIN_CHECK_TIMEOUT_MS=5000
 AGENT_INSTALLER_PATH=agent/install-agent.sh
 AGENT_RELEASE_DIR=agent-releases
-AGENT_RELEASE_VERSION=0.3.0
+AGENT_RELEASE_VERSION=0.3.1
 AGENT_ENROLLMENT_TTL_MINUTES=10
 AGENT_HEARTBEAT_INTERVAL_SECONDS=20
 AGENT_METRICS_INTERVAL_SECONDS=30
@@ -496,7 +499,9 @@ Never commit `.env` files, API keys, access tokens, passwords, private IP addres
 
 ## Machine update discovery
 
-NodeGuard Agents discover operating-system package updates on Debian, Ubuntu, and Proxmox VE machines. Each Agent refreshes APT metadata on its own schedule, simulates an upgrade to identify installed and candidate versions, reports security-origin packages and the standard reboot-required indicator, then sends a bounded inventory over its existing authenticated outbound connection.
+NodeGuard Agents discover operating-system package updates on Debian, Ubuntu, and Proxmox VE machines. Shortly after startup, each Agent refreshes APT metadata with strict partial-failure detection, reads `apt list --upgradable` with fixed shell-free arguments, reports security-origin packages and the standard reboot-required indicator, then sends a bounded inventory over its existing authenticated outbound connection.
+
+Unknown, failed, busy, unsupported, retained, and stale inventories remain distinct from a confirmed zero-update result. Later failures do not erase the last successful counts or package details, and the UI separates the latest attempted check from the latest successful inventory.
 
 The NodeGuard API reads only the latest report stored in SQLite. Opening the Updates page never runs APT, connects to a machine, or starts a remote command. NodeGuard does not install, remove, configure, or upgrade packages and cannot reboot a machine. See **[`docs/MACHINE_UPDATES.md`](docs/MACHINE_UPDATES.md)** for architecture, supported states, security boundaries, configuration, and troubleshooting.
 

@@ -191,14 +191,13 @@ func packageManagerBusy(result CommandResult) bool {
 func metadataArgs() []string {
 	return []string{
 		"-q", "-o", "Dpkg::Use-Pty=0", "-o", "Acquire::Languages=none", "-o", "DPkg::Lock::Timeout=0",
-		"-o", "Dir::Cache::pkgcache=", "-o", "Dir::Cache::srcpkgcache=", "update",
+		"-o", "APT::Update::Error-Mode=any", "-o", "Dir::Cache::pkgcache=", "-o", "Dir::Cache::srcpkgcache=", "update",
 	}
 }
 
 func queryArgs() []string {
 	return []string{
-		"--simulate", "--no-download", "-o", "DPkg::Lock::Timeout=0", "-o", "Dpkg::Use-Pty=0",
-		"-o", "APT::Get::Show-Upgraded=true", "upgrade",
+		"-o", "APT::Color=0", "-o", "Dpkg::Use-Pty=0", "list", "--upgradable",
 	}
 }
 
@@ -255,8 +254,8 @@ func (provider *APTProvider) Check(ctx context.Context) model.UpdateInventory {
 		return provider.failure(info, false, model.UpdateStatusUnsupported, "unsupported_os", "Update discovery is not available for this operating system.")
 	}
 	provider.detectProxmox(ctx, &info)
-	if !provider.runner.Available("apt-get") {
-		return provider.failure(info, true, model.UpdateStatusCheckFailed, "apt_unavailable", "APT is not available on this machine.")
+	if !provider.runner.Available("apt-get") || !provider.runner.Available("apt") {
+		return provider.failure(info, true, model.UpdateStatusCheckFailed, "apt_unavailable", "The required APT tools are not available on this machine.")
 	}
 	if inventory, ready := provider.checkPackageLocks(info); !ready {
 		return inventory
@@ -267,6 +266,9 @@ func (provider *APTProvider) Check(ctx context.Context) model.UpdateInventory {
 	refreshContextError := refreshContext.Err()
 	cancelRefresh()
 	if refreshError != nil {
+		if errors.Is(refreshError, ErrCommandOutputTooLarge) {
+			return provider.failure(info, true, model.UpdateStatusMetadataRefreshFailed, "metadata_output_too_large", "APT package metadata refresh produced too much diagnostic output.")
+		}
 		if packageManagerBusy(refreshResult) {
 			return provider.failure(info, true, model.UpdateStatusPackageManagerBusy, "package_manager_busy", "The package manager is currently busy. NodeGuard will retry automatically.")
 		}
@@ -280,10 +282,13 @@ func (provider *APTProvider) Check(ctx context.Context) model.UpdateInventory {
 	}
 
 	queryContext, cancelQuery := withTimeout(ctx, updateQueryTimeout)
-	queryResult, queryError := provider.runner.Run(queryContext, "apt-get", queryArgs()...)
+	queryResult, queryError := provider.runner.Run(queryContext, "apt", queryArgs()...)
 	queryContextError := queryContext.Err()
 	cancelQuery()
 	if queryError != nil {
+		if errors.Is(queryError, ErrCommandOutputTooLarge) {
+			return provider.failure(info, true, model.UpdateStatusCheckFailed, "check_output_too_large", "APT returned an update list that exceeded the safe output limit.")
+		}
 		if packageManagerBusy(queryResult) {
 			return provider.failure(info, true, model.UpdateStatusPackageManagerBusy, "package_manager_busy", "The package manager is currently busy. NodeGuard will retry automatically.")
 		}
@@ -293,7 +298,7 @@ func (provider *APTProvider) Check(ctx context.Context) model.UpdateInventory {
 		return provider.failure(info, true, model.UpdateStatusCheckFailed, "check_failed", "APT could not determine the available package updates.")
 	}
 
-	packages, total, securityCount, parseError := parseSimulation(queryResult.Stdout, provider.maxPackages)
+	packages, total, securityCount, parseError := parseUpgradableList(queryResult.Stdout, provider.maxPackages)
 	if parseError != nil {
 		return provider.failure(info, true, model.UpdateStatusCheckFailed, "malformed_apt_output", "APT returned an unexpected update list.")
 	}
@@ -321,22 +326,25 @@ func rebootRequired(path string) (bool, error) {
 	return false, err
 }
 
-func parseSimulation(output string, maxPackages int) ([]model.PackageUpdate, int, int, error) {
+func parseUpgradableList(output string, maxPackages int) ([]model.PackageUpdate, int, int, error) {
 	if maxPackages <= 0 || maxPackages > MaximumPackageRows {
 		maxPackages = MaximumPackageRows
 	}
 	byName := map[string]model.PackageUpdate{}
+	recognizedListing := false
 	scanner := bufio.NewScanner(strings.NewReader(output))
 	scanner.Buffer(make([]byte, 4096), 1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "Inst ") {
+		if strings.HasPrefix(line, "Listing...") {
+			recognizedListing = true
 			continue
 		}
-		update, err := parseInstallLine(line)
-		if errors.Is(err, errNewPackage) {
+		if line == "" || strings.HasPrefix(line, "WARNING:") ||
+			strings.HasPrefix(line, "apt does not have a stable CLI interface") {
 			continue
 		}
+		update, err := parseUpgradableLine(line)
 		if err != nil {
 			return nil, 0, 0, err
 		}
@@ -344,6 +352,9 @@ func parseSimulation(output string, maxPackages int) ([]model.PackageUpdate, int
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, 0, 0, err
+	}
+	if !recognizedListing && len(byName) == 0 {
+		return nil, 0, 0, errors.New("APT update listing was empty or unrecognized")
 	}
 	all := make([]model.PackageUpdate, 0, len(byName))
 	securityCount := 0
@@ -361,44 +372,29 @@ func parseSimulation(output string, maxPackages int) ([]model.PackageUpdate, int
 	return all, total, securityCount, nil
 }
 
-var errNewPackage = errors.New("simulated package is newly installed")
+const upgradableFromMarker = " [upgradable from: "
 
-func parseInstallLine(line string) (model.PackageUpdate, error) {
-	rest := strings.TrimSpace(strings.TrimPrefix(line, "Inst "))
-	separator := strings.IndexAny(rest, " \t")
-	if separator <= 0 {
-		return model.PackageUpdate{}, fmt.Errorf("missing package name")
+func parseUpgradableLine(line string) (model.PackageUpdate, error) {
+	marker := strings.LastIndex(line, upgradableFromMarker)
+	if marker <= 0 || !strings.HasSuffix(line, "]") {
+		return model.PackageUpdate{}, fmt.Errorf("missing upgradable version marker")
 	}
-	name := clip(rest[:separator], maximumPackageNameBytes)
-	rest = strings.TrimSpace(rest[separator:])
-	if !strings.HasPrefix(rest, "[") {
-		if strings.HasPrefix(rest, "(") && strings.HasSuffix(rest, ")") {
-			return model.PackageUpdate{}, errNewPackage
-		}
-		return model.PackageUpdate{}, fmt.Errorf("missing installed version")
+	installed := strings.TrimSpace(line[marker+len(upgradableFromMarker) : len(line)-1])
+	fields := strings.Fields(strings.TrimSpace(line[:marker]))
+	if len(fields) != 3 {
+		return model.PackageUpdate{}, fmt.Errorf("unexpected upgradable package fields")
 	}
-	installedEnd := strings.IndexByte(rest, ']')
-	if installedEnd <= 1 {
-		return model.PackageUpdate{}, fmt.Errorf("invalid installed version")
+	nameAndSources := fields[0]
+	slash := strings.IndexByte(nameAndSources, '/')
+	if slash <= 0 || slash == len(nameAndSources)-1 {
+		return model.PackageUpdate{}, fmt.Errorf("missing package source")
 	}
-	installed := clip(strings.TrimSpace(rest[1:installedEnd]), maximumVersionBytes)
-	rest = strings.TrimSpace(rest[installedEnd+1:])
-	if len(rest) < 3 || rest[0] != '(' || rest[len(rest)-1] != ')' {
-		return model.PackageUpdate{}, fmt.Errorf("missing candidate version")
-	}
-	inside := strings.TrimSpace(rest[1 : len(rest)-1])
-	candidateEnd := strings.IndexAny(inside, " \t")
-	candidate := inside
-	sourceText := ""
-	if candidateEnd >= 0 {
-		candidate = inside[:candidateEnd]
-		sourceText = strings.TrimSpace(inside[candidateEnd:])
-	}
-	if candidate == "" {
-		return model.PackageUpdate{}, fmt.Errorf("empty candidate version")
-	}
-	if lastBracket := strings.LastIndex(sourceText, " ["); lastBracket >= 0 && strings.HasSuffix(sourceText, "]") {
-		sourceText = strings.TrimSpace(sourceText[:lastBracket])
+	name := clip(nameAndSources[:slash], maximumPackageNameBytes)
+	sourceText := nameAndSources[slash+1:]
+	candidate := clip(fields[1], maximumVersionBytes)
+	installed = clip(installed, maximumVersionBytes)
+	if name == "" || candidate == "" || installed == "" {
+		return model.PackageUpdate{}, fmt.Errorf("empty package update field")
 	}
 	security := isSecuritySource(sourceText)
 	sourceValue := normalizeSource(sourceText)
@@ -407,7 +403,7 @@ func parseInstallLine(line string) (model.PackageUpdate, error) {
 		source = &sourceValue
 	}
 	return model.PackageUpdate{
-		Name: name, InstalledVersion: installed, CandidateVersion: clip(candidate, maximumVersionBytes),
+		Name: name, InstalledVersion: installed, CandidateVersion: candidate,
 		Security: security, Source: source,
 	}, nil
 }

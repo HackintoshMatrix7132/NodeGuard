@@ -106,6 +106,7 @@ Host monitoring continues. Confirm Docker is running and `/var/run/docker.sock` 
 ## Update discovery delayed
 
 - **Package manager busy:** wait for the current APT/dpkg operation; NodeGuard never kills it or bypasses locks.
+- **Waiting for first inventory:** allow 5–30 seconds after service startup, then inspect the journal for `updates_collected` or `updates_delayed`.
 - **Metadata refresh failed:** check repositories, DNS, proxy, and outbound package-repository access.
 - **Unsupported:** APT update discovery currently supports Debian, Ubuntu, Debian derivatives, and Proxmox VE.
 

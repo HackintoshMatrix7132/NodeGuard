@@ -76,7 +76,7 @@ export const env = {
   webDistDir: process.env.WEB_DIST_DIR ?? "apps/web/dist",
   agentInstallerPath: process.env.AGENT_INSTALLER_PATH ?? "agent/install-agent.sh",
   agentReleaseDir: process.env.AGENT_RELEASE_DIR ?? "agent-releases",
-  agentReleaseVersion: process.env.AGENT_RELEASE_VERSION ?? "0.3.0",
+  agentReleaseVersion: process.env.AGENT_RELEASE_VERSION ?? "0.3.1",
   serverDisplayName: process.env.SERVER_DISPLAY_NAME ?? "local-nodeguard-host",
   logPreviewLines: numberEnv("LOG_PREVIEW_LINES", 80),
   domainCheckTimeoutMs: numberEnv("DOMAIN_CHECK_TIMEOUT_MS", 5000),

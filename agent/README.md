@@ -216,7 +216,9 @@ sudo systemctl restart nodeguard-agent
 
 Default intervals are heartbeat 20 seconds, metrics 30 seconds, Docker 60 seconds, inventory six hours, and APT update discovery six hours. NodeGuard controls the reporting intervals returned during enrollment. The minimum update interval is 15 minutes.
 
-On supported APT systems, the Agent refreshes package metadata and simulates an upgrade using fixed, shell-free commands. It never installs, removes, configures, upgrades, downloads upgrade packages, or reboots. APT/dpkg lock contention is never bypassed.
+The first update check starts independently about 5–30 seconds after the Agent starts. Package-manager busy and other transient checks retry with a bounded 30-second, 2-minute, 5-minute, then 15-minute cadence before returning to the configured interval. During a temporary NodeGuard outage, the queue retains at most the newest complete update inventory plus the newest non-success state so recovery stores the usable snapshot before its current freshness/error metadata.
+
+On supported APT systems, the Agent refreshes package metadata with strict partial-failure detection, then uses `apt list --upgradable` through fixed, shell-free arguments. It never invokes an upgrade/install/remove action, downloads upgrade packages, configures packages, or reboots. APT/dpkg lock contention is never bypassed.
 
 ## Security summary
 

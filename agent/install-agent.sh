@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-readonly INSTALLER_VERSION="0.3.0"
+readonly INSTALLER_VERSION="0.3.1"
 readonly INSTALL_PATH="/usr/local/bin/nodeguard-agent"
 readonly CONFIG_DIR="/etc/nodeguard-agent"
 readonly CONFIG_PATH="${CONFIG_DIR}/config.json"

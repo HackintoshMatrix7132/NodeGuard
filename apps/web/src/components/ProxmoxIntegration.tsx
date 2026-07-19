@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   AlertTriangle,
@@ -6,7 +7,6 @@ import {
   CheckCircle2,
   CloudCog,
   Database,
-  ExternalLink,
   HardDrive,
   LoaderCircle,
   LockKeyhole,
@@ -455,55 +455,35 @@ function useVisibleAutoRefresh(
   }, [enabled]);
 }
 
-type ProxmoxLoadMode = "initial" | "manual" | "background";
-
-function useProxmoxSnapshot(refreshKey = 0) {
-  const [snapshot, setSnapshot] = useState<ProxmoxSnapshot>(emptySnapshot);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const requestRef = useRef<Promise<void> | null>(null);
-  const enabled = refreshKey >= 0;
-
-  const load = useCallback((mode: ProxmoxLoadMode = "initial"): Promise<void> => {
-    if (requestRef.current) return requestRef.current;
-    if (mode === "initial") setLoading(true);
-    if (mode === "manual") setRefreshing(true);
-
-    const request = (async () => {
-      try {
-        const payload = await requestJson<unknown>("/api/proxmox");
-        setSnapshot(normalizeSnapshot(payload));
-        setError(null);
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Unable to load Proxmox data.");
-      } finally {
-        setLoading(false);
-        if (mode === "manual") setRefreshing(false);
-      }
-    })();
-
-    requestRef.current = request;
-    void request.finally(() => {
-      if (requestRef.current === request) requestRef.current = null;
-    });
-    return request;
-  }, []);
-
-  useEffect(() => {
-    if (enabled) void load("initial");
-  }, [enabled, load, refreshKey]);
-
-  const autoRefresh = useCallback(() => load("background"), [load]);
-  useVisibleAutoRefresh(autoRefresh, enabled);
+function useProxmoxSnapshot(enabled = true) {
+  const backendUrl = useSettingsStore((state) => state.backendConfig?.backendUrl) ?? getDefaultBackendUrl();
+  const demoMode = useSettingsStore((state) => state.demoMode);
+  const { data, error: queryError, isFetching, isPending, refetch } = useQuery({
+    queryKey: ["proxmox", "snapshot", backendUrl, demoMode],
+    queryFn: async () => normalizeSnapshot(await requestJson<unknown>("/api/proxmox")),
+    enabled,
+    refetchInterval: enabled ? PROXMOX_AUTO_REFRESH_MS : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    staleTime: PROXMOX_AUTO_REFRESH_MS / 2,
+  });
 
   const reload = useCallback(async () => {
-    const activeRequest = requestRef.current;
-    if (activeRequest) await activeRequest;
-    await load("manual");
-  }, [load]);
+    await refetch({ cancelRefetch: false });
+  }, [refetch]);
 
-  return { snapshot, loading, refreshing, error, reload };
+  return {
+    snapshot: data ?? emptySnapshot,
+    hasData: data !== undefined,
+    loading: isPending && data === undefined,
+    refreshing: isFetching && data !== undefined,
+    error: queryError instanceof Error
+      ? queryError.message
+      : queryError
+        ? "Unable to load Proxmox data."
+        : null,
+    reload,
+  };
 }
 
 function formatPercent(value?: number | null): string {
@@ -1621,10 +1601,11 @@ export function ProxmoxSettingsPanel() {
                   <div className="proxmox-settings-row__identity">
                     <strong>{connection.name}</strong>
                     <div className="proxmox-settings-row__details">
-                      <a href={connection.endpoint} rel="noreferrer" target="_blank">
-                        <span>{connection.endpoint}</span>
-                        <ExternalLink aria-hidden="true" size={13} />
-                      </a>
+                      <MonitoredExternalLink
+                        href={connection.endpoint}
+                        label={`Open ${connection.name} at ${connection.endpoint}`}
+                        text={connection.endpoint}
+                      />
                       <span className="proxmox-settings-row__sync">
                         <span aria-hidden="true" className="proxmox-settings-row__separator">•</span>
                         <span>Last successful sync {formatDate(connection.lastSuccessfulSyncAt)}{connection.errorMessage ? ` - ${connection.errorMessage}` : ""}</span>
@@ -1695,18 +1676,69 @@ export function ProxmoxSettingsPanel() {
   );
 }
 
-export function ProxmoxDashboardCard({
-  snapshot: providedSnapshot,
-  onOpen,
-}: {
-  snapshot?: unknown;
-  onOpen?: () => void;
-}) {
-  const shouldFetch = providedSnapshot === undefined;
-  const { snapshot: fetchedSnapshot, loading } = useProxmoxSnapshot(shouldFetch ? 0 : -1);
-  const snapshot = providedSnapshot === undefined ? fetchedSnapshot : normalizeSnapshot(providedSnapshot);
+export type ProxmoxDashboardCardView = {
+  state: "loading" | "unconfigured" | "disabled" | "unavailable" | "stale" | "healthy" | "warning";
+  value: string;
+  label: string;
+  primaryDetail: string;
+  secondaryDetail: string;
+  issueCount: number;
+};
 
-  if ((shouldFetch && loading) || !snapshot.configured || snapshot.enabledConnections === 0) return null;
+export function getProxmoxDashboardCardView({
+  snapshot,
+  loading,
+  error,
+  hasData,
+}: {
+  snapshot: ProxmoxSnapshot;
+  loading: boolean;
+  error: string | null;
+  hasData: boolean;
+}): ProxmoxDashboardCardView {
+  if (loading && !hasData) {
+    return {
+      state: "loading",
+      value: "—",
+      label: "Checking Proxmox",
+      primaryDetail: "Loading inventory",
+      secondaryDetail: "Updates automatically",
+      issueCount: 0,
+    };
+  }
+
+  if (error && !hasData) {
+    return {
+      state: "unavailable",
+      value: "—",
+      label: "Inventory unavailable",
+      primaryDetail: "Proxmox API unavailable",
+      secondaryDetail: "Open for details",
+      issueCount: 1,
+    };
+  }
+
+  if (!snapshot.configured) {
+    return {
+      state: "unconfigured",
+      value: "—",
+      label: "Not configured",
+      primaryDetail: "No connection configured",
+      secondaryDetail: "Set up in Settings",
+      issueCount: 0,
+    };
+  }
+
+  if (snapshot.enabledConnections === 0) {
+    return {
+      state: "disabled",
+      value: "—",
+      label: "Monitoring disabled",
+      primaryDetail: `${snapshot.connections.length} configured`,
+      secondaryDetail: "Enable in Settings",
+      issueCount: 0,
+    };
+  }
 
   const nodeIssues = Math.max(
     0,
@@ -1722,6 +1754,28 @@ export function ProxmoxDashboardCard({
       (snapshot.summary.availableConnections ?? 0),
   );
   const issueCount = nodeIssues + storageIssues + connectionIssues;
+  return {
+    state: error ? "stale" : issueCount > 0 ? "warning" : "healthy",
+    value: summaryValue(snapshot.summary.nodesOnline, snapshot.summary.nodesTotal),
+    label: "Nodes online",
+    primaryDetail: `${snapshot.summary.guestsRunning ?? 0}/${snapshot.summary.guestsTotal ?? 0} guests running`,
+    secondaryDetail: error ? "Refresh failed" : issueCount > 0 ? `${issueCount} issues` : "Healthy",
+    issueCount,
+  };
+}
+
+export function ProxmoxDashboardCard({
+  snapshot: providedSnapshot,
+  onOpen,
+}: {
+  snapshot?: unknown;
+  onOpen?: () => void;
+}) {
+  const shouldFetch = providedSnapshot === undefined;
+  const { snapshot: fetchedSnapshot, hasData: fetchedHasData, loading, error } = useProxmoxSnapshot(shouldFetch);
+  const snapshot = providedSnapshot === undefined ? fetchedSnapshot : normalizeSnapshot(providedSnapshot);
+  const hasData = providedSnapshot !== undefined || fetchedHasData;
+  const view = getProxmoxDashboardCardView({ snapshot, loading, error, hasData });
 
   const content = (
     <>
@@ -1730,27 +1784,27 @@ export function ProxmoxDashboardCard({
         <CloudCog size={18} />
       </div>
       <strong className="proxmox-dashboard-card__value">
-        {summaryValue(snapshot.summary.nodesOnline, snapshot.summary.nodesTotal)}
+        {view.value}
       </strong>
-      <div className="proxmox-dashboard-card__label">Nodes online</div>
+      <div className="proxmox-dashboard-card__label">{view.label}</div>
       <div className="proxmox-dashboard-card__details">
         <span>
-          <Box size={14} />
-          {snapshot.summary.guestsRunning ?? 0}/{snapshot.summary.guestsTotal ?? 0} guests running
+          {view.state === "loading" ? <LoaderCircle className="proxmox-spin" size={14} /> : <Box size={14} />}
+          {view.primaryDetail}
         </span>
-        <span className={issueCount > 0 ? "has-warning" : "is-healthy"}>
-          {issueCount > 0 ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
-          {issueCount > 0 ? `${issueCount} issues` : "Healthy"}
+        <span className={view.state === "healthy" ? "is-healthy" : view.state === "warning" || view.state === "unavailable" || view.state === "stale" ? "has-warning" : ""}>
+          {view.state === "healthy" ? <CheckCircle2 size={14} /> : view.state === "warning" || view.state === "unavailable" || view.state === "stale" ? <AlertTriangle size={14} /> : <CloudCog size={14} />}
+          {view.secondaryDetail}
         </span>
       </div>
     </>
   );
 
   return onOpen ? (
-    <button className="proxmox-dashboard-card" onClick={onOpen} type="button">
+    <button aria-busy={view.state === "loading"} aria-label={`Open Proxmox: ${view.label}`} className={`proxmox-dashboard-card is-${view.state}`} onClick={onOpen} type="button">
       {content}
     </button>
   ) : (
-    <article className="proxmox-dashboard-card">{content}</article>
+    <article aria-busy={view.state === "loading"} className={`proxmox-dashboard-card is-${view.state}`}>{content}</article>
   );
 }

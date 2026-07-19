@@ -194,6 +194,21 @@ export type AgentUpdateCheckStatus =
   | "metadata_refresh_failed"
   | "check_failed";
 
+export type AgentUpdateErrorCode =
+  | "unsupported_os"
+  | "os_detection_failed"
+  | "apt_unavailable"
+  | "package_lock_check_failed"
+  | "package_manager_busy"
+  | "metadata_refresh_timeout"
+  | "metadata_output_too_large"
+  | "check_output_too_large"
+  | "metadata_refresh_failed"
+  | "check_timeout"
+  | "check_failed"
+  | "malformed_apt_output"
+  | "reboot_state_unavailable";
+
 export type AgentPackageUpdateInput = {
   name: string;
   installedVersion: string;
@@ -219,6 +234,7 @@ export type AgentUpdateInventoryInput = {
   rebootRequired: boolean | null;
   truncated: boolean;
   packages: AgentPackageUpdateInput[];
+  errorCode: AgentUpdateErrorCode | null;
 };
 
 export type MachineUpdateCheckStatus = AgentUpdateCheckStatus | "waiting";
@@ -233,6 +249,7 @@ export type MachineUpdateSummary = {
   provider: "apt" | null;
   supported: boolean | null;
   status: MachineUpdateCheckStatus;
+  freshness: "waiting" | "current" | "retained" | "stale" | "unsupported";
   os: {
     id: string | null;
     versionId: string | null;
@@ -245,19 +262,26 @@ export type MachineUpdateSummary = {
   checkedAt: string | null;
   lastSuccessfulAt: string | null;
   lastError: string | null;
+  lastErrorCode: AgentUpdateErrorCode | null;
 };
 
 export type MachineUpdateDetail = MachineUpdateSummary & {
   packages: MachineUpdatePackage[];
 };
 
+export type UpdateCenterSummaryState = "empty" | "waiting" | "current" | "partial" | "retained";
+
 export type UpdateCenterSnapshot = {
   machines: MachineUpdateSummary[];
-  availableCount: number;
-  securityCriticalCount: number;
+  availableCount: number | null;
+  securityCriticalCount: number | null;
   reportingMachineCount: number;
+  currentReportingMachineCount: number;
+  retainedMachineCount: number;
   totalMachineCount: number;
   lastCheckedAt: string | null;
+  lastSuccessfulAt: string | null;
+  summaryState: UpdateCenterSummaryState;
 };
 
 export type Overview = {

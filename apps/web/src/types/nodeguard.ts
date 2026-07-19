@@ -85,6 +85,21 @@ export type CreateAgentEnrollmentInput = {
 };
 
 export type UpdateCheckStatus = "waiting" | "ok" | "unsupported" | "package_manager_busy" | "metadata_refresh_failed" | "check_failed";
+export type UpdateInventoryFreshness = "waiting" | "current" | "retained" | "stale" | "unsupported";
+export type UpdateErrorCode =
+  | "unsupported_os"
+  | "os_detection_failed"
+  | "apt_unavailable"
+  | "package_lock_check_failed"
+  | "package_manager_busy"
+  | "metadata_refresh_timeout"
+  | "metadata_refresh_failed"
+  | "metadata_output_too_large"
+  | "check_timeout"
+  | "check_failed"
+  | "check_output_too_large"
+  | "malformed_apt_output"
+  | "reboot_state_unavailable";
 
 export type MachinePackageUpdate = {
   name: string;
@@ -102,6 +117,7 @@ export type MachineUpdateSummary = {
   provider: "apt" | null;
   supported: boolean | null;
   status: UpdateCheckStatus;
+  freshness: UpdateInventoryFreshness;
   os: {
     id: string | null;
     versionId: string | null;
@@ -114,6 +130,7 @@ export type MachineUpdateSummary = {
   rebootRequired: boolean | null;
   truncated: boolean;
   lastError: string | null;
+  lastErrorCode: UpdateErrorCode | null;
   packages?: MachinePackageUpdate[];
 };
 
@@ -121,12 +138,18 @@ export type MachineUpdateDetail = MachineUpdateSummary & {
   packages: MachinePackageUpdate[];
 };
 
+export type UpdateCenterSummaryState = "empty" | "waiting" | "current" | "partial" | "retained";
+
 export type UpdateCenterSnapshot = {
-  availableCount: number;
-  securityCriticalCount: number;
+  availableCount: number | null;
+  securityCriticalCount: number | null;
   reportingMachineCount: number;
+  currentReportingMachineCount: number;
+  retainedMachineCount: number;
   totalMachineCount: number;
   lastCheckedAt: string | null;
+  lastSuccessfulAt: string | null;
+  summaryState: UpdateCenterSummaryState;
   machines: MachineUpdateSummary[];
 };
 

@@ -51,17 +51,20 @@ func writeOSRelease(t *testing.T, directory, contents string) string {
 	return path
 }
 
-func successfulRunner(simulation string) *fakeCommandRunner {
+func successfulRunner(upgradableList string) *fakeCommandRunner {
+	if upgradableList == "" {
+		upgradableList = "Listing...\n"
+	}
 	return &fakeCommandRunner{
-		available: map[string]bool{"apt-get": true},
+		available: map[string]bool{"apt-get": true, "apt": true},
 		run: func(_ context.Context, name string, args ...string) (CommandResult, error) {
-			if name != "apt-get" {
-				return CommandResult{}, errors.New("unexpected command")
+			if name == "apt" && args[len(args)-1] == "--upgradable" {
+				return CommandResult{Stdout: upgradableList}, nil
 			}
-			if args[len(args)-1] == "upgrade" {
-				return CommandResult{Stdout: simulation}, nil
+			if name == "apt-get" && args[len(args)-1] == "update" {
+				return CommandResult{}, nil
 			}
-			return CommandResult{}, nil
+			return CommandResult{}, errors.New("unexpected command")
 		},
 	}
 }
@@ -147,22 +150,34 @@ func TestProxmoxDetection(t *testing.T) {
 		if name == "pveversion" {
 			return CommandResult{Stdout: "pve-manager/8.4.1/2a5fa54a8503f96d\n"}, nil
 		}
-		return CommandResult{}, nil
+		if name == "apt-get" && args[len(args)-1] == "update" {
+			return CommandResult{}, nil
+		}
+		if name == "apt" && args[len(args)-1] == "--upgradable" {
+			return CommandResult{Stdout: strings.Join([]string{
+				"Listing...", "pve-manager/pve-no-subscription 8.4.2 all [upgradable from: 8.4.1]",
+				"openssl/stable-security 3.0.17-1~deb12u3 amd64 [upgradable from: 3.0.17-1~deb12u2]",
+			}, "\n")}, nil
+		}
+		return CommandResult{}, errors.New("unexpected command")
 	}
 	provider := providerForTest(t, "ID=debian\nVERSION_ID=12\nPRETTY_NAME=\"Debian GNU/Linux 12\"\n", runner)
 	inventory := provider.Check(context.Background())
 	if inventory.OS.ID != "proxmox" || inventory.OS.VersionID != "8.4.1" || inventory.OS.PrettyName != "Proxmox VE 8.4.1" {
 		t.Fatalf("Proxmox OS was not normalized: %+v", inventory.OS)
 	}
+	if inventory.UpdateCount != 2 || inventory.SecurityUpdateCount != 1 || inventory.Packages[0].Source == nil || *inventory.Packages[0].Source != "stable-security" {
+		t.Fatalf("Proxmox APT inventory was not parsed correctly: %+v", inventory)
+	}
 }
 
 func TestNormalAndSecurityUpdates(t *testing.T) {
-	simulation := strings.Join([]string{
-		"NOTE: This is only a simulation!",
-		"Inst curl [8.0.0-1] (8.0.0-2 Debian:12/oldstable [amd64])",
-		"Inst openssl:amd64 [3.0.0-1] (3.0.0-2 Debian-Security:12/oldstable-security [amd64])",
+	upgradableList := strings.Join([]string{
+		"Listing...",
+		"curl/oldstable 8.0.0-2 amd64 [upgradable from: 8.0.0-1]",
+		"openssl:amd64/oldstable-security 3.0.0-2 amd64 [upgradable from: 3.0.0-1]",
 	}, "\n")
-	provider := providerForTest(t, "ID=debian\nVERSION_ID=12\nPRETTY_NAME=Debian\n", successfulRunner(simulation))
+	provider := providerForTest(t, "ID=debian\nVERSION_ID=12\nPRETTY_NAME=Debian\n", successfulRunner(upgradableList))
 	inventory := provider.Check(context.Background())
 	if inventory.UpdateCount != 2 || inventory.SecurityUpdateCount != 1 || len(inventory.Packages) != 2 {
 		t.Fatalf("update inventory was not counted correctly: %+v", inventory)
@@ -178,20 +193,26 @@ func TestNormalAndSecurityUpdates(t *testing.T) {
 	}
 }
 
-func TestNewDependencyLinesAreSkipped(t *testing.T) {
-	simulation := strings.Join([]string{
-		"Inst linux-headers-6.8.0 (6.8.0 Ubuntu:24.04/noble-updates [amd64])",
-		"Inst openssl [3.0.0-1] (3.0.0-2 Ubuntu:24.04/noble-security [amd64])",
+func TestUbuntuMultiplePocketAndArchitectureFormats(t *testing.T) {
+	upgradableList := strings.Join([]string{
+		"Listing...",
+		"gzip/noble-updates,noble-security 1.12-1ubuntu3.2 amd64 [upgradable from: 1.12-1ubuntu3.1]",
+		"libncursesw6/noble-updates,noble-security 6.4+20240113-1ubuntu2.1 amd64 [upgradable from: 6.4+20240113-1ubuntu2]",
+		"libtinfo6/noble-updates,noble-security 6.4+20240113-1ubuntu2.1 amd64 [upgradable from: 6.4+20240113-1ubuntu2]",
+		"ncurses-base/noble-updates,noble-security 6.4+20240113-1ubuntu2.1 all [upgradable from: 6.4+20240113-1ubuntu2]",
+		"ncurses-bin/noble-updates,noble-security 6.4+20240113-1ubuntu2.1 amd64 [upgradable from: 6.4+20240113-1ubuntu2]",
+		"perl-base/noble-updates,noble-security 5.38.2-3.2ubuntu0.3 amd64 [upgradable from: 5.38.2-3.2ubuntu0.2]",
+		"tar/noble-updates,noble-security 1.35+dfsg-3ubuntu0.2 amd64 [upgradable from: 1.35+dfsg-3build1]",
 	}, "\n")
-	provider := providerForTest(t, "ID=ubuntu\nID_LIKE=debian\nPRETTY_NAME=Ubuntu\n", successfulRunner(simulation))
+	provider := providerForTest(t, "ID=ubuntu\nID_LIKE=debian\nPRETTY_NAME=Ubuntu\n", successfulRunner(upgradableList))
 	inventory := provider.Check(context.Background())
-	if inventory.Status != model.UpdateStatusOK || inventory.UpdateCount != 1 || len(inventory.Packages) != 1 {
-		t.Fatalf("new dependency line affected the installed update inventory: %+v", inventory)
+	if inventory.Status != model.UpdateStatusOK || inventory.UpdateCount != 7 || inventory.SecurityUpdateCount != 7 || len(inventory.Packages) != 7 {
+		t.Fatalf("Ubuntu update inventory was not parsed correctly: %+v", inventory)
 	}
 }
 
 func TestPrivateRepositorySourceIsNotReported(t *testing.T) {
-	update, err := parseInstallLine("Inst private-package [1.0] (2.0 https://user:secret@packages.internal/stable [amd64])")
+	update, err := parseUpgradableLine("private-package/https://user:secret@packages.internal/stable 2.0 amd64 [upgradable from: 1.0]")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,13 +291,19 @@ func TestPackageLockPreflightStopsAPTWithoutMutatingLocks(t *testing.T) {
 	}
 }
 
-func TestAPTCommandsUseZeroWaitLocksWithoutDisablingLocking(t *testing.T) {
-	arguments := strings.Join(append(metadataArgs(), queryArgs()...), " ")
-	if strings.Contains(arguments, "Debug::NoLocking") {
-		t.Fatal("APT locking was disabled")
+func TestAPTCommandsRefreshStrictlyAndOnlyListUpdates(t *testing.T) {
+	metadataArguments := strings.Join(metadataArgs(), " ")
+	if !strings.Contains(metadataArguments, "APT::Update::Error-Mode=any") || !strings.Contains(metadataArguments, "DPkg::Lock::Timeout=0") {
+		t.Fatalf("metadata refresh is not strict and zero-wait: %q", metadataArguments)
 	}
-	if strings.Count(arguments, "DPkg::Lock::Timeout=0") != 2 {
-		t.Fatalf("zero-wait lock option not applied to both APT commands: %q", arguments)
+	queryArguments := strings.Join(queryArgs(), " ")
+	if !strings.Contains(queryArguments, "list --upgradable") {
+		t.Fatalf("APT query is not a read-only list operation: %q", queryArguments)
+	}
+	for _, forbidden := range []string{" upgrade", "full-upgrade", "dist-upgrade", "install", "remove"} {
+		if strings.Contains(" "+queryArguments, forbidden) {
+			t.Fatalf("APT query contains forbidden package action %q: %q", forbidden, queryArguments)
+		}
 	}
 }
 
@@ -291,7 +318,7 @@ func TestPackageManagerBusyAndMetadataFailure(t *testing.T) {
 		{"failed", CommandResult{Stderr: "private repository URL must not leave the host"}, model.UpdateStatusMetadataRefreshFailed},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			runner := &fakeCommandRunner{available: map[string]bool{"apt-get": true}, run: func(context.Context, string, ...string) (CommandResult, error) {
+			runner := &fakeCommandRunner{available: map[string]bool{"apt-get": true, "apt": true}, run: func(context.Context, string, ...string) (CommandResult, error) {
 				return test.result, errors.New("exit status 100")
 			}}
 			inventory := providerForTest(t, "ID=debian\nPRETTY_NAME=Debian\n", runner).Check(context.Background())
@@ -306,7 +333,7 @@ func TestPackageManagerBusyAndMetadataFailure(t *testing.T) {
 }
 
 func TestMetadataTimeout(t *testing.T) {
-	runner := &fakeCommandRunner{available: map[string]bool{"apt-get": true}, run: func(ctx context.Context, _ string, _ ...string) (CommandResult, error) {
+	runner := &fakeCommandRunner{available: map[string]bool{"apt-get": true, "apt": true}, run: func(ctx context.Context, _ string, _ ...string) (CommandResult, error) {
 		<-ctx.Done()
 		return CommandResult{}, ctx.Err()
 	}}
@@ -319,18 +346,59 @@ func TestMetadataTimeout(t *testing.T) {
 	}
 }
 
+func TestBoundedCommandOutputFailuresUseSafeCodes(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		failedTool string
+		status     model.UpdateStatus
+		code       string
+	}{
+		{name: "metadata", failedTool: "apt-get", status: model.UpdateStatusMetadataRefreshFailed, code: "metadata_output_too_large"},
+		{name: "listing", failedTool: "apt", status: model.UpdateStatusCheckFailed, code: "check_output_too_large"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runner := &fakeCommandRunner{
+				available: map[string]bool{"apt-get": true, "apt": true},
+				run: func(_ context.Context, name string, args ...string) (CommandResult, error) {
+					if name == test.failedTool {
+						return CommandResult{Stderr: "raw output must not be reported"}, ErrCommandOutputTooLarge
+					}
+					if name == "apt-get" && args[len(args)-1] == "update" {
+						return CommandResult{}, nil
+					}
+					return CommandResult{}, errors.New("unexpected command")
+				},
+			}
+			inventory := providerForTest(t, "ID=debian\nPRETTY_NAME=Debian\n", runner).Check(context.Background())
+			if inventory.Status != test.status || inventory.ErrorCode == nil || *inventory.ErrorCode != test.code {
+				t.Fatalf("bounded output failure = %+v, want status %s code %s", inventory, test.status, test.code)
+			}
+			if inventory.ErrorMessage == nil || strings.Contains(*inventory.ErrorMessage, "raw output") {
+				t.Fatalf("unsafe or missing failure message: %v", inventory.ErrorMessage)
+			}
+		})
+	}
+}
+
 func TestMalformedOutputFailsSafely(t *testing.T) {
-	provider := providerForTest(t, "ID=debian\nPRETTY_NAME=Debian\n", successfulRunner("Inst malformed output"))
+	provider := providerForTest(t, "ID=debian\nPRETTY_NAME=Debian\n", successfulRunner("Listing...\nmalformed output"))
 	inventory := provider.Check(context.Background())
 	if inventory.Status != model.UpdateStatusCheckFailed || inventory.ErrorCode == nil || *inventory.ErrorCode != "malformed_apt_output" {
 		t.Fatalf("malformed output was accepted: %+v", inventory)
 	}
 }
 
+func TestEmptyOutputCannotBecomeFalseZeroInventory(t *testing.T) {
+	packages, total, security, err := parseUpgradableList("", MaximumPackageRows)
+	if err == nil || packages != nil || total != 0 || security != 0 {
+		t.Fatalf("empty output was accepted: packages=%v total=%d security=%d err=%v", packages, total, security, err)
+	}
+}
+
 func TestPackageTruncationKeepsSummaryCounts(t *testing.T) {
 	lines := make([]string, 0, 503)
 	for index := 0; index < 503; index++ {
-		lines = append(lines, fmt.Sprintf("Inst package-%03d [1.0] (2.0 Debian:12/oldstable [amd64])", index))
+		lines = append(lines, fmt.Sprintf("package-%03d/oldstable 2.0 amd64 [upgradable from: 1.0]", index))
 	}
 	provider := providerForTest(t, "ID=debian\nPRETTY_NAME=Debian\n", successfulRunner(strings.Join(lines, "\n")))
 	inventory := provider.Check(context.Background())

@@ -35,7 +35,7 @@ Prefer the secure `/dev/tty` token prompt or `NODEGUARD_ENROLLMENT_TOKEN`. `--to
 
 The packaged service runs as root to read protected host metrics/configuration and, when enabled, the Docker socket. It applies systemd hardening (`NoNewPrivileges`, private temp, protected kernel/control groups/home/system paths, restricted address families, and a protected state directory). Docker socket access remains effectively root-equivalent and is not described as least privilege.
 
-On Debian-family systems, the fixed APT provider may refresh package indexes before simulating an upgrade. Commands/arguments are hard-coded, run without a shell, have time/output bounds, never come from NodeGuard, and never install, remove, configure, or download upgrade packages. APT/dpkg locks are respected and never bypassed.
+On Debian-family systems, the fixed APT provider may refresh package indexes before invoking the read-only `apt list --upgradable` operation. Commands and arguments are hard-coded, run without a shell, have time/output bounds, and never come from NodeGuard. The Agent never invokes upgrade, install, remove, or package-configuration actions and never downloads upgrade packages. APT/dpkg locks are respected and never bypassed.
 
 ## Removal
 

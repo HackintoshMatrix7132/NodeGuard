@@ -17,22 +17,23 @@ import (
 )
 
 type Runner struct {
-	config           config.Config
-	api              *client.Client
-	metrics          *collectors.MetricsCollector
-	docker           *collectors.DockerCollector
-	queue            *queue.Queue
-	logger           *slog.Logger
-	version          string
-	machineIdentity  string
-	startedAt        time.Time
-	nextAttempt      time.Time
-	failures         int
-	connectionFailed bool
-	dockerAvailable  *bool
-	updateProvider   updates.UpdateProvider
-	updateWaitGroup  sync.WaitGroup
-	updateStartDelay func(time.Duration) time.Duration
+	config            config.Config
+	api               *client.Client
+	metrics           *collectors.MetricsCollector
+	docker            *collectors.DockerCollector
+	queue             *queue.Queue
+	logger            *slog.Logger
+	version           string
+	machineIdentity   string
+	startedAt         time.Time
+	nextAttempt       time.Time
+	failures          int
+	connectionFailed  bool
+	dockerAvailable   *bool
+	updateProvider    updates.UpdateProvider
+	lastUpdateSuccess *time.Time
+	updateWaitGroup   sync.WaitGroup
+	updateStartDelay  func(time.Duration) time.Duration
 }
 
 func (runner *Runner) WithMachineIdentity(machineIdentity string) *Runner {
@@ -51,7 +52,17 @@ func New(cfg config.Config, version string, logger *slog.Logger) *Runner {
 }
 
 func (runner *Runner) enqueue(path string, payload any) {
-	runner.queue.Add(queue.Item{Path: path, Payload: payload, CreatedAt: time.Now()})
+	coalesceKey := ""
+	if path == "/api/agent/updates" {
+		coalesceKey = "agent-updates-state"
+		if inventory, ok := payload.(model.UpdateInventory); ok && inventory.Status == model.UpdateStatusOK {
+			coalesceKey = "agent-updates-success"
+		}
+	}
+	runner.queue.Add(queue.Item{
+		Path: path, CoalesceKey: coalesceKey, Payload: payload, CreatedAt: time.Now(),
+		RetainUntilReplaced: path == "/api/agent/updates",
+	})
 }
 
 func (runner *Runner) heartbeat() {
@@ -108,22 +119,23 @@ func retryDelay(failures int) time.Duration {
 }
 
 func updateStartupDelay(interval time.Duration) time.Duration {
-	window := interval / 10
-	if window > 2*time.Minute {
-		window = 2 * time.Minute
-	}
-	if window <= 0 {
+	if interval <= 0 {
 		return 0
 	}
-	return time.Duration(rand.Int63n(int64(window) + 1))
+	maximum := min(30*time.Second, interval)
+	minimum := min(5*time.Second, maximum)
+	if maximum == minimum {
+		return minimum
+	}
+	return minimum + time.Duration(rand.Int63n(int64(maximum-minimum)+1))
 }
 
 func updateStatusIsTransient(status model.UpdateStatus) bool {
 	return status == model.UpdateStatusPackageManagerBusy || status == model.UpdateStatusMetadataRefreshFailed || status == model.UpdateStatusCheckFailed
 }
 
-func updateRetryDelay(failures int) time.Duration {
-	delays := []time.Duration{15 * time.Minute, 30 * time.Minute, 60 * time.Minute}
+func updateRetryDelay(failures int, interval time.Duration) time.Duration {
+	delays := []time.Duration{30 * time.Second, 2 * time.Minute, 5 * time.Minute, 15 * time.Minute}
 	index := failures - 1
 	if index < 0 {
 		index = 0
@@ -131,7 +143,29 @@ func updateRetryDelay(failures int) time.Duration {
 	if index >= len(delays) {
 		index = len(delays) - 1
 	}
-	return delays[index]
+	delay := delays[index]
+	if interval > 0 && delay > interval {
+		return interval
+	}
+	return delay
+}
+
+func (runner *Runner) preserveLastSuccessfulUpdate(inventory model.UpdateInventory) model.UpdateInventory {
+	if inventory.Status == model.UpdateStatusOK {
+		successfulAt := inventory.CheckedAt.UTC()
+		if inventory.LastSuccessfulAt != nil {
+			successfulAt = inventory.LastSuccessfulAt.UTC()
+		} else {
+			inventory.LastSuccessfulAt = &successfulAt
+		}
+		runner.lastUpdateSuccess = &successfulAt
+		return inventory
+	}
+	if updateStatusIsTransient(inventory.Status) && inventory.LastSuccessfulAt == nil && runner.lastUpdateSuccess != nil {
+		successfulAt := *runner.lastUpdateSuccess
+		inventory.LastSuccessfulAt = &successfulAt
+	}
+	return inventory
 }
 
 func (runner *Runner) startUpdateCheck(ctx context.Context, results chan<- model.UpdateInventory) {
@@ -158,6 +192,13 @@ func (runner *Runner) sendNext(ctx context.Context) {
 	err := runner.api.Post(requestContext, item.Path, item.Payload)
 	cancel()
 	if err != nil {
+		var apiError *client.APIError
+		if errors.As(err, &apiError) && (apiError.StatusCode == 400 || apiError.StatusCode == 413) {
+			runner.queue.RemoveFirst()
+			runner.logger.Error("agent report rejected and discarded", "event", "report_rejected", "path", item.Path,
+				"status", apiError.StatusCode, "code", apiError.Code)
+			return
+		}
 		if errors.Is(err, client.ErrRequestBodyTooLarge) {
 			runner.queue.RemoveFirst()
 			runner.logger.Error("agent report discarded because it exceeded the safe payload limit", "event", "report_too_large", "path", item.Path)
@@ -228,11 +269,17 @@ func (runner *Runner) Run(ctx context.Context) error {
 			}
 		case inventory := <-updateResults:
 			updateRunning = false
+			inventory = runner.preserveLastSuccessfulUpdate(inventory)
 			runner.enqueue("/api/agent/updates", inventory)
 			if updateStatusIsTransient(inventory.Status) {
 				updateFailures++
-				delay := updateRetryDelay(updateFailures)
-				runner.logger.Warn("package update discovery delayed", "event", "updates_delayed", "status", inventory.Status, "retryIn", delay.String())
+				delay := updateRetryDelay(updateFailures, updateInterval)
+				errorCode := ""
+				if inventory.ErrorCode != nil {
+					errorCode = *inventory.ErrorCode
+				}
+				runner.logger.Warn("package update discovery delayed", "event", "updates_delayed", "status", inventory.Status,
+					"code", errorCode, "retryIn", delay.String())
 				updateTimer.Reset(delay)
 			} else {
 				updateFailures = 0

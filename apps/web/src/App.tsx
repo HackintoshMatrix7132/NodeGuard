@@ -53,6 +53,7 @@ import { getContainerImageRepositoryUrl } from "./utils/containerImage";
 import { buildAgentCommand } from "./utils/agentCommand";
 import { formatBytes, formatDateTime, formatPercentage, formatRelativeTime, formatResponseTime, formatUptime } from "./utils/format";
 import { getStatusLabel, getStatusTone } from "./utils/status";
+import { currentUpdateCoverage, formatUpdateCount, getMachineUpdateCondition, hasRetainedUpdateInventory, updateSummaryHasCurrentData, updateSummaryUsesRetainedData } from "./utils/updatePresentation";
 
 type View = "dashboard" | "server" | "proxmox" | "agents" | "containers" | "domains" | "updates" | "alerts" | "settings";
 type MetricTone = "blue" | "green" | "orange" | "red" | "purple";
@@ -580,28 +581,26 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
   const alertDataUnavailable = !alerts.data;
   const domainDataUnavailable = !domains.data;
   const updateDataUnavailable = !updates.data;
-  const lastKnownUpdateAt = updates.data?.machines.reduce<string | null>((latest, machine) => {
-    const retainedAt = machine.lastSuccessfulAt && (machine.agentStatus !== "online" || machine.status !== "ok")
-      ? machine.lastSuccessfulAt
-      : null;
-    return retainedAt && (!latest || retainedAt > latest) ? retainedAt : latest;
-  }, null) ?? null;
-  const updateDetail = updates.data?.lastCheckedAt
-    ? `Last checked ${formatRelativeTime(updates.data.lastCheckedAt)}`
-    : updateDataUnavailable
-      ? "Update inventory unavailable"
-      : lastKnownUpdateAt
-        ? `No current reports · last known ${formatRelativeTime(lastKnownUpdateAt)}`
-        : updates.data.machines.length > 0
-          ? "No current Agent reports"
-          : "Waiting for Agent update inventory";
-  const updateTone: MetricTone = updateDataUnavailable || !updates.data.reportingMachineCount
+  const updateHasCurrentData = updateSummaryHasCurrentData(updates.data);
+  const updateUsesRetainedData = updateSummaryUsesRetainedData(updates.data);
+  const updateDetail = updateDataUnavailable
+    ? "Update inventory unavailable"
+    : updates.data.summaryState === "retained"
+      ? `Last known ${updates.data.lastSuccessfulAt ? formatRelativeTime(updates.data.lastSuccessfulAt) : "inventory"} · no current reports`
+      : updates.data.summaryState === "partial"
+        ? `${currentUpdateCoverage(updates.data)} current · ${updates.data.retainedMachineCount} retained`
+        : updates.data.lastCheckedAt
+          ? `Last checked ${formatRelativeTime(updates.data.lastCheckedAt)}`
+          : updates.data.totalMachineCount > 0
+            ? "Waiting for first update inventory"
+            : "No Agent update inventory";
+  const updateTone: MetricTone = updateDataUnavailable || updates.data.availableCount === null
     ? "blue"
-    : updates.data.securityCriticalCount > 0
+    : (updates.data.securityCriticalCount ?? 0) > 0
       ? "orange"
       : updates.data.availableCount > 0
         ? "blue"
-        : "green";
+        : updateUsesRetainedData ? "blue" : "green";
   const staleSupplementalSections = [
     server.isError && server.data ? "server" : null,
     alerts.isError && alerts.data ? "alerts" : null,
@@ -721,15 +720,15 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
         />
         <MetricCard
           label="Updates"
-          value={updateDataUnavailable ? updates.isLoading ? "Checking" : "Unavailable" : String(updates.data.availableCount)}
+          value={updateDataUnavailable ? updates.isLoading ? "Checking" : "Unavailable" : formatUpdateCount(updates.data.availableCount)}
           detail={updateDetail}
           tone={updateTone}
           onClick={() => setView("updates")}
-          subdued={updateDataUnavailable || !updates.data?.reportingMachineCount}
+          subdued={updateDataUnavailable || !updateHasCurrentData || updateUsesRetainedData}
           indicator={<MetricDiagnostic rows={[
-            { label: "Available", value: updateDataUnavailable ? "Unavailable" : String(updates.data.availableCount), tone: updateDataUnavailable ? "orange" : updates.data.availableCount > 0 ? "blue" : "green" },
-            { label: "Security-critical", value: updateDataUnavailable ? "Unavailable" : String(updates.data.securityCriticalCount), tone: updateDataUnavailable ? "orange" : updates.data.securityCriticalCount > 0 ? "orange" : "green" },
-            { label: "Machines", value: updateDataUnavailable ? "Unavailable" : String(updates.data.reportingMachineCount), tone: updateDataUnavailable ? "orange" : updates.data.reportingMachineCount > 0 ? "green" : "blue" }
+            { label: "Available", value: updateDataUnavailable ? "Unavailable" : formatUpdateCount(updates.data.availableCount), tone: updateDataUnavailable ? "orange" : (updates.data.availableCount ?? 0) > 0 ? "blue" : updates.data.availableCount === null ? "blue" : "green" },
+            { label: "Security-critical", value: updateDataUnavailable ? "Unavailable" : formatUpdateCount(updates.data.securityCriticalCount), tone: updateDataUnavailable ? "orange" : (updates.data.securityCriticalCount ?? 0) > 0 ? "orange" : updates.data.securityCriticalCount === null ? "blue" : "green" },
+            { label: "Current machines", value: updateDataUnavailable ? "Unavailable" : currentUpdateCoverage(updates.data), tone: updateDataUnavailable ? "orange" : updateHasCurrentData ? "green" : "blue" }
           ]} />}
         />
         <ProxmoxDashboardCard onOpen={() => setView("proxmox")} />
@@ -2172,25 +2171,9 @@ function AlertsPage() {
 
 type MachineUpdateFilter = "all" | "updates" | "security" | "up_to_date" | "reboot" | "unsupported" | "check_failed" | "stale_offline";
 
-function machineUpdateCondition(machine: MachineUpdateSummary) {
-  if (machine.status === "waiting" || machine.supported === null) return { label: "Waiting", tone: "unknown" };
-  if (machine.supported === false || machine.status === "unsupported") return { label: "Unsupported", tone: "unknown" };
-  if (machine.status === "package_manager_busy") return { label: "Check delayed", tone: "warning" };
-  if (machine.status === "metadata_refresh_failed" || machine.status === "check_failed") return { label: "Check failed", tone: "critical" };
-  if (machine.agentStatus !== "online" && machine.lastSuccessfulAt) return { label: "Last known", tone: "unknown" };
-  if ((machine.securityUpdateCount ?? 0) > 0) return { label: "Security updates", tone: "critical" };
-  if ((machine.updateCount ?? 0) > 0) return { label: "Updates available", tone: "warning" };
-  if (machine.lastSuccessfulAt) return { label: "Up to date", tone: "healthy" };
-  return { label: "Waiting", tone: "unknown" };
-}
-
 function MachineUpdateConditionPill({ machine }: { machine: MachineUpdateSummary }) {
-  const condition = machineUpdateCondition(machine);
+  const condition = getMachineUpdateCondition(machine);
   return <span className={`pill ${condition.tone}`}>{condition.label}</span>;
-}
-
-function updateCountValue(value: number | null) {
-  return value === null ? "—" : String(value);
 }
 
 function MachineCheckTime({ machine, successfulOnly = false }: { machine: MachineUpdateSummary; successfulOnly?: boolean }) {
@@ -2207,18 +2190,27 @@ function RebootState({ machine }: { machine: MachineUpdateSummary }) {
 }
 
 function MachineUpdateStatusNote({ machine }: { machine: MachineUpdateSummary }) {
-  if (machine.status === "waiting" || machine.supported === null) return <span>Waiting for the first scheduled update inventory.</span>;
-  if (machine.supported === false || machine.status === "unsupported") return <span>Update discovery is not available for this operating system yet.</span>;
+  if (machine.supported === false || machine.status === "unsupported" || machine.freshness === "unsupported") return <span>Update discovery is not available for this operating system yet.</span>;
   if (machine.status === "package_manager_busy") return <span>The package manager is busy. NodeGuard will retry automatically.{machine.lastSuccessfulAt ? <> Showing data from the last successful check <MachineCheckTime machine={machine} successfulOnly />.</> : null}</span>;
   if (machine.status === "metadata_refresh_failed" || machine.status === "check_failed") return <span>The latest update check failed.{machine.lastSuccessfulAt ? <> Showing data from the last successful check <MachineCheckTime machine={machine} successfulOnly />.</> : null}{machine.lastError ? <> {machine.lastError}</> : null}</span>;
-  if (machine.agentStatus !== "online" && machine.lastSuccessfulAt) return <span>Showing retained data from the last successful check <MachineCheckTime machine={machine} successfulOnly /> because this Agent is {machine.agentStatus}.</span>;
+  if (machine.status === "waiting" || machine.supported === null || machine.freshness === "waiting") return <span>Waiting for the first scheduled update inventory.</span>;
+  if (machine.freshness === "stale" && machine.lastSuccessfulAt) return <span>The retained update inventory is stale. Last successful check <MachineCheckTime machine={machine} successfulOnly />.</span>;
+  if (machine.freshness === "retained" && machine.lastSuccessfulAt) return <span>Showing retained data from the last successful check <MachineCheckTime machine={machine} successfulOnly /> because a current report is unavailable.</span>;
   if (!machine.lastSuccessfulAt) return <span>Waiting for the first scheduled update inventory.</span>;
   return null;
 }
 
 function MachinePackageEmptyState({ machine, securityOnly }: { machine: MachineUpdateSummary; securityOnly: boolean }) {
-  const currentInventoryUnavailable = machine.agentStatus !== "online" || machine.status !== "ok";
-  const retainedInventory = currentInventoryUnavailable && machine.lastSuccessfulAt !== null;
+  const currentInventoryUnavailable = machine.freshness !== "current";
+  const retainedInventory = hasRetainedUpdateInventory(machine);
+
+  if (machine.status === "waiting" && machine.lastSuccessfulAt === null) {
+    return <StateBlock
+      icon={<PackageOpen size={18} aria-hidden="true" />}
+      title="Waiting for first update inventory"
+      message="Package details will appear after this Agent completes its first successful update check."
+    />;
+  }
 
   if (retainedInventory) {
     return <StateBlock
@@ -2249,8 +2241,8 @@ function MachineUpdateRow({ machine, onView }: { machine: MachineUpdateSummary; 
   return <tr>
     <td><span className="machine-update-name"><strong>{machine.displayName}</strong><small title={machine.hostname}>{machine.hostname}</small></span></td>
     <td><span className="machine-update-os"><span title={machine.os.prettyName ?? undefined}>{machine.os.prettyName ?? "Unavailable"}</span><MachineUpdateStatusNote machine={machine} /></span></td>
-    <td className="number-cell"><strong>{updateCountValue(machine.updateCount)}</strong></td>
-    <td className={`number-cell ${(machine.securityUpdateCount ?? 0) > 0 ? "security-value" : ""}`}><strong>{updateCountValue(machine.securityUpdateCount)}</strong></td>
+    <td className="number-cell"><strong>{formatUpdateCount(machine.updateCount)}</strong></td>
+    <td className={`number-cell ${(machine.securityUpdateCount ?? 0) > 0 ? "security-value" : ""}`}><strong>{formatUpdateCount(machine.securityUpdateCount)}</strong></td>
     <td><RebootState machine={machine} /></td>
     <td><MachineCheckTime machine={machine} /></td>
     <td><AgentStatusPill status={machine.agentStatus} /></td>
@@ -2263,8 +2255,8 @@ function MachineUpdateCard({ machine, onView }: { machine: MachineUpdateSummary;
     <div className="update-mobile-head"><div><strong>{machine.displayName}</strong><span title={machine.hostname}>{machine.hostname}</span></div><AgentStatusPill status={machine.agentStatus} /></div>
     <div className="machine-update-card-state"><MachineUpdateConditionPill machine={machine} /><span>{machine.os.prettyName ?? "Operating system unavailable"}</span></div>
     <dl>
-      <div><dt>Updates</dt><dd>{updateCountValue(machine.updateCount)}</dd></div>
-      <div><dt>Security</dt><dd className={(machine.securityUpdateCount ?? 0) > 0 ? "security-value" : ""}>{updateCountValue(machine.securityUpdateCount)}</dd></div>
+      <div><dt>Updates</dt><dd>{formatUpdateCount(machine.updateCount)}</dd></div>
+      <div><dt>Security</dt><dd className={(machine.securityUpdateCount ?? 0) > 0 ? "security-value" : ""}>{formatUpdateCount(machine.securityUpdateCount)}</dd></div>
       <div><dt>Reboot</dt><dd><RebootState machine={machine} /></dd></div>
       <div><dt>Last checked</dt><dd><MachineCheckTime machine={machine} /></dd></div>
     </dl>
@@ -2309,8 +2301,8 @@ function MachineUpdatesDialog({ machineId, fallback, onClose }: { machineId: str
           <div><MachineUpdateConditionPill machine={machine} /><AgentStatusPill status={machine.agentStatus} /></div>
         </div>
         <dl className="machine-update-detail-summary">
-          <div><dt>Available updates</dt><dd>{updateCountValue(machine.updateCount)}</dd></div>
-          <div><dt>Security updates</dt><dd className={(machine.securityUpdateCount ?? 0) > 0 ? "security-value" : ""}>{updateCountValue(machine.securityUpdateCount)}</dd></div>
+          <div><dt>Available updates</dt><dd>{formatUpdateCount(machine.updateCount)}</dd></div>
+          <div><dt>Security updates</dt><dd className={(machine.securityUpdateCount ?? 0) > 0 ? "security-value" : ""}>{formatUpdateCount(machine.securityUpdateCount)}</dd></div>
           <div><dt>Reboot</dt><dd><RebootState machine={machine} /></dd></div>
           <div><dt>Last successful check</dt><dd><MachineCheckTime machine={machine} successfulOnly /></dd></div>
         </dl>
@@ -2356,42 +2348,29 @@ function UpdatesPage({ initialMachineId, onInitialMachineApplied }: { initialMac
   if (!updates.data) return <StateBlock tone="error" title="Updates unavailable" message={normalizeApiError(updates.error).message} />;
 
   const isDefaultView = status === "all" && search.trim() === "" && debouncedSearch === "";
-  const eligibleMachines = updates.data.machines.filter((machine) => machine.supported !== false && machine.status !== "unsupported");
-  const waitingForInventory = isDefaultView
-    && updates.data.totalMachineCount > 0
-    && updates.data.reportingMachineCount === 0
-    && eligibleMachines.length > 0
-    && eligibleMachines.every((machine) => machine.status === "waiting" || machine.checkedAt === null);
+  const waitingForInventory = isDefaultView && updates.data.summaryState === "waiting";
   const allUpToDate = isDefaultView
+    && updates.data.summaryState === "current"
     && updates.data.totalMachineCount > 0
-    && updates.data.machines.length === updates.data.totalMachineCount
-    && updates.data.machines.every((machine) => machine.supported === true
-      && machine.status === "ok"
-      && machine.agentStatus === "online"
-      && machine.lastSuccessfulAt !== null
-      && machine.updateCount === 0);
-  const lastKnownUpdateAt = updates.data.machines.reduce<string | null>((latest, machine) => {
-    const retainedAt = machine.lastSuccessfulAt && (machine.agentStatus !== "online" || machine.status !== "ok")
-      ? machine.lastSuccessfulAt
-      : null;
-    return retainedAt && (!latest || retainedAt > latest) ? retainedAt : latest;
-  }, null);
+    && updates.data.availableCount === 0;
+  const retainedOnly = isDefaultView && updates.data.summaryState === "retained";
+  const partialInventory = isDefaultView && updates.data.summaryState === "partial";
   const selectedMachine = updates.data.machines.find((machine) => machine.agentId === selectedMachineId);
 
   return (
     <div className="page-stack updates-page">
       <StaleNotice isError={updates.isError} dataUpdatedAt={updates.dataUpdatedAt} />
       <dl className="update-summary-strip" aria-label="Machine update summary">
-        <div><dt>Available updates</dt><dd>{updates.data.availableCount}</dd></div>
-        <div><dt>Security-critical</dt><dd className={updates.data.securityCriticalCount ? "security-value" : ""}>{updates.data.securityCriticalCount}</dd></div>
-        <div><dt>Reporting machines</dt><dd>{updates.data.reportingMachineCount}/{updates.data.totalMachineCount}</dd></div>
+        <div><dt>Available updates</dt><dd>{formatUpdateCount(updates.data.availableCount)}</dd></div>
+        <div><dt>Security-critical</dt><dd className={(updates.data.securityCriticalCount ?? 0) > 0 ? "security-value" : ""}>{formatUpdateCount(updates.data.securityCriticalCount)}</dd></div>
+        <div><dt>Reporting machines</dt><dd title={`${updates.data.currentReportingMachineCount} current, ${updates.data.retainedMachineCount} retained`}>{currentUpdateCoverage(updates.data)}</dd></div>
         <div>
-          <dt>{updates.data.lastCheckedAt ? "Last checked" : lastKnownUpdateAt ? "Last known" : "Last checked"}</dt>
-          <dd className={!updates.data.lastCheckedAt && !lastKnownUpdateAt ? "update-summary-status" : undefined}>
+          <dt>{updates.data.lastCheckedAt ? "Last checked" : updates.data.lastSuccessfulAt ? "Last known" : "Last checked"}</dt>
+          <dd className={!updates.data.lastCheckedAt && !updates.data.lastSuccessfulAt ? "update-summary-status" : undefined}>
             {updates.data.lastCheckedAt
               ? <time dateTime={updates.data.lastCheckedAt} title={formatDateTime(updates.data.lastCheckedAt)}>{formatRelativeTime(updates.data.lastCheckedAt)}</time>
-              : lastKnownUpdateAt
-                ? <time dateTime={lastKnownUpdateAt} title={`Last successful report ${formatDateTime(lastKnownUpdateAt)}`}>{formatRelativeTime(lastKnownUpdateAt)}</time>
+              : updates.data.lastSuccessfulAt
+                ? <time dateTime={updates.data.lastSuccessfulAt} title={`Last successful report ${formatDateTime(updates.data.lastSuccessfulAt)}`}>{formatRelativeTime(updates.data.lastSuccessfulAt)}</time>
                 : updates.data.machines.length > 0 ? "No current reports" : "No reports yet"}
           </dd>
         </div>
@@ -2411,6 +2390,8 @@ function UpdatesPage({ initialMachineId, onInitialMachineApplied }: { initialMac
           ]} onChange={(value) => setStatus(value as MachineUpdateFilter)} />
         </div>
         {waitingForInventory ? <div className="update-state-banner" role="status"><RadioTower size={17} aria-hidden="true" /><span><strong>Waiting for update inventory</strong> Connected Agents will report operating-system updates after their first scheduled check.</span></div> : null}
+        {retainedOnly ? <div className="update-state-banner warning" role="status"><AlertTriangle size={17} aria-hidden="true" /><span><strong>Showing retained inventory</strong> No machine has a current report. Counts come from the last successful inventories.</span></div> : null}
+        {partialInventory ? <div className="update-state-banner warning" role="status"><AlertTriangle size={17} aria-hidden="true" /><span><strong>Some inventories are retained</strong> {currentUpdateCoverage(updates.data)} machines are current; counts include {updates.data.retainedMachineCount} retained {updates.data.retainedMachineCount === 1 ? "inventory" : "inventories"}.</span></div> : null}
         {allUpToDate ? <div className="update-state-banner success" role="status"><ShieldCheck size={17} aria-hidden="true" /><span><strong>All machines are up to date</strong> No operating-system updates are currently available.</span></div> : null}
         {machines.length === 0 ? <StateBlock
           icon={isDefaultView ? <RadioTower size={18} aria-hidden="true" /> : <Search size={18} aria-hidden="true" />}
@@ -3104,11 +3085,11 @@ function AgentMobileCard({ agent, selected, onSelect }: { agent: AgentSummary; s
   );
 }
 
-function AgentUpdateSummary({ machine, loading, unavailable, onOpen }: { machine?: MachineUpdateSummary; loading: boolean; unavailable: boolean; onOpen: () => void }) {
-  const retainedInventory = machine?.agentStatus !== "online" && machine?.lastSuccessfulAt;
-  const checkLabel = retainedInventory ? "Last known" : "Last checked";
-  const checkValue = retainedInventory
-    ? formatRelativeTime(retainedInventory)
+function AgentUpdateSummary({ machine, loading, unavailable, refreshFailed, onOpen }: { machine?: MachineUpdateSummary; loading: boolean; unavailable: boolean; refreshFailed: boolean; onOpen: () => void }) {
+  const retainedAt = machine && hasRetainedUpdateInventory(machine) ? machine.lastSuccessfulAt : null;
+  const checkLabel = retainedAt ? "Last known" : "Last checked";
+  const checkValue = retainedAt
+    ? formatRelativeTime(retainedAt)
     : machine?.checkedAt
       ? formatRelativeTime(machine.checkedAt)
       : machine?.lastSuccessfulAt
@@ -3119,11 +3100,12 @@ function AgentUpdateSummary({ machine, loading, unavailable, onOpen }: { machine
     <h3>System updates</h3>
     {machine ? <>
       <div className="info-grid">
-        <Info label="Available" value={updateCountValue(machine.updateCount)} />
-        <Info label="Security" value={updateCountValue(machine.securityUpdateCount)} />
+        <Info label="Available" value={formatUpdateCount(machine.updateCount)} />
+        <Info label="Security" value={formatUpdateCount(machine.securityUpdateCount)} />
         <Info label="Reboot" value={machine.rebootRequired === null ? "Unavailable" : machine.rebootRequired ? "Required" : "Not required"} />
         <Info label={checkLabel} value={checkValue} />
       </div>
+      {refreshFailed ? <div className="stale-notice" role="status">Latest refresh failed. Showing the last available update inventory.</div> : null}
       <div className="agent-update-summary-footer"><MachineUpdateConditionPill machine={machine} /><button className="secondary-button" onClick={onOpen}><PackageOpen size={15} aria-hidden="true" /> View in Update Center</button></div>
     </> : <div className="agent-update-empty"><span>{loading ? "Loading the latest update inventory..." : unavailable ? "Update inventory is currently unavailable." : "Waiting for this Agent's first scheduled update check."}</span><button className="secondary-button" onClick={onOpen}><PackageOpen size={15} aria-hidden="true" /> View Update Center</button></div>}
   </section>;
@@ -3271,7 +3253,7 @@ function AgentsPage({ onOpenContainers, onOpenUpdates }: { onOpenContainers: (ag
               <InfoGroup title="Overview"><Info label="Display name" value={detail.data.displayName} /><Info label="Hostname" value={detail.data.hostname} /><Info label="OS" value={[detail.data.osName, detail.data.osVersion].filter(Boolean).join(" ") || "Unavailable"} /><Info label="Kernel" value={detail.data.kernel ?? "Unavailable"} /><Info label="Architecture" value={detail.data.architecture ?? "Unavailable"} /><Info label="IP addresses" value={detail.data.ipAddresses.join(", ") || "Unavailable"} /><Info label="Agent version" value={detail.data.agentVersion} /><Info label="Registered" value={formatDateTime(detail.data.registeredAt)} /><Info label="Last seen" value={formatDateTime(detail.data.lastSeenAt)} /></InfoGroup>
               <InfoGroup title="Resources"><Info label="CPU" value={formatPercentage(detail.data.latestMetrics?.cpu.usagePercent ?? null)} /><Info label="CPU model" value={detail.data.cpuModel ?? "Unavailable"} /><Info label="CPU cores" value={[detail.data.physicalCoreCount === null ? null : `${detail.data.physicalCoreCount} physical`, detail.data.logicalCpuCount === null ? null : `${detail.data.logicalCpuCount} logical`].filter(Boolean).join(" / ") || "Unavailable"} /><Info label="RAM" value={formatPercentage(detail.data.latestMetrics?.memory.usagePercent ?? null)} /><Info label="Disk" value={formatPercentage(detail.data.latestMetrics?.disk.usagePercent ?? null)} /><Info label="Swap" value={formatPercentage(detail.data.latestMetrics?.swap.usagePercent ?? null)} /><Info label="Load averages" value={[detail.data.latestMetrics?.cpu.loadAverage, detail.data.latestMetrics?.cpu.loadAverage5, detail.data.latestMetrics?.cpu.loadAverage15].map((value) => value ?? "-").join(" / ")} /><Info label="Uptime" value={formatUptime(detail.data.systemUptimeSeconds)} /><Info label="Installed RAM" value={formatReportedBytes(detail.data.totalMemoryBytes)} /><Info label="Installed swap" value={formatReportedBytes(detail.data.totalSwapBytes)} /></InfoGroup>
               <InfoGroup title="Docker"><Info label="Availability" value={detail.data.dockerAvailable ? "Available" : "Unavailable"} /><Info label="Version" value={detail.data.dockerVersion ?? "Unavailable"} /><Info label="Containers" value={String(detail.data.containerCount)} /><Info label="Last inventory" value={formatDateTime(detail.data.lastDockerAt)} /></InfoGroup>
-              <AgentUpdateSummary machine={selectedMachineUpdates} loading={updates.isLoading} unavailable={updates.isError && !updates.data} onOpen={() => onOpenUpdates(detail.data.id)} />
+              <AgentUpdateSummary machine={selectedMachineUpdates} loading={updates.isLoading} unavailable={updates.isError && !updates.data} refreshFailed={updates.isError && Boolean(updates.data)} onOpen={() => onOpenUpdates(detail.data.id)} />
               <InfoGroup title="Connection"><Info label="Last heartbeat" value={formatDateTime(detail.data.lastSeenAt)} /><Info label="Last metrics report" value={formatDateTime(detail.data.lastMetricsAt)} /><Info label="Last host inventory" value={formatDateTime(detail.data.lastInventoryAt)} /><Info label="Agent ID" value={shortAgentId(detail.data.id)} /><Info label="Credential" value={detail.data.credentialStatus === "active" ? "Active" : "Revoked"} /></InfoGroup>
               <div className="agent-detail-actions">
                 <button onClick={() => onOpenContainers(detail.data.id)}><Boxes size={15} /> View host containers</button>

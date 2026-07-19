@@ -22,7 +22,7 @@ No token is required while the existing credential remains active. The installer
 7. Starts/restarts only when needed and verifies the backend connection.
 8. Restores the previous binary/unit after a failed or interrupted installation.
 
-Pin a release with `--agent-version 0.3.0`. The old `--version 0.3.0` spelling remains accepted; `--version` without a value prints the installer version.
+Pin a release with `--agent-version 0.3.1`. The old `--version 0.3.1` spelling remains accepted; `--version` without a value prints the installer version.
 
 Use `--force-reinstall` only to reinstall a checksum-verified current binary. It does not silently rotate a healthy credential.
 

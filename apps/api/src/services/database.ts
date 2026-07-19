@@ -246,6 +246,7 @@ database.exec(`
     os_version_id TEXT,
     os_pretty_name TEXT,
     last_error TEXT,
+    last_error_code TEXT,
     updated_at TEXT NOT NULL,
     FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
   );
@@ -341,6 +342,14 @@ export function ensureAgentMachineIdentitySchema(target: typeof database = datab
 }
 
 ensureAgentMachineIdentitySchema();
+
+export function ensureAgentUpdateErrorCodeSchema(target: typeof database = database) {
+  if (hasColumn("agent_update_inventories", "last_error_code", target)) return false;
+  target.prepare("ALTER TABLE agent_update_inventories ADD COLUMN last_error_code TEXT").run();
+  return true;
+}
+
+ensureAgentUpdateErrorCodeSchema();
 
 if (!hasColumn("server_monitors", "allow_insecure_tls")) {
   database.prepare("ALTER TABLE server_monitors ADD COLUMN allow_insecure_tls INTEGER NOT NULL DEFAULT 0").run();

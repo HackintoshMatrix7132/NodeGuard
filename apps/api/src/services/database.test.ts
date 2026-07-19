@@ -4,7 +4,7 @@ import Database from "better-sqlite3";
 
 process.env.DATABASE_URL = ":memory:";
 
-const { ensureAgentMachineIdentitySchema, removeLegacyHomeAssistantUpdateSchema } = await import("./database.js");
+const { ensureAgentMachineIdentitySchema, ensureAgentUpdateErrorCodeSchema, removeLegacyHomeAssistantUpdateSchema } = await import("./database.js");
 
 test("legacy Home Assistant update tables are removed once without touching unrelated data", () => {
   const database = new Database(":memory:");
@@ -95,5 +95,32 @@ test("Agent identity migration repairs schema safely when another startup alread
     WHERE type = 'index' AND name = 'idx_agents_machine_identity_unique'
   `).get());
   assert.equal((database.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 1);
+  database.close();
+});
+
+test("Agent update error-code migration is additive and idempotent", () => {
+  const database = new Database(":memory:");
+  database.exec(`
+    CREATE TABLE agent_update_inventories (
+      agent_id TEXT PRIMARY KEY,
+      status TEXT NOT NULL,
+      checked_at TEXT NOT NULL,
+      last_error TEXT
+    );
+    INSERT INTO agent_update_inventories (agent_id, status, checked_at, last_error)
+    VALUES ('agent-existing', 'check_failed', '2026-07-16T00:00:00.000Z', 'Preserved message');
+  `);
+
+  assert.equal(ensureAgentUpdateErrorCodeSchema(database), true);
+  assert.equal(ensureAgentUpdateErrorCodeSchema(database), false);
+  const columns = database.prepare("PRAGMA table_info(agent_update_inventories)").all() as { name: string }[];
+  assert.equal(columns.some((column) => column.name === "last_error_code"), true);
+  assert.deepEqual(database.prepare(`
+    SELECT agent_id, status, checked_at, last_error, last_error_code
+    FROM agent_update_inventories
+  `).get(), {
+    agent_id: "agent-existing", status: "check_failed", checked_at: "2026-07-16T00:00:00.000Z",
+    last_error: "Preserved message", last_error_code: null
+  });
   database.close();
 });

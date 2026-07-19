@@ -157,7 +157,8 @@ test("agent enrollment, ingestion, rotation, and revocation lifecycle", async (c
       securityUpdateCount: 1,
       rebootRequired: false,
       truncated: false,
-      packages: [{ name: "openssl", installedVersion: "1", candidateVersion: "2", security: true, source: "noble-security" }]
+      packages: [{ name: "openssl", installedVersion: "1", candidateVersion: "2", security: true, source: "noble-security" }],
+      errorCode: null
     });
 
     const detail = agentService.getAgent(agentId);
@@ -301,7 +302,8 @@ test("stable machine identity prevents duplicates and supports safe re-enrollmen
       securityUpdateCount: 1,
       rebootRequired: false,
       truncated: false,
-      packages: [{ name: "openssl", installedVersion: "1", candidateVersion: "2", security: true, source: "security" }]
+      packages: [{ name: "openssl", installedVersion: "1", candidateVersion: "2", security: true, source: "security" }],
+      errorCode: null
     });
     const unusedRotation = agentService.createAgentEnrollmentToken("Preserved machine", "rotate", first.agentId);
     const replacementToken = agentService.createAgentEnrollmentToken("Preserved machine");
