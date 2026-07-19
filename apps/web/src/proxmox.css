@@ -265,7 +265,8 @@
 .proxmox-status--available,
 .proxmox-status--ok,
 .proxmox-status--healthy,
-.proxmox-status--enabled {
+.proxmox-status--enabled,
+.proxmox-status--success {
   border-color: rgba(74, 222, 128, 0.7);
   color: #86efac;
   background: rgba(22, 101, 52, 0.2);
@@ -282,7 +283,8 @@
 .proxmox-status--critical,
 .proxmox-status--offline,
 .proxmox-status--unavailable,
-.proxmox-status--error {
+.proxmox-status--error,
+.proxmox-status--danger {
   border-color: rgba(248, 113, 113, 0.72);
   color: #fda4af;
   background: rgba(127, 29, 29, 0.2);
@@ -290,7 +292,7 @@
 
 .proxmox-status--disabled,
 .proxmox-status--unknown,
-.proxmox-status--stopped {
+.proxmox-status--neutral {
   border-color: #536176;
   color: #b6c2d2;
   background: rgba(51, 65, 85, 0.23);
@@ -2030,5 +2032,216 @@
     min-height: 36px;
     height: 36px;
     flex-basis: 36px;
+  }
+}
+
+/* Compact mobile inventory cards: preserve table semantics while grouping the
+   same fields into scan-friendly summaries instead of one tall row per cell. */
+@media (max-width: 700px) {
+  .proxmox-page {
+    gap: 5px;
+  }
+
+  .proxmox-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .proxmox-summary-card {
+    min-height: 60px;
+    gap: 2px;
+    padding: 6px 7px;
+  }
+
+  .proxmox-summary-card__value {
+    font-size: 20px;
+  }
+
+  .proxmox-summary-card__detail {
+    overflow: hidden;
+    font-size: 10.5px;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .proxmox-panel__header,
+  .proxmox-settings-section__header {
+    min-height: 34px;
+    gap: 5px;
+    padding: 4px 7px;
+  }
+
+  .proxmox-panel__actions {
+    width: auto;
+    gap: 5px;
+    margin-left: auto;
+  }
+
+  .proxmox-panel__actions .proxmox-last-sync {
+    width: 100%;
+    font-size: 10.5px;
+    text-align: right;
+  }
+
+  .proxmox-panel__body,
+  .proxmox-settings-section__body {
+    padding: 5px 6px;
+  }
+
+  .proxmox-button {
+    min-height: 36px;
+    padding-inline: 9px;
+  }
+
+  .proxmox-icon-button {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    flex-basis: 36px;
+  }
+
+  .proxmox-connection-row {
+    min-height: 0;
+    gap: 5px;
+    padding: 6px 7px;
+  }
+
+  .proxmox-filter-row {
+    gap: 5px;
+    padding: 5px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  .proxmox-segmented {
+    flex: 0 0 auto;
+  }
+
+  .proxmox-segmented button {
+    min-height: 34px;
+    padding-inline: 8px;
+    font-size: 11.5px;
+    white-space: nowrap;
+  }
+
+  .proxmox-node-table tbody,
+  .proxmox-guest-table tbody {
+    gap: 5px;
+  }
+
+  .proxmox-node-table tr,
+  .proxmox-guest-table tr {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 3px 9px;
+    padding: 7px;
+  }
+
+  .proxmox-node-table td,
+  .proxmox-guest-table td {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: 1px;
+    border: 0;
+    padding: 3px 0;
+    text-align: left;
+  }
+
+  .proxmox-node-table td::before,
+  .proxmox-guest-table td::before {
+    margin: 0;
+    color: var(--ng-muted, #94a3b8);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .proxmox-node-table td:first-child,
+  .proxmox-guest-table td:first-child {
+    grid-column: 1 / -1;
+    padding-right: 44px;
+  }
+
+  .proxmox-guest-table td:first-child {
+    padding-right: 86px;
+  }
+
+  .proxmox-node-table td:first-child::before,
+  .proxmox-guest-table td:first-child::before {
+    content: none;
+  }
+
+  .proxmox-node-table td:first-child strong,
+  .proxmox-guest-table td:first-child strong {
+    overflow: hidden;
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .proxmox-node-table td:first-child small,
+  .proxmox-guest-table td:first-child small {
+    overflow: hidden;
+    font-size: 10.5px;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .proxmox-node-table .proxmox-node-row-actions {
+    width: 36px;
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: block;
+    padding: 0;
+  }
+
+  .proxmox-node-table .proxmox-node-row-actions::before {
+    content: none;
+  }
+
+  .proxmox-guest-table td:nth-child(5) {
+    width: auto;
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: block;
+    padding: 0;
+  }
+
+  .proxmox-guest-table td:nth-child(5)::before {
+    content: none;
+  }
+
+  .proxmox-resource-cell {
+    gap: 2px;
+  }
+
+  .proxmox-resource-cell small {
+    overflow: hidden;
+    font-size: 10px;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .proxmox-progress {
+    height: 3px;
+  }
+
+  .proxmox-dialog {
+    max-height: calc(100vh - 12px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  }
+
+  @supports (height: 100dvh) {
+    .proxmox-dialog {
+      max-height: calc(100dvh - 12px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    }
   }
 }

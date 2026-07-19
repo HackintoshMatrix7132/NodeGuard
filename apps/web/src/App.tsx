@@ -625,7 +625,7 @@ function Dashboard({ setView }: { setView: (view: View) => void }) {
   if (!overview.data) return <StateBlock tone="error" title="Dashboard unavailable" message={normalizeApiError(overview.error).message} />;
 
   return (
-    <div className="page-stack">
+    <div className="page-stack dashboard-page">
       <StaleNotice isError={overview.isError} dataUpdatedAt={overview.dataUpdatedAt} />
       {staleSupplementalSections.length > 0 ? (
         <div className="stale-notice" role="status">
@@ -914,7 +914,7 @@ function ServerPage() {
   if (server.isLoading || metrics.isLoading) return <StateBlock tone="loading" title="Loading machine" message="Reading system metrics." />;
   if (!server.data || !metrics.data) return <StateBlock tone="error" title="Machine unavailable" message={normalizeApiError(server.error ?? metrics.error).message} />;
   return (
-    <div className="page-stack">
+    <div className="page-stack machines-page">
       <StaleNotice isError={server.isError || metrics.isError} dataUpdatedAt={Math.max(server.dataUpdatedAt, metrics.dataUpdatedAt)} />
       <Panel title={server.data.name} action={(
         <div className="host-selector-actions">
@@ -1503,7 +1503,7 @@ function ContainersPage({ initialHostId, onHostFilterApplied }: { initialHostId?
   if (containers.isLoading) return <StateBlock tone="loading" title="Loading containers" message="Reading Docker status." />;
   if (!containers.data) return <StateBlock tone="error" title="Docker unavailable" message={normalizeApiError(containers.error).message} />;
   return (
-    <div className="page-stack">
+    <div className="page-stack containers-page">
       <StaleNotice isError={containers.isError} dataUpdatedAt={containers.dataUpdatedAt} />
       {!containers.data.dockerAvailable ? <DockerUnavailable message={containers.data.message ?? "Docker is not available on this host."} /> : null}
       <Panel
@@ -1808,7 +1808,7 @@ function DomainsPage() {
   if (domains.isLoading) return <StateBlock tone="loading" title="Loading domains" message="Checking configured domains." />;
   if (!domains.data) return <StateBlock tone="error" title="Domains unavailable" message={normalizeApiError(domains.error).message} />;
   return (
-    <div className="page-stack">
+    <div className="page-stack domains-page">
       <Panel title="Domains / services" action={<div className="button-row"><button className="secondary-button" onClick={() => domains.refetch()}><RefreshCcw size={16} /> Check now</button><button className="primary-button" onClick={openAddDomain}><Plus size={16} /> Add domain</button></div>}>
         {actionError ? <div className="form-error" role="alert">{actionError}</div> : null}
         {successMessage ? <SuccessNotice key={successMessage} message={successMessage} onDismiss={setSuccessMessage} /> : null}
@@ -1901,7 +1901,7 @@ function AlertMobileCard({ item, selected, onToggle, onDelete, deleting }: { ite
         </button>
         <button className="danger-soft" onClick={onDelete} disabled={deleting} aria-label={`Delete ${item.title}`}>
           <Trash2 size={15} />
-          {deleting ? "Deleting…" : "Delete"}
+          <span className="alert-delete-label">{deleting ? "Deleting…" : "Delete"}</span>
         </button>
       </div>
     </article>
@@ -2507,9 +2507,9 @@ function SettingsPage() {
         <div className="settings-content about-content">
           <p className="muted settings-description">NodeGuard is a self-hosted, read-only infrastructure monitoring platform for Linux servers, Docker containers, domains, updates, alerts, and Proxmox infrastructure. It combines a React dashboard, TypeScript API, SQLite persistence, and a lightweight Go monitoring agent.</p>
           <div className="about-actions">
-            <a className="secondary-button" href="https://github.com/HackintoshMatrix7132/NodeGuard" target="_blank" rel="noreferrer" title="Open NodeGuard on GitHub"><Github size={15} /> GitHub</a>
+            <a className="secondary-button compact-action" href="https://github.com/HackintoshMatrix7132/NodeGuard" target="_blank" rel="noreferrer" title="Open NodeGuard on GitHub"><Github size={15} /> GitHub</a>
             {appConfig.supportUrl ? <a
-              className="secondary-button about-support-link"
+              className="secondary-button compact-action about-support-link"
               href={appConfig.supportUrl}
               target="_blank"
               rel="noopener noreferrer"
@@ -2740,7 +2740,8 @@ function DomainRow({ domain, onCheck, onDuplicate, onEdit, onRemove }: { domain:
         </span>
         <span>{domain.statusCode ? `HTTP ${domain.statusCode}` : "No status"}</span>
         <span>{formatResponseTime(domain.responseTimeMs)}</span>
-        <span>{sslLabel(domain)}</span>
+        <span>{compactUptimeLabel(domain)}</span>
+        <span>{compactSslLabel(domain)}</span>
         <StatusPill status={domain.status} />
       </div>
     );
@@ -3299,6 +3300,7 @@ export function App() {
   const [containerHostFilter, setContainerHostFilter] = useState<string | null>(null);
   const [pendingUpdateMachineId, setPendingUpdateMachineId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 980px)").matches);
+  const [isMobileNavigation, setIsMobileNavigation] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const logoutTimer = useRef<number | null>(null);
   const sidebarRevealRef = useRef<HTMLButtonElement>(null);
@@ -3335,7 +3337,13 @@ export function App() {
     };
   }, [load]);
 
-  if (!backendConfig && !demoMode) return <ConnectScreen />;
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 640px)");
+    const updateMobileNavigation = () => setIsMobileNavigation(media.matches);
+    updateMobileNavigation();
+    media.addEventListener("change", updateMobileNavigation);
+    return () => media.removeEventListener("change", updateMobileNavigation);
+  }, []);
 
   const nav = [
     ["dashboard", Gauge, "Dashboard"],
@@ -3369,6 +3377,7 @@ export function App() {
     setProxmoxNodeRoute(null);
     const path = nextView === "proxmox" ? "/proxmox" : "/";
     if (window.location.pathname !== path || window.location.search) window.history.pushState({}, "", path);
+    window.scrollTo({ top: 0, behavior: "auto" });
     if (window.matchMedia("(max-width: 980px)").matches) {
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       focusRevealAfterClose.current = true;
@@ -3420,29 +3429,63 @@ export function App() {
     sidebarRevealRef.current?.focus({ preventScroll: true });
   };
 
+  useEffect(() => {
+    if (!isMobileNavigation || sidebarCollapsed) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const sidebar = document.getElementById("primary-sidebar");
+    const focusableSelector = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeSidebar();
+        return;
+      }
+      if (event.key !== "Tab" || !sidebar) return;
+      const focusable = Array.from(sidebar.querySelectorAll<HTMLElement>(focusableSelector)).filter((element) => element.offsetParent !== null);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+    window.requestAnimationFrame(() => sidebarToggleRef.current?.focus({ preventScroll: true }));
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMobileNavigation, sidebarCollapsed]);
+
+  useEffect(() => {
+    if (!isMobileNavigation || !sidebarCollapsed || !focusRevealAfterClose.current) return;
+    focusRevealAfterClose.current = false;
+    window.requestAnimationFrame(() => sidebarRevealRef.current?.focus({ preventScroll: true }));
+  }, [isMobileNavigation, sidebarCollapsed]);
+
+  if (!backendConfig && !demoMode) return <ConnectScreen />;
+
   return (
     <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${isLoggingOut ? "logging-out" : ""}`}>
       <a className="skip-link" href="#main-content">Skip to main content</a>
-      <button
-        ref={sidebarRevealRef}
-        className="sidebar-reveal"
-        onClick={openSidebar}
-        aria-label="Open navigation"
-        title="Open navigation"
-        aria-controls="primary-sidebar"
-        aria-expanded={!sidebarCollapsed}
-        aria-hidden={!sidebarCollapsed}
-        tabIndex={sidebarCollapsed ? 0 : -1}
-      >
-        <PanelLeftOpen size={18} aria-hidden="true" />
-      </button>
       <div className="sidebar-slot">
+        <button className="sidebar-backdrop" onClick={closeSidebar} aria-label="Close navigation" tabIndex={-1} />
         <aside
           id="primary-sidebar"
           className="sidebar"
           aria-hidden={sidebarCollapsed}
+          aria-label="NodeGuard navigation"
+          aria-modal={isMobileNavigation && !sidebarCollapsed ? true : undefined}
           inert={sidebarCollapsed}
           onTransitionEnd={handleSidebarTransitionEnd}
+          role={isMobileNavigation ? "dialog" : undefined}
         >
         <div className="sidebar-top">
           <div className="brand"><LogoMark className="brand-logo" /><span>NodeGuard</span></div>
@@ -3462,8 +3505,21 @@ export function App() {
         <button className="sidebar-logout" onClick={logout} disabled={isLoggingOut}><LogOut size={18} aria-hidden="true" /><span className="sidebar-action-label">{isLoggingOut ? "Logging out" : "Logout"}</span></button>
         </aside>
       </div>
-      <main className="workspace" id="main-content" tabIndex={-1}>
+      <main className="workspace" id="main-content" inert={isMobileNavigation && !sidebarCollapsed ? true : undefined} tabIndex={-1}>
         <header className="workspace-topbar">
+          <button
+            ref={sidebarRevealRef}
+            className="sidebar-reveal"
+            onClick={openSidebar}
+            aria-label="Open navigation"
+            title="Open navigation"
+            aria-controls="primary-sidebar"
+            aria-expanded={!sidebarCollapsed}
+            aria-hidden={!sidebarCollapsed}
+            tabIndex={sidebarCollapsed ? 0 : -1}
+          >
+            <PanelLeftOpen size={18} aria-hidden="true" />
+          </button>
           <div className="topbar-title">
             <span><ActiveIcon size={16} aria-hidden="true" /></span>
             <h1>{activeLabel}</h1>

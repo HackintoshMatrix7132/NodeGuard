@@ -46,7 +46,7 @@ import type { ProxmoxNodeDetail, ProxmoxNodeHistory, ProxmoxNodeHistoryPoint, Pr
 import { MonitoredExternalLink } from "./MonitoredExternalLink";
 import { NodeGuardSelect } from "./NodeGuardSelect";
 
-type ProxmoxStatus =
+export type ProxmoxStatus =
   | "available"
   | "online"
   | "running"
@@ -98,7 +98,7 @@ type ProxmoxNode = {
   lastSyncAt?: string | null;
 };
 
-type ProxmoxGuest = {
+export type ProxmoxGuest = {
   id?: string;
   connectionId: string;
   connectionName?: string;
@@ -257,7 +257,7 @@ function normalizeGuest(value: unknown, parent?: Record<string, unknown>): Proxm
     type: asString(guest.type) || undefined,
     vmid,
     name: asString(guest.name) || null,
-    status: asString(guest.status, "unknown") as ProxmoxStatus,
+    status: normalizeProxmoxStatus(asString(guest.status, "unknown")),
     cpuUsagePercent: asOptionalNumber(guest.cpuUsagePercent),
     cpuUsage: asOptionalNumber(guest.cpuUsage),
     memoryUsedBytes: asOptionalNumber(guest.memoryUsedBytes ?? guest.memoryUsed),
@@ -546,12 +546,43 @@ function titleCase(value: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function StatusBadge({ status }: { status: ProxmoxStatus }) {
-  const normalized = status || "unknown";
+export type ProxmoxStatusTone = "success" | "warning" | "danger" | "neutral";
+
+const successStatuses = new Set(["available", "online", "running", "ok", "healthy", "enabled"]);
+const warningStatuses = new Set(["warning", "stale", "pending"]);
+const dangerStatuses = new Set(["critical", "offline", "unavailable", "error", "stopped"]);
+
+export function normalizeProxmoxStatus(status: unknown): ProxmoxStatus {
+  if (typeof status !== "string") return "unknown";
+  const normalized = status.trim().toLowerCase().replace(/[\s_]+/g, "-");
+  return (normalized || "unknown") as ProxmoxStatus;
+}
+
+export function getProxmoxStatusPresentation(status: unknown): {
+  normalized: ProxmoxStatus;
+  label: string;
+  tone: ProxmoxStatusTone;
+} {
+  const normalized = normalizeProxmoxStatus(status);
+  const tone = successStatuses.has(normalized)
+    ? "success"
+    : warningStatuses.has(normalized)
+      ? "warning"
+      : dangerStatuses.has(normalized)
+        ? "danger"
+        : "neutral";
+  return { normalized, label: titleCase(normalized), tone };
+}
+
+export function StatusBadge({ status }: { status: ProxmoxStatus | string }) {
+  const presentation = getProxmoxStatusPresentation(status);
   return (
-    <span className={`proxmox-status proxmox-status--${normalized}`}>
+    <span
+      className={`proxmox-status proxmox-status--${presentation.tone}`}
+      data-status={presentation.normalized}
+    >
       <span aria-hidden="true" className="proxmox-status__dot" />
-      {titleCase(normalized)}
+      {presentation.label}
     </span>
   );
 }
@@ -741,7 +772,7 @@ export function NodesTable({
 
   return (
     <div className="proxmox-table-wrap">
-      <table className="proxmox-table">
+      <table className="proxmox-table proxmox-node-table">
         <thead>
           <tr>
             <th>Node</th>
@@ -818,17 +849,25 @@ export function NodesTable({
   );
 }
 
-function GuestsTable({ guests }: { guests: ProxmoxGuest[] }) {
+export function filterProxmoxGuests(
+  guests: ProxmoxGuest[],
+  typeFilter: "all" | "qemu" | "lxc",
+  statusFilter: "all" | "running" | "stopped",
+): ProxmoxGuest[] {
+  return guests.filter((guest) => {
+    const kind = (guest.kind ?? guest.type ?? "").toLowerCase();
+    const normalizedStatus = normalizeProxmoxStatus(guest.status);
+    const typeMatches = typeFilter === "all" || kind === typeFilter;
+    const statusMatches = statusFilter === "all" || normalizedStatus === statusFilter;
+    return typeMatches && statusMatches;
+  });
+}
+
+export function GuestsTable({ guests }: { guests: ProxmoxGuest[] }) {
   const [typeFilter, setTypeFilter] = useState<"all" | "qemu" | "lxc">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "running" | "stopped">("all");
   const filtered = useMemo(
-    () =>
-      guests.filter((guest) => {
-        const kind = guest.kind ?? guest.type;
-        const typeMatches = typeFilter === "all" || kind === typeFilter;
-        const statusMatches = statusFilter === "all" || guest.status === statusFilter;
-        return typeMatches && statusMatches;
-      }),
+    () => filterProxmoxGuests(guests, typeFilter, statusFilter),
     [guests, statusFilter, typeFilter],
   );
 
@@ -875,7 +914,7 @@ function GuestsTable({ guests }: { guests: ProxmoxGuest[] }) {
         <EmptyState title="No matching guests" description="Adjust the guest filters to see more results." />
       ) : (
         <div className="proxmox-table-wrap">
-          <table className="proxmox-table">
+          <table className="proxmox-table proxmox-guest-table">
             <thead>
               <tr>
                 <th>Guest</th>

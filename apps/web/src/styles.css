@@ -7546,7 +7546,7 @@ button.modal-submit:disabled {
 
   .about-actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: auto minmax(0, 1fr);
   }
 }
 
@@ -7910,6 +7910,12 @@ body .agent-update-empty button {
   vertical-align: middle;
 }
 
+body .compact-action {
+  min-height: var(--ng-action-compact-height);
+  gap: 5px;
+  padding: 3px 9px;
+}
+
 body .panel-header > .primary-button,
 body .panel-header > .secondary-button,
 body .dashboard-panel-action,
@@ -8068,6 +8074,12 @@ body .package-updates-table {
   body .domain-details-toggle,
   body .nodeguard-select-trigger {
     min-height: 38px;
+  }
+
+  body .compact-action {
+    min-height: 34px;
+    gap: 5px;
+    padding-inline: 9px;
   }
 
   body .icon-only,

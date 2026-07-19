@@ -8,11 +8,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ProxmoxNodeDetail, ProxmoxNodeHistory } from "../types/nodeguard";
 import { parseProxmoxNodeLocation, proxmoxNodePath } from "../utils/proxmoxNodeRoute";
 import {
+  filterProxmoxGuests,
+  getProxmoxStatusPresentation,
+  GuestsTable,
   NodesTable,
   nextProxmoxNodeTab,
   PROXMOX_NODE_HISTORY_RANGES,
   ProxmoxNodeHistoryView,
   ProxmoxNodeOverview,
+  StatusBadge,
+  type ProxmoxGuest,
 } from "./ProxmoxIntegration";
 
 const detail: ProxmoxNodeDetail = {
@@ -83,6 +88,57 @@ test("each Proxmox node row exposes a compact accessible view action", () => {
   assert.match(markup, /aria-label="View details for pve-a"/);
   assert.match(markup, /title="View node details"/);
   assert.match(markup, /data-label="Actions"/);
+  assert.match(markup, /proxmox-node-table/);
+});
+
+test("Proxmox guest statuses use normalized shared semantic badge variants", () => {
+  assert.deepEqual(getProxmoxStatusPresentation(" RUNNING "), {
+    normalized: "running",
+    label: "Running",
+    tone: "success",
+  });
+  assert.deepEqual(getProxmoxStatusPresentation("Stopped"), {
+    normalized: "stopped",
+    label: "Stopped",
+    tone: "danger",
+  });
+  assert.equal(getProxmoxStatusPresentation("unexpected-state").tone, "neutral");
+  assert.equal(getProxmoxStatusPresentation(null).normalized, "unknown");
+
+  const running = renderToStaticMarkup(createElement(StatusBadge, { status: "RUNNING" }));
+  const stopped = renderToStaticMarkup(createElement(StatusBadge, { status: "stopped" }));
+  assert.match(running, /class="proxmox-status proxmox-status--success"/);
+  assert.match(running, /data-status="running"/);
+  assert.match(running, />Running<\/span>/);
+  assert.match(stopped, /class="proxmox-status proxmox-status--danger"/);
+  assert.match(stopped, /data-status="stopped"/);
+  assert.match(stopped, />Stopped<\/span>/);
+});
+
+test("VM and LXC rows share guest status styling and retain functional filters", () => {
+  const guests: ProxmoxGuest[] = [
+    { connectionId: "connection-a", connectionName: "Primary", kind: "qemu", vmid: 100, name: "VM running", status: "RUNNING" as ProxmoxGuest["status"] },
+    { connectionId: "connection-a", connectionName: "Primary", kind: "qemu", vmid: 101, name: "VM stopped", status: "stopped" },
+    { connectionId: "connection-a", connectionName: "Primary", kind: "lxc", vmid: 200, name: "LXC running", status: "running" },
+    { connectionId: "connection-a", connectionName: "Primary", kind: "lxc", vmid: 201, name: "LXC stopped", status: "STOPPED" as ProxmoxGuest["status"] },
+  ];
+
+  assert.deepEqual(filterProxmoxGuests(guests, "qemu", "running").map((guest) => guest.name), ["VM running"]);
+  assert.deepEqual(filterProxmoxGuests(guests, "lxc", "stopped").map((guest) => guest.name), ["LXC stopped"]);
+  assert.equal(filterProxmoxGuests(guests, "all", "running").length, 2);
+  assert.equal(filterProxmoxGuests(guests, "all", "stopped").length, 2);
+
+  const markup = renderToStaticMarkup(createElement(GuestsTable, { guests }));
+  assert.match(markup, /proxmox-guest-table/);
+  assert.match(markup, /VM running/);
+  assert.match(markup, /LXC running/);
+  assert.equal((markup.match(/proxmox-status--success/g) ?? []).length, 2);
+  assert.equal((markup.match(/proxmox-status--danger/g) ?? []).length, 2);
+
+  const css = readFileSync(new URL("../proxmox.css", import.meta.url), "utf8");
+  assert.match(css, /\.proxmox-status--success/);
+  assert.match(css, /\.proxmox-status--danger/);
+  assert.match(css, /\.proxmox-status\s*\{[^}]*min-height:\s*1\.6rem/s);
 });
 
 test("node detail routes encode identifiers and support direct history loading", () => {
