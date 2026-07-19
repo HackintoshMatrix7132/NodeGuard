@@ -1122,6 +1122,631 @@
   }
 }
 
+/* Read-only Proxmox node detail and RRD history. */
+.proxmox-actions-heading,
+.proxmox-node-row-actions {
+  width: 58px;
+  text-align: center;
+}
+
+.proxmox-node-row-actions .proxmox-icon-button {
+  margin-inline: auto;
+}
+
+.proxmox-node-page {
+  gap: 7px;
+  min-width: 0;
+}
+
+.proxmox-node-heading {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 54px;
+  padding: 8px 10px;
+  border: 1px solid var(--ng-border);
+  border-radius: var(--ng-radius, 8px);
+  background: var(--ng-surface);
+}
+
+.proxmox-node-heading__identity {
+  min-width: 0;
+}
+
+.proxmox-node-heading h2,
+.proxmox-node-heading p {
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proxmox-node-heading h2 {
+  color: var(--ng-text);
+  font-size: var(--ng-type-page-title, 16px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.proxmox-node-heading p,
+.proxmox-node-heading__sync {
+  color: var(--ng-muted);
+  font-size: var(--ng-type-helper, 12px);
+  line-height: 1.3;
+}
+
+.proxmox-node-heading__sync {
+  white-space: nowrap;
+}
+
+.proxmox-node-heading__state {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  min-width: 0;
+}
+
+.proxmox-node-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 38px;
+  padding: 3px;
+  border: 1px solid var(--ng-border);
+  border-radius: var(--ng-radius, 8px);
+  background: rgba(15, 23, 42, 0.68);
+}
+
+.proxmox-node-tabs__list {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.proxmox-node-tabs__list > button[role="tab"] {
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--ng-muted);
+  background: transparent;
+  font-size: var(--ng-type-button, 13px);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.proxmox-node-tabs__list > button[role="tab"]:hover,
+.proxmox-node-tabs__list > button[role="tab"]:focus-visible,
+.proxmox-node-tabs__list > button[role="tab"][aria-selected="true"] {
+  color: var(--ng-text);
+  border-color: rgba(56, 217, 255, 0.45);
+  background: rgba(56, 217, 255, 0.1);
+}
+
+.proxmox-node-tabs__list > button[role="tab"]:focus-visible {
+  outline: 2px solid rgba(56, 217, 255, 0.78);
+  outline-offset: 1px;
+}
+
+.proxmox-history-range-select {
+  width: 122px;
+}
+
+.proxmox-history-range-select .nodeguard-select-trigger {
+  width: 100%;
+  min-height: 30px;
+}
+
+.proxmox-history-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 0;
+}
+
+.proxmox-history-controls__label,
+.proxmox-history-controls__refresh {
+  color: var(--ng-muted);
+  font-size: var(--ng-type-helper, 12px);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.proxmox-history-controls__refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #7dd3fc;
+}
+
+.proxmox-node-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: start;
+  gap: 8px;
+}
+
+.proxmox-node-overview-grid > .proxmox-node-detail-card {
+  grid-column: span 3;
+}
+
+.proxmox-node-overview-grid > .proxmox-node-detail-card:nth-child(n + 5) {
+  grid-column: span 4;
+}
+
+.proxmox-node-detail-card,
+.proxmox-history-chart-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--ng-border);
+  border-radius: var(--ng-radius, 8px);
+  background: var(--ng-surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.proxmox-node-detail-card__header,
+.proxmox-history-chart-card__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.proxmox-node-detail-card__header {
+  min-height: 34px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--ng-border);
+  background: rgba(7, 13, 26, 0.28);
+}
+
+.proxmox-node-detail-card__header > span,
+.proxmox-history-chart-card__title > span {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #7dd3fc;
+}
+
+.proxmox-node-detail-card__header h2,
+.proxmox-history-chart-card h2 {
+  margin: 0;
+  color: var(--ng-text);
+  font-size: var(--ng-type-card-title, 13px);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.proxmox-node-detail-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 7px 9px 8px;
+}
+
+.proxmox-node-detail-list > div {
+  display: grid;
+  grid-template-columns: minmax(88px, 0.85fr) minmax(0, 1.15fr);
+  align-items: baseline;
+  gap: 7px;
+  min-height: 18px;
+}
+
+.proxmox-node-detail-list > .proxmox-node-detail-row--long {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1px;
+  padding: 2px 0;
+}
+
+.proxmox-node-detail-list dt,
+.proxmox-node-detail-list dd {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--ng-type-body, 13px);
+  line-height: 1.3;
+}
+
+.proxmox-node-detail-list dt {
+  color: var(--ng-muted);
+}
+
+.proxmox-node-detail-list dd {
+  overflow: hidden;
+  color: #e2e8f0;
+  font-weight: 560;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proxmox-node-detail-row--long dd {
+  color: var(--ng-text);
+  text-align: left;
+}
+
+.proxmox-node-detail-list .proxmox-status {
+  display: inline-flex;
+}
+
+.proxmox-node-resource-usage {
+  display: grid;
+  gap: 5px;
+  padding: 8px 9px 5px;
+}
+
+.proxmox-node-resource-usage__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ng-muted);
+  font-size: var(--ng-type-body, 13px);
+  line-height: 1.25;
+}
+
+.proxmox-node-resource-usage__heading strong {
+  color: var(--ng-text);
+  font-weight: 650;
+}
+
+.proxmox-node-resource-usage .proxmox-progress {
+  width: 100%;
+  height: 5px;
+}
+
+.proxmox-node-resource-usage .proxmox-progress__fill--amber {
+  background: #f59e0b;
+}
+
+.proxmox-node-resource-usage__summary {
+  color: #cbd5e1;
+  font-size: var(--ng-type-helper, 12px);
+  line-height: 1.2;
+}
+
+.proxmox-node-resource-usage + .proxmox-node-detail-list {
+  padding-top: 3px;
+}
+
+.proxmox-node-unavailable {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 7px;
+  min-height: 64px;
+  align-content: center;
+  padding: 8px 9px;
+  color: var(--ng-muted);
+  font-size: var(--ng-type-helper, 12px);
+  line-height: 1.35;
+}
+
+.proxmox-node-unavailable > svg,
+.proxmox-node-unavailable__icon {
+  display: inline-grid;
+  grid-row: 1 / span 2;
+  align-self: center;
+  place-items: center;
+  color: var(--ng-subtle);
+}
+
+.proxmox-node-unavailable strong {
+  color: #e2e8f0;
+  font-size: var(--ng-type-body, 13px);
+}
+
+.proxmox-node-stale-notice,
+.proxmox-node-refreshing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 6px;
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.08);
+  font-size: var(--ng-type-helper, 12px);
+  line-height: 1.3;
+}
+
+.proxmox-node-refreshing {
+  border-color: var(--ng-border);
+  color: var(--ng-muted);
+  background: var(--ng-surface);
+}
+
+.proxmox-node-history-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 8px;
+}
+
+.proxmox-history-chart-card__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  min-height: 43px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--ng-border);
+  background: rgba(7, 13, 26, 0.28);
+}
+
+.proxmox-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 10px;
+  color: var(--ng-muted);
+  font-size: var(--ng-type-helper, 12px);
+  line-height: 1.2;
+}
+
+.proxmox-chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.proxmox-chart-legend i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.proxmox-chart-legend strong {
+  color: #e2e8f0;
+  font-weight: 650;
+}
+
+.proxmox-history-chart-wrap {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 7px 0;
+}
+
+.proxmox-history-chart {
+  display: block;
+  width: 100%;
+  height: 226px;
+  overflow: hidden;
+  outline: none;
+  touch-action: pan-y;
+}
+
+.proxmox-history-chart:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid rgba(56, 217, 255, 0.72);
+  outline-offset: -2px;
+}
+
+.proxmox-chart-grid-line {
+  stroke: rgba(148, 163, 184, 0.14);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.proxmox-chart-axis {
+  fill: var(--ng-muted);
+  font-size: 10px;
+}
+
+.proxmox-chart-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.proxmox-chart-cursor {
+  stroke: rgba(226, 232, 240, 0.42);
+  stroke-dasharray: 3 3;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.proxmox-chart-current {
+  display: flex;
+  min-height: 31px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 9px 6px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  color: var(--ng-muted);
+  font-size: var(--ng-type-helper, 12px);
+  line-height: 1.2;
+}
+
+.proxmox-chart-current strong {
+  color: #cbd5e1;
+  font-weight: 550;
+  text-align: right;
+}
+
+.proxmox-history-chart-card--unavailable .proxmox-history-chart-card__header {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.proxmox-history-chart-card--unavailable .proxmox-node-unavailable {
+  min-height: 66px;
+}
+
+.proxmox-node-skeleton {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+  gap: 8px;
+}
+
+.proxmox-node-skeleton--history {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.proxmox-node-skeleton__card {
+  display: grid;
+  gap: 10px;
+  min-height: 142px;
+  padding: 10px;
+  border: 1px solid var(--ng-border);
+  border-radius: var(--ng-radius, 8px);
+  background: var(--ng-surface);
+}
+
+.proxmox-node-skeleton--history .proxmox-node-skeleton__card {
+  min-height: 286px;
+}
+
+.proxmox-node-skeleton__card > * {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.08), rgba(148, 163, 184, 0.18), rgba(148, 163, 184, 0.08));
+  background-size: 220% 100%;
+  animation: proxmoxNodeSkeleton 1.2s ease-in-out infinite;
+}
+
+.proxmox-node-skeleton__card > span {
+  width: 42%;
+  height: 13px;
+}
+
+.proxmox-node-skeleton__card > i:nth-child(2) {
+  width: 90%;
+}
+
+.proxmox-node-skeleton__card > i:nth-child(3) {
+  width: 72%;
+}
+
+.proxmox-node-skeleton__card > i:nth-child(4) {
+  width: 82%;
+}
+
+@keyframes proxmoxNodeSkeleton {
+  to { background-position: -220% 0; }
+}
+
+@media (max-width: 1180px) {
+  .proxmox-node-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .proxmox-node-overview-grid > .proxmox-node-detail-card,
+  .proxmox-node-overview-grid > .proxmox-node-detail-card:nth-child(n + 5) {
+    grid-column: auto;
+  }
+
+  .proxmox-node-skeleton {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .proxmox-node-heading {
+    grid-template-columns: 36px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .proxmox-node-heading__state {
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    margin-top: -2px;
+  }
+
+  .proxmox-node-tabs {
+    flex-wrap: wrap;
+  }
+
+  .proxmox-history-range-select {
+    width: 116px;
+  }
+
+  .proxmox-node-history-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .proxmox-history-chart {
+    height: 204px;
+  }
+}
+
+@media (max-width: 520px) {
+  .proxmox-node-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: dense;
+  }
+
+  .proxmox-node-overview-grid > .proxmox-node-detail-card,
+  .proxmox-node-overview-grid > .proxmox-node-detail-card:nth-child(n + 5) {
+    grid-column: auto;
+  }
+
+  .proxmox-node-overview-grid > .proxmox-node-detail-card:nth-child(2),
+  .proxmox-node-overview-grid > .proxmox-node-detail-card:nth-child(4),
+  .proxmox-node-overview-grid > .proxmox-node-detail-card:nth-child(5),
+  .proxmox-node-overview-grid > .proxmox-node-detail-card:nth-child(6),
+  .proxmox-node-overview-grid > .proxmox-node-detail-card:nth-child(7) {
+    grid-column: span 2;
+  }
+
+  .proxmox-node-tabs {
+    gap: 5px;
+  }
+
+  .proxmox-node-detail-list > div {
+    grid-template-columns: minmax(68px, 0.9fr) minmax(0, 1.1fr);
+  }
+
+  .proxmox-node-detail-list > .proxmox-node-detail-row--long {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .proxmox-history-controls__label {
+    display: none;
+  }
+
+  .proxmox-history-chart-card__header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .proxmox-chart-legend {
+    justify-content: flex-start;
+  }
+
+  .proxmox-history-chart {
+    height: 164px;
+  }
+
+  .proxmox-node-skeleton,
+  .proxmox-node-skeleton--history {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .proxmox-history-chart *,
+  .proxmox-node-page * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+
+  .proxmox-node-skeleton__card > * {
+    animation: none !important;
+  }
+}
+
 @media (max-width: 480px) {
   .proxmox-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

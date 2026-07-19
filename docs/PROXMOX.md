@@ -66,6 +66,27 @@ NodeGuard reads the Proxmox version endpoint and cluster resource inventory. It 
 
 Stopped guests are displayed as inventory and do not create health alerts. NodeGuard keeps runtime state separate from infrastructure health.
 
+### Node details and history
+
+Each node row includes a compact **View details** action. The dedicated node page has two tabs:
+
+- **Overview** reads the current node status and groups available system, platform, hardware, memory, root-storage, network/disk-rate, source, and thermal fields.
+- **History** reads Proxmox node RRD data and charts utilization, network I/O, and disk I/O. Thermal history is shown only when Proxmox supplies real temperature samples; otherwise the section says **Not available**.
+
+History supports `1h`, `6h`, `12h`, `24h`, `7d`, `30d`, and `90d`. NodeGuard maps these ranges to Proxmox's native RRD timeframes, then filters the returned UTC samples to the exact requested window:
+
+| NodeGuard range | Proxmox timeframe |
+| --- | --- |
+| `1h` | `hour` |
+| `6h`, `12h`, `24h` | `day` |
+| `7d` | `week` |
+| `30d` | `month` |
+| `90d` | `year` |
+
+Results are briefly cached per connection, node, and range. Concurrent identical requests are deduplicated, and the UI keeps the previous chart visible while another range loads. No Proxmox performance samples are written to NodeGuard's database.
+
+Current node details come from `/nodes/{node}/status`; history comes from `/nodes/{node}/rrddata` with `cf=AVERAGE`; the cluster label, when available, comes from `/cluster/status`. Missing optional fields remain non-fatal and display **Not available** rather than a false zero.
+
 ## Synchronization and stale data
 
 Enabled connections synchronize in the background. Synchronizations for the same connection cannot overlap. A successful run atomically replaces that connection's stored inventory.
@@ -130,6 +151,8 @@ Authenticated owners use these backend routes through the NodeGuard UI:
 
 ```text
 GET    /api/proxmox
+GET    /api/proxmox/connections/:id/nodes/:node
+GET    /api/proxmox/connections/:id/nodes/:node/history?range=1h|6h|12h|24h|7d|30d|90d
 GET    /api/proxmox/connections
 POST   /api/proxmox/connections/test
 POST   /api/proxmox/connections
@@ -174,5 +197,7 @@ NodeGuard is showing the last successful snapshot because recent synchronization
 - Read-only inventory and health monitoring only
 - No VM or container lifecycle actions
 - No console, shell, migration, backup, or update controls
-- No task-history or performance-series collection from Proxmox
+- Node performance history is read on demand from Proxmox RRD; NodeGuard does not persist a separate Proxmox time-series database
+- Proxmox node RRD normally does not expose thermal samples, so thermals may remain **Not available**
+- No VM or LXC detail/history pages and no Proxmox task-history collection
 - No automatic certificate enrollment

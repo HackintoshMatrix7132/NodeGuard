@@ -8,6 +8,18 @@ Fourteen findings were recorded: **0 Critical, 3 High, 8 Medium, and 3 Low**. Fo
 
 The frontend now uses a shared 32px default action, 30px toolbar action, 32px square icon action, 13px button label, 14px icon, 6px gap, and 6px radius on desktop. Mobile actions remain 34–38px and icon controls 36px to preserve practical touch interaction. The restored login submit remains deliberately unchanged at 44px.
 
+### Sidebar typography follow-up
+
+A focused rendered-sidebar follow-up aligned navigation with the same compact type scale. Before the change, brand text computed to 16px/900 and every navigation/Logout label to 16px/760 with 18px icons, 8px gaps, 38px desktop rows, and 44px phone rows. The final shared sidebar tokens use a 16px/700 brand, 13px/600 inactive labels, 13px/700 active labels, 16px icons, 7px gaps, 34px desktop rows, and 40px phone rows. Active and inactive items retain identical geometry; background, border, cyan inset accent, icon color, and the subtle weight change carry the active hierarchy.
+
+Chrome DevTools MCP verified Dashboard, Machines, Proxmox, Agents, Containers, Domains, Updates, Alerts, Settings, and Logout labels; expanded and collapsed navigation; desktop, tablet, and phone layouts; hover, active, and focus-visible states; accessible current-page indication; zero horizontal overflow; and a clean final console. Collapsed mode intentionally exposes the labeled navigation-reveal control with a shared 12px tooltip because the product uses a closed sidebar, not an icon rail. Focus is released before sidebar visibility changes and restored to the reveal control after closing, preventing focused descendants from being hidden from assistive technology.
+
+### Control-alignment follow-up
+
+A rendered control follow-up found that several 32px actions declared `align-items` and `justify-content` without declaring a flex/grid display. Their 14px Lucide SVGs therefore remained inline and aligned to the text baseline. The isolated Domains `Details` trigger also retained 16px/800 text and an 8px radius, generic panel-hover CSS translated action icons two pixels horizontally, Settings checkbox labels inherited 16px/700 text, and status pills retained 900 weight.
+
+The final shared layer makes text actions `inline-flex`, icon-only actions square `inline-grid` controls, and direct Lucide SVGs fixed 14px block elements. Text, chevrons, and icons use one centered 6px-gap baseline; desktop text actions are 30–32px, icon-only controls are 32px square, compact pills use 11px/700 text, Settings option labels use 13px/600 text, and mobile controls retain 36–38px practical targets. Expanded chevrons keep their existing rotation, while unrelated hover translation is removed from action icons.
+
 ## Routes and states inspected
 
 - Login: initial, password visibility control, form fields, and submit control.
@@ -313,6 +325,10 @@ The stable deployed UI produced no uncaught application exception during route t
 | Dashboard Refresh | 32px; 16px/800; 17px icon; 8px gap | 32px; 13px/700; 14px icon; 6px gap |
 | View details / Open | 32px; 16px/800; 8px radius | 30px; 13px/700; 6px radius |
 | Add machine/agent/container/domain | 32px; visually heavy 16px/800 baseline | 32px; 13px/700; 14px icon; consistent padding/gap/radius |
+| Domains Details trigger | 32px; 16px/800; normal line-height; 8px radius | 32px; 13px/700/1; inline-flex; 14px centered chevron; 6px radius |
+| Domain icon-only actions | 32px square; 14px SVG but generic hover translated it 2px | 32px square; centered grid; 14px block SVG; no positional hover drift |
+| Healthy/status pill | 21px; 11px/900 | 20px minimum; 11px/700/1; centered compact padding |
+| Settings option label | 16px/700 inherited text | 13px/600/1.3 shared label hierarchy |
 | Settings section headings | Integrations 19.2px/24px; peers 14px/16px | All 14px/700 with 16.8px line height |
 | Settings helper text | Integrations 16px/24px; peers 12px/15.6px | Shared muted 12px/1.35 hierarchy |
 | Login submit | 44px | 44px, intentionally unchanged |
@@ -323,6 +339,7 @@ The stable deployed UI produced no uncaught application exception during route t
 - `npm run lint --workspace apps/web` — pass.
 - `npm test --workspace apps/web` — pass, 11 tests.
 - `npm test` in the project Node 22 container — pass, 100 tests total (89 API + 11 web); the host Node 24 runtime cannot load the Node 22 `better-sqlite3` binary.
-- `npm run build --workspace apps/web -- --outDir /tmp/nodeguard-web-button-audit` — pass.
+- `npm run build --workspace apps/web -- --outDir /tmp/nodeguard-web-icon-alignment` — pass.
 - Docker production build — pass; existing Rollup informational notices about TanStack Query `use client` directives only.
 - Deployed container health check and `https://nodeguard.muthu.eu` HTTP check — pass.
+- Chrome DevTools MCP post-deployment sweep — pass across all nine authenticated routes at 1440 × 900, 1024 × 768, 768 × 1024, 430 × 932, 390 × 844, and 360 × 800; zero horizontal page overflow, zero clipped visible controls, and zero vertical-center delta for direct action icons.

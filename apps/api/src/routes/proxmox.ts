@@ -12,6 +12,12 @@ import {
   updateProxmoxConnection,
   type ProxmoxConnectionInput
 } from "../services/proxmoxService.js";
+import {
+  getDemoProxmoxNodeDetail,
+  getDemoProxmoxNodeHistory,
+  proxmoxNodeService,
+  ProxmoxNodeServiceError,
+} from "../services/proxmoxNodeService.js";
 
 const router = Router();
 
@@ -72,6 +78,17 @@ function errorResponse(res: Response, error: unknown, fallback: string): void {
   res.status(status).json({ error: message });
 }
 
+function nodeErrorResponse(res: Response, error: unknown): void {
+  if (error instanceof ProxmoxNodeServiceError) {
+    res.status(error.statusCode).json({ error: error.code, message: error.message });
+    return;
+  }
+  res.status(502).json({
+    error: "proxmox_unavailable",
+    message: "Proxmox API is unavailable. Try again after checking the connection.",
+  });
+}
+
 router.get("/", (req, res) => {
   const mode = readMode(req, res);
   if (mode === "demo") {
@@ -88,6 +105,39 @@ router.get("/", (req, res) => {
 router.get("/connections", (req, res) => {
   if (!requireLive(req, res)) return;
   res.json({ connections: listProxmoxConnections() });
+});
+
+router.get("/connections/:id/nodes/:node", async (req, res) => {
+  const mode = readMode(req, res);
+  if (mode === "unknown") {
+    res.status(403).json({ error: "forbidden", message: "Proxmox node details require an authenticated data mode." });
+    return;
+  }
+  try {
+    const detail = mode === "demo"
+      ? getDemoProxmoxNodeDetail(req.params.id, req.params.node)
+      : await proxmoxNodeService.getDetail(req.params.id, req.params.node);
+    res.json(detail);
+  } catch (error) {
+    nodeErrorResponse(res, error);
+  }
+});
+
+router.get("/connections/:id/nodes/:node/history", async (req, res) => {
+  const mode = readMode(req, res);
+  if (mode === "unknown") {
+    res.status(403).json({ error: "forbidden", message: "Proxmox node history requires an authenticated data mode." });
+    return;
+  }
+  try {
+    const range = req.query.range ?? "24h";
+    const history = mode === "demo"
+      ? getDemoProxmoxNodeHistory(req.params.id, req.params.node, range)
+      : await proxmoxNodeService.getHistory(req.params.id, req.params.node, range);
+    res.json(history);
+  } catch (error) {
+    nodeErrorResponse(res, error);
+  }
 });
 
 router.post("/connections/test", async (req, res) => {

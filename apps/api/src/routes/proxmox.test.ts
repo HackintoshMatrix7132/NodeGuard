@@ -44,6 +44,41 @@ test("Proxmox keeps Demo Mode read-only while serving its fictional snapshot", a
       assert.deepEqual(await response.json(), { error: "Proxmox integration settings are unavailable in Demo Mode." });
     });
 
+    await context.test("Demo Mode serves isolated node detail and all allowlisted RRD ranges", async () => {
+      const detail = await fetch(`${baseUrl}/api/proxmox/connections/demo-pve-main/nodes/pve-a`, {
+        headers: { "x-test-mode": "demo" },
+      });
+      assert.equal(detail.status, 200);
+      const detailBody = await detail.json() as Record<string, unknown>;
+      assert.equal(detailBody.node, "pve-a");
+      assert.equal(detailBody.connectionName, "Primary cluster");
+      assert.doesNotMatch(JSON.stringify(detailBody), /tokenSecret|fixture-secret/i);
+
+      for (const range of ["1h", "6h", "12h", "24h", "7d", "30d", "90d"]) {
+        const response = await fetch(`${baseUrl}/api/proxmox/connections/demo-pve-main/nodes/pve-a/history?range=${range}`, {
+          headers: { "x-test-mode": "demo" },
+        });
+        assert.equal(response.status, 200);
+        const body = await response.json() as { range: string; points: unknown[] };
+        assert.equal(body.range, range);
+        assert.ok(body.points.length > 0);
+      }
+    });
+
+    await context.test("node routes reject arbitrary ranges and identifiers", async () => {
+      const invalidRange = await fetch(`${baseUrl}/api/proxmox/connections/demo-pve-main/nodes/pve-a/history?range=forever`, {
+        headers: { "x-test-mode": "demo" },
+      });
+      assert.equal(invalidRange.status, 400);
+      assert.deepEqual(await invalidRange.json(), { error: "invalid_range", message: "Unsupported Proxmox history range." });
+
+      const missing = await fetch(`${baseUrl}/api/proxmox/connections/demo-pve-main/nodes/missing`, {
+        headers: { "x-test-mode": "demo" },
+      });
+      assert.equal(missing.status, 404);
+      assert.deepEqual(await missing.json(), { error: "node_not_found", message: "Proxmox node was not found." });
+    });
+
     await context.test("an unknown data mode fails closed", async () => {
       const inventory = await fetch(`${baseUrl}/api/proxmox`);
       assert.equal(inventory.status, 403);

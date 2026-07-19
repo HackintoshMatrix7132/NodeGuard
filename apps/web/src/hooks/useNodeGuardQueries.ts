@@ -18,6 +18,8 @@ import {
   getDomains,
   getMachineUpdates,
   getOverview,
+  getProxmoxNodeDetail,
+  getProxmoxNodeHistory,
   getUpdates,
   getServer,
   getServerMetricHistory,
@@ -38,7 +40,7 @@ import {
   updateServerMonitor
 } from "../api/endpoints";
 import type { ApiConfig } from "../api/client";
-import type { CreateAgentEnrollmentInput, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, LoginInput, MetricHistoryRange } from "../types/nodeguard";
+import type { CreateAgentEnrollmentInput, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, LoginInput, MetricHistoryRange, ProxmoxNodeHistoryRange } from "../types/nodeguard";
 import { demoAgentDetails, demoAgents, demoAlerts, demoContainers, demoDocker, demoDomains, getDemoMachineUpdates, getDemoMetricHistory, getDemoOverview, getDemoUpdateCenter, demoMetrics, demoServer, demoServerMonitors, demoServers } from "../demoData";
 import { useSettingsStore } from "../store/settingsStore";
 
@@ -61,7 +63,9 @@ export const queryKeys = {
   alerts: (status: "active" | "resolved" | "all" = "active") => ["alerts", status] as const,
   alert: (id: string) => ["alert", id] as const,
   updates: ["updates"] as const,
-  machineUpdates: (id: string) => ["updates", "machines", id] as const
+  machineUpdates: (id: string) => ["updates", "machines", id] as const,
+  proxmoxNode: (connectionId: string, node: string) => ["proxmox", "nodes", connectionId, node] as const,
+  proxmoxNodeHistory: (connectionId: string, node: string, range: ProxmoxNodeHistoryRange) => ["proxmox", "nodes", connectionId, node, "history", range] as const
 };
 
 function useConfig() {
@@ -103,6 +107,37 @@ export function useOverview() {
       ? Promise.resolve(getDemoOverview(demoAlerts.filter((alert) => !dismissedDemoAlertIds.has(alert.id))))
       : getOverview(config),
     ...liveOptions
+  });
+}
+
+export function useProxmoxNodeDetail(connectionId: string | null, node: string | null) {
+  const config = useConfig();
+  const demoMode = useSettingsStore((state) => state.demoMode);
+  return useQuery({
+    queryKey: [...queryKeys.proxmoxNode(connectionId ?? "", node ?? ""), demoMode],
+    queryFn: ({ signal }) => getProxmoxNodeDetail(config, connectionId ?? "", node ?? "", signal),
+    enabled: Boolean(connectionId && node),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  });
+}
+
+export function useProxmoxNodeHistory(
+  connectionId: string | null,
+  node: string | null,
+  range: ProxmoxNodeHistoryRange,
+  enabled = true,
+) {
+  const config = useConfig();
+  const demoMode = useSettingsStore((state) => state.demoMode);
+  return useQuery({
+    queryKey: [...queryKeys.proxmoxNodeHistory(connectionId ?? "", node ?? "", range), demoMode],
+    queryFn: ({ signal }) => getProxmoxNodeHistory(config, connectionId ?? "", node ?? "", range, signal),
+    enabled: Boolean(connectionId && node && enabled),
+    staleTime: 30_000,
+    placeholderData: (previous) => previous,
+    refetchOnWindowFocus: true,
   });
 }
 

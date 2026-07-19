@@ -58,6 +58,10 @@ async function parseJson(response: Response) {
 
 export async function apiFetch<T>(config: ApiConfig, path: string, init: RequestInit = {}): Promise<T> {
   const controller = new AbortController();
+  const callerSignal = init.signal;
+  const abortFromCaller = () => controller.abort();
+  if (callerSignal?.aborted) controller.abort();
+  else callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
   const timeout = setTimeout(() => controller.abort(), 8000);
   const headers = {
     Accept: "application/json",
@@ -88,11 +92,13 @@ export async function apiFetch<T>(config: ApiConfig, path: string, init: Request
     }
 
     if (error instanceof DOMException && error.name === "AbortError") {
+      if (callerSignal?.aborted) throw error;
       throw new ApiError("Backend request timed out.");
     }
 
     throw new ApiError("Backend is unreachable.");
   } finally {
     clearTimeout(timeout);
+    callerSignal?.removeEventListener("abort", abortFromCaller);
   }
 }

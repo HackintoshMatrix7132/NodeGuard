@@ -8,7 +8,7 @@ import { normalizeApiError } from "./api/errors";
 import { MonitoredExternalLink } from "./components/MonitoredExternalLink";
 import { NodeGuardSelect } from "./components/NodeGuardSelect";
 import { ProxmoxIcon } from "./components/ProxmoxIcon";
-import { ProxmoxDashboardCard, ProxmoxPage, ProxmoxSettingsPanel } from "./components/ProxmoxIntegration";
+import { ProxmoxDashboardCard, ProxmoxNodeDetailPage, ProxmoxPage, ProxmoxSettingsPanel } from "./components/ProxmoxIntegration";
 import { appConfig } from "./config/appConfig";
 import {
   useAddContainerMonitor,
@@ -48,18 +48,20 @@ import {
   useLogin
 } from "./hooks/useNodeGuardQueries";
 import { useSettingsStore } from "./store/settingsStore";
-import type { AgentEnrollmentProgress, AgentStatus, AgentSummary, Alert, Container, ContainerMonitorStatus, CreatedAgentEnrollmentToken, DomainCheck, HealthStatus, MachinePackageUpdate, MachineUpdateSummary, MetricHistory, MetricHistoryPoint, MetricHistoryRange, MetricHistorySummary, MonitoredServerStatus, Server as NodeGuardServer } from "./types/nodeguard";
+import type { AgentEnrollmentProgress, AgentStatus, AgentSummary, Alert, Container, ContainerMonitorStatus, CreatedAgentEnrollmentToken, DomainCheck, HealthStatus, MachinePackageUpdate, MachineUpdateSummary, MetricHistory, MetricHistoryPoint, MetricHistoryRange, MetricHistorySummary, MonitoredServerStatus, ProxmoxNodeHistoryRange, Server as NodeGuardServer } from "./types/nodeguard";
 import { getContainerImageRepositoryUrl } from "./utils/containerImage";
 import { buildAgentCommand } from "./utils/agentCommand";
 import { formatBytes, formatDateTime, formatPercentage, formatRelativeTime, formatResponseTime, formatUptime } from "./utils/format";
 import { getStatusLabel, getStatusTone } from "./utils/status";
 import { currentUpdateCoverage, formatUpdateCount, getMachineUpdateCondition, hasRetainedUpdateInventory, updateSummaryHasCurrentData, updateSummaryUsesRetainedData } from "./utils/updatePresentation";
+import { parseProxmoxNodeLocation, proxmoxNodePath, type ProxmoxNodeRoute } from "./utils/proxmoxNodeRoute";
 
-type View = "dashboard" | "server" | "proxmox" | "agents" | "containers" | "domains" | "updates" | "alerts" | "settings";
+type View = "dashboard" | "server" | "proxmox" | "proxmox-node" | "agents" | "containers" | "domains" | "updates" | "alerts" | "settings";
 type MetricTone = "blue" | "green" | "orange" | "red" | "purple";
 type BreakdownItem = { label: string; value: string; tone?: MetricTone };
 type HistoricalResource = "cpu" | "memory" | "disk" | "swap";
 type HistoricalMetricKey = "cpuUsagePercent" | "memoryUsagePercent" | "diskUsagePercent" | "swapUsagePercent";
+
 
 function LogoMark({ className, label }: { className: string; label?: string }) {
   return (
@@ -3291,13 +3293,16 @@ function UpdatesNavLabel() {
 }
 
 export function App() {
-  const [view, setView] = useState<View>("dashboard");
+  const initialProxmoxNodeRoute = typeof window === "undefined" ? null : parseProxmoxNodeLocation(window.location);
+  const [view, setView] = useState<View>(() => initialProxmoxNodeRoute ? "proxmox-node" : window.location.pathname === "/proxmox" ? "proxmox" : "dashboard");
+  const [proxmoxNodeRoute, setProxmoxNodeRoute] = useState<ProxmoxNodeRoute | null>(initialProxmoxNodeRoute);
   const [containerHostFilter, setContainerHostFilter] = useState<string | null>(null);
   const [pendingUpdateMachineId, setPendingUpdateMachineId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 980px)").matches);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const logoutTimer = useRef<number | null>(null);
   const sidebarRevealRef = useRef<HTMLButtonElement>(null);
+  const sidebarToggleRef = useRef<HTMLButtonElement>(null);
   const focusRevealAfterClose = useRef(false);
   const backendConfig = useSettingsStore((state) => state.backendConfig);
   const demoMode = useSettingsStore((state) => state.demoMode);
@@ -3307,7 +3312,23 @@ export function App() {
   useEffect(() => {
     load();
 
+    const restoreLocation = () => {
+      const route = parseProxmoxNodeLocation(window.location);
+      if (route) {
+        setProxmoxNodeRoute(route);
+        setView("proxmox-node");
+      } else if (window.location.pathname === "/proxmox") {
+        setProxmoxNodeRoute(null);
+        setView("proxmox");
+      } else if (window.location.pathname === "/") {
+        setProxmoxNodeRoute(null);
+        setView("dashboard");
+      }
+    };
+    window.addEventListener("popstate", restoreLocation);
+
     return () => {
+      window.removeEventListener("popstate", restoreLocation);
       if (logoutTimer.current) {
         window.clearTimeout(logoutTimer.current);
       }
@@ -3327,9 +3348,9 @@ export function App() {
     ["alerts", Bell, "Alerts"],
     ["settings", Settings, "Settings"]
   ] as const;
-  const activeNavItem = nav.find(([key]) => key === view);
+  const activeNavItem = nav.find(([key]) => key === (view === "proxmox-node" ? "proxmox" : view));
   const ActiveIcon = activeNavItem?.[1] ?? Gauge;
-  const activeLabel = activeNavItem?.[2] ?? "Dashboard";
+  const activeLabel = view === "proxmox-node" ? "Proxmox node" : activeNavItem?.[2] ?? "Dashboard";
 
   const logout = () => {
     if (isLoggingOut) return;
@@ -3345,18 +3366,48 @@ export function App() {
 
   const selectView = (nextView: View) => {
     setView(nextView);
+    setProxmoxNodeRoute(null);
+    const path = nextView === "proxmox" ? "/proxmox" : "/";
+    if (window.location.pathname !== path || window.location.search) window.history.pushState({}, "", path);
     if (window.matchMedia("(max-width: 980px)").matches) {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       focusRevealAfterClose.current = true;
       setSidebarCollapsed(true);
     }
   };
 
+  const openProxmoxNode = (connectionId: string, node: string) => {
+    const route: ProxmoxNodeRoute = { connectionId, node, tab: "overview", range: "24h" };
+    setProxmoxNodeRoute(route);
+    setView("proxmox-node");
+    window.history.pushState({}, "", proxmoxNodePath(route));
+  };
+
+  const updateProxmoxNodeRoute = (patch: Partial<Pick<ProxmoxNodeRoute, "tab" | "range">>, replace = false) => {
+    setProxmoxNodeRoute((current) => {
+      if (!current) return current;
+      const next = { ...current, ...patch };
+      window.history[replace ? "replaceState" : "pushState"]({}, "", proxmoxNodePath(next));
+      return next;
+    });
+  };
+
+  const closeProxmoxNode = () => {
+    setProxmoxNodeRoute(null);
+    setView("proxmox");
+    window.history.pushState({}, "", "/proxmox");
+  };
+
   const openSidebar = () => {
+    const revealButton = sidebarRevealRef.current;
+    if (document.activeElement === revealButton) revealButton?.blur();
     focusRevealAfterClose.current = false;
     setSidebarCollapsed(false);
+    window.requestAnimationFrame(() => sidebarToggleRef.current?.focus({ preventScroll: true }));
   };
 
   const closeSidebar = () => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     focusRevealAfterClose.current = true;
     setSidebarCollapsed(true);
   };
@@ -3396,6 +3447,7 @@ export function App() {
         <div className="sidebar-top">
           <div className="brand"><LogoMark className="brand-logo" /><span>NodeGuard</span></div>
           <button
+            ref={sidebarToggleRef}
             className="sidebar-toggle"
             onClick={closeSidebar}
             aria-label="Close navigation"
@@ -3406,7 +3458,7 @@ export function App() {
             <PanelLeftClose size={18} aria-hidden="true" />
           </button>
         </div>
-        <nav aria-label="Primary navigation">{nav.map(([key, Icon, label]) => <button key={key} className={view === key ? "active" : ""} aria-current={view === key ? "page" : undefined} onClick={() => selectView(key)}><Icon size={18} aria-hidden="true" /><span className="sidebar-nav-label">{key === "updates" ? <UpdatesNavLabel /> : label}</span></button>)}</nav>
+        <nav aria-label="Primary navigation">{nav.map(([key, Icon, label]) => { const active = view === key || (key === "proxmox" && view === "proxmox-node"); return <button key={key} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={() => selectView(key)}><Icon size={18} aria-hidden="true" /><span className="sidebar-nav-label">{key === "updates" ? <UpdatesNavLabel /> : label}</span></button>; })}</nav>
         <button className="sidebar-logout" onClick={logout} disabled={isLoggingOut}><LogOut size={18} aria-hidden="true" /><span className="sidebar-action-label">{isLoggingOut ? "Logging out" : "Logout"}</span></button>
         </aside>
       </div>
@@ -3423,7 +3475,8 @@ export function App() {
         </header>
         {view === "dashboard" && <Dashboard setView={setView} />}
         {view === "server" && <ServerPage />}
-        {view === "proxmox" && <ProxmoxPage />}
+        {view === "proxmox" && <ProxmoxPage onViewNode={openProxmoxNode} />}
+        {view === "proxmox-node" && proxmoxNodeRoute ? <ProxmoxNodeDetailPage connectionId={proxmoxNodeRoute.connectionId} node={proxmoxNodeRoute.node} tab={proxmoxNodeRoute.tab} range={proxmoxNodeRoute.range} onBack={closeProxmoxNode} onTabChange={(tab) => updateProxmoxNodeRoute({ tab })} onRangeChange={(range) => updateProxmoxNodeRoute({ range }, true)} /> : null}
         {view === "agents" && <AgentsPage onOpenContainers={(agentId) => { setContainerHostFilter(agentId); setView("containers"); }} onOpenUpdates={(agentId) => { setPendingUpdateMachineId(agentId); setView("updates"); }} />}
         {view === "containers" && <ContainersPage initialHostId={containerHostFilter} onHostFilterApplied={() => setContainerHostFilter(null)} />}
         {view === "domains" && <DomainsPage />}

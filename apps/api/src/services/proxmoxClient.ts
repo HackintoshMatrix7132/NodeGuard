@@ -2,6 +2,18 @@ import https from "node:https";
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 
+export type ProxmoxRrdTimeframe = "hour" | "day" | "week" | "month" | "year";
+
+export class ProxmoxApiRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly statusCode: number | null = null,
+  ) {
+    super(message);
+    this.name = "ProxmoxApiRequestError";
+  }
+}
+
 export interface ProxmoxCredentials {
   baseUrl: string;
   tokenUser: string;
@@ -56,12 +68,47 @@ export interface ProxmoxCollectedSnapshot {
   storage: ProxmoxStorageRecord[];
 }
 
+export interface ProxmoxNodeStatusRecord {
+  uptime: number | null;
+  cpuUsage: number | null;
+  cpuModel: string | null;
+  cpuCores: number | null;
+  cpuSockets: number | null;
+  architecture: string | null;
+  memoryUsed: number | null;
+  memoryTotal: number | null;
+  memoryFree: number | null;
+  memoryAvailable: number | null;
+  rootUsed: number | null;
+  rootTotal: number | null;
+  rootFree: number | null;
+  pveVersion: string | null;
+  kernelVersion: string | null;
+}
+
+export interface ProxmoxNodeRrdRecord {
+  timestamp: number;
+  cpuUsage: number | null;
+  memoryUsed: number | null;
+  memoryTotal: number | null;
+  rootUsed: number | null;
+  rootTotal: number | null;
+  networkIn: number | null;
+  networkOut: number | null;
+  diskRead: number | null;
+  diskWrite: number | null;
+}
+
 function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function asString(value: unknown, fallback = "Unknown"): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function asOptionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 export function normalizeProxmoxBaseUrl(value: string): string {
@@ -135,7 +182,13 @@ function requestJson(credentials: ProxmoxCredentials, path: string): Promise<unk
         response.on("end", () => {
           const body = Buffer.concat(chunks).toString("utf8");
           if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
-            reject(new Error(`Proxmox API returned HTTP ${response.statusCode ?? "unknown"}.`));
+            const statusCode = response.statusCode ?? null;
+            const message = statusCode === 401 || statusCode === 403
+              ? "Proxmox API permission denied. Verify the token has PVEAuditor access."
+              : statusCode === 404
+                ? "The requested Proxmox node was not found."
+                : "Proxmox API request failed. Try again after checking the connection.";
+            reject(new ProxmoxApiRequestError(message, statusCode));
             return;
           }
           try {
@@ -158,6 +211,104 @@ function extractData(payload: unknown): unknown {
     throw new Error("Proxmox API response did not contain a data field.");
   }
   return (payload as { data: unknown }).data;
+}
+
+export function normalizeProxmoxNodeStatus(payload: unknown): ProxmoxNodeStatusRecord {
+  const data = extractData(payload);
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Proxmox node status response was malformed.");
+  }
+
+  const status = data as Record<string, unknown>;
+  const cpu = status.cpuinfo && typeof status.cpuinfo === "object"
+    ? status.cpuinfo as Record<string, unknown>
+    : {};
+  const memory = status.memory && typeof status.memory === "object"
+    ? status.memory as Record<string, unknown>
+    : {};
+  const root = status.rootfs && typeof status.rootfs === "object"
+    ? status.rootfs as Record<string, unknown>
+    : {};
+  const kernel = status["current-kernel"] && typeof status["current-kernel"] === "object"
+    ? status["current-kernel"] as Record<string, unknown>
+    : {};
+
+  return {
+    uptime: asNumber(status.uptime),
+    cpuUsage: asNumber(status.cpu),
+    cpuModel: asOptionalString(cpu.model),
+    cpuCores: asNumber(cpu.cores ?? cpu.cpus),
+    cpuSockets: asNumber(cpu.sockets),
+    architecture: asOptionalString(kernel.machine ?? status.architecture),
+    memoryUsed: asNumber(memory.used),
+    memoryTotal: asNumber(memory.total),
+    memoryFree: asNumber(memory.free),
+    memoryAvailable: asNumber(memory.available),
+    rootUsed: asNumber(root.used),
+    rootTotal: asNumber(root.total),
+    rootFree: asNumber(root.free ?? root.avail),
+    pveVersion: asOptionalString(status.pveversion),
+    kernelVersion: asOptionalString(status.kversion ?? kernel.release),
+  };
+}
+
+export function normalizeProxmoxNodeRrd(payload: unknown): ProxmoxNodeRrdRecord[] {
+  const data = extractData(payload);
+  if (!Array.isArray(data)) {
+    throw new Error("Proxmox node history response was malformed.");
+  }
+
+  return data
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && !Array.isArray(item)))
+    .map((item) => ({
+      timestamp: asNumber(item.time) ?? Number.NaN,
+      cpuUsage: asNumber(item.cpu),
+      memoryUsed: asNumber(item.memused ?? item.mem),
+      memoryTotal: asNumber(item.memtotal ?? item.maxmem),
+      rootUsed: asNumber(item.rootused),
+      rootTotal: asNumber(item.roottotal),
+      networkIn: asNumber(item.netin),
+      networkOut: asNumber(item.netout),
+      diskRead: asNumber(item.diskread),
+      diskWrite: asNumber(item.diskwrite),
+    }))
+    .filter((item) => Number.isFinite(item.timestamp));
+}
+
+export async function collectProxmoxNodeStatus(
+  credentials: ProxmoxCredentials,
+  node: string,
+): Promise<ProxmoxNodeStatusRecord> {
+  return normalizeProxmoxNodeStatus(
+    await requestJson(credentials, `/nodes/${encodeURIComponent(node)}/status`),
+  );
+}
+
+export async function collectProxmoxNodeRrd(
+  credentials: ProxmoxCredentials,
+  node: string,
+  timeframe: ProxmoxRrdTimeframe,
+): Promise<ProxmoxNodeRrdRecord[]> {
+  return normalizeProxmoxNodeRrd(
+    await requestJson(
+      credentials,
+      `/nodes/${encodeURIComponent(node)}/rrddata?timeframe=${timeframe}&cf=AVERAGE`,
+    ),
+  );
+}
+
+export async function collectProxmoxClusterName(
+  credentials: ProxmoxCredentials,
+): Promise<string | null> {
+  const data = extractData(await requestJson(credentials, "/cluster/status"));
+  if (!Array.isArray(data)) return null;
+  const cluster = data.find(
+    (item): item is Record<string, unknown> => Boolean(
+      item && typeof item === "object" && !Array.isArray(item)
+      && (item as Record<string, unknown>).type === "cluster",
+    ),
+  );
+  return cluster ? asOptionalString(cluster.name) : null;
 }
 
 export async function collectProxmoxSnapshot(

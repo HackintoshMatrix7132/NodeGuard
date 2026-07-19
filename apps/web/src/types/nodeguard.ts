@@ -377,3 +377,86 @@ export type BackendConfig = {
   user: AuthUser;
   connectedAt: string;
 };
+
+export type ProxmoxNodeHistoryRange = "1h" | "6h" | "12h" | "24h" | "7d" | "30d" | "90d";
+export type ProxmoxNodeTab = "overview" | "history";
+
+export type ProxmoxNodeDetail = {
+  connectionId: string;
+  connectionName: string;
+  connectionStatus: string;
+  displayName: string;
+  node: string;
+  status: string;
+  uptimeSeconds: number | null;
+  lastSyncAt: string | null;
+  lastTelemetryAt: string | null;
+  stale: boolean;
+  platform: {
+    pveVersion: string | null;
+    kernelVersion: string | null;
+    cluster: string | null;
+    connection: string | null;
+  };
+  hardware: {
+    cpuModel: string | null;
+    cpuCores: number | null;
+    cpuSockets: number | null;
+    architecture: string | null;
+  };
+  memory: {
+    usagePercent: number | null;
+    usedBytes: number | null;
+    totalBytes: number | null;
+    freeBytes: number | null;
+    reclaimableBytes: number | null;
+  };
+  storage: {
+    usagePercent: number | null;
+    usedBytes: number | null;
+    totalBytes: number | null;
+    freeBytes: number | null;
+    readBytesPerSecond: number | null;
+    writeBytesPerSecond: number | null;
+  };
+  telemetry: {
+    networkInBytesPerSecond: number | null;
+    networkOutBytesPerSecond: number | null;
+    source: string;
+    state: string;
+  };
+  thermals: {
+    sensors: Array<{ name: string; celsius: number }>;
+    lastUpdatedAt: string | null;
+  };
+};
+
+export type ProxmoxNodeHistoryPoint = {
+  timestamp: string;
+  cpuUsagePercent: number | null;
+  memoryUsagePercent: number | null;
+  rootUsagePercent: number | null;
+  networkInBytesPerSecond: number | null;
+  networkOutBytesPerSecond: number | null;
+  diskReadBytesPerSecond: number | null;
+  diskWriteBytesPerSecond: number | null;
+  temperaturesCelsius: Record<string, number>;
+};
+
+export type ProxmoxNodeHistory = {
+  connectionId: string;
+  node: string;
+  range: ProxmoxNodeHistoryRange;
+  sourceTimeframe: "hour" | "day" | "week" | "month" | "year";
+  from: string;
+  to: string;
+  fetchedAt: string;
+  stale: boolean;
+  points: ProxmoxNodeHistoryPoint[];
+  availableMetrics: {
+    utilization: boolean;
+    network: boolean;
+    disk: boolean;
+    thermals: boolean;
+  };
+};

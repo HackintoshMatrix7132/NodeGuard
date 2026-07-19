@@ -1,4 +1,4 @@
-import type { AgentDetail, AgentEnrollmentProgress, AgentEnrollmentToken, AgentSummary, Alert, AuthSession, Container, CreateAgentEnrollmentInput, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, CreatedAgentEnrollmentToken, DockerSnapshot, DomainCheck, LoginInput, MachineUpdateDetail, MetricHistory, MetricHistoryRange, MetricSnapshot, MonitoredServerStatus, Overview, ServerListItem, Server, UpdateCenterSnapshot } from "../types/nodeguard";
+import type { AgentDetail, AgentEnrollmentProgress, AgentEnrollmentToken, AgentSummary, Alert, AuthSession, Container, CreateAgentEnrollmentInput, CreateContainerMonitorInput, CreateDomainInput, CreateMonitoredServerInput, CreatedAgentEnrollmentToken, DockerSnapshot, DomainCheck, LoginInput, MachineUpdateDetail, MetricHistory, MetricHistoryRange, MetricSnapshot, MonitoredServerStatus, Overview, ProxmoxNodeDetail, ProxmoxNodeHistory, ProxmoxNodeHistoryRange, ServerListItem, Server, UpdateCenterSnapshot } from "../types/nodeguard";
 import type { ApiConfig } from "./client";
 import { apiFetch } from "./client";
 
@@ -19,6 +19,28 @@ export function logout(config: ApiConfig) {
 
 export function getOverview(config: ApiConfig) {
   return apiFetch<Overview>(config, "/api/overview");
+}
+
+export function getProxmoxNodeDetail(config: ApiConfig, connectionId: string, node: string, signal?: AbortSignal) {
+  return apiFetch<ProxmoxNodeDetail>(
+    config,
+    `/api/proxmox/connections/${encodeURIComponent(connectionId)}/nodes/${encodeURIComponent(node)}`,
+    { signal },
+  );
+}
+
+export function getProxmoxNodeHistory(
+  config: ApiConfig,
+  connectionId: string,
+  node: string,
+  range: ProxmoxNodeHistoryRange,
+  signal?: AbortSignal,
+) {
+  return apiFetch<ProxmoxNodeHistory>(
+    config,
+    `/api/proxmox/connections/${encodeURIComponent(connectionId)}/nodes/${encodeURIComponent(node)}/history?range=${range}`,
+    { signal },
+  );
 }
 
 export function getServers(config: ApiConfig) {

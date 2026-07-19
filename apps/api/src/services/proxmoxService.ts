@@ -297,6 +297,33 @@ function getConnectionRow(id: string): ConnectionRow | undefined {
     .get(id) as ConnectionRow | undefined;
 }
 
+export function getProxmoxNodeConnectionContext(
+  connectionId: string,
+  nodeName: string,
+) {
+  const row = getConnectionRow(connectionId);
+  if (!row) throw new Error("Proxmox connection was not found.");
+  if (!row.enabled) throw new Error("Proxmox connection is disabled.");
+
+  const node = rowsForConnection(connectionId).nodes.find(
+    (item) => item.name === nodeName || item.id === `node/${nodeName}`,
+  );
+  if (!node) throw new Error("Proxmox node was not found.");
+
+  return {
+    connection: {
+      id: row.id,
+      name: row.name,
+      status: connectionStatus(row),
+      version: row.version,
+      lastCheckedAt: row.last_checked_at,
+      lastSuccessAt: row.last_success_at,
+    },
+    node,
+    credentials: credentials(row),
+  };
+}
+
 export function listProxmoxConnections() {
   return (
     db

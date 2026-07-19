@@ -56,7 +56,7 @@ NodeGuard brings those answers into one focused, read-only dashboard. The projec
 | **06** | **Read-only update discovery** | Linux Agents discover APT package updates on Debian, Ubuntu, and Proxmox VE hosts, including security-origin and reboot-required status. |
 | **07** | **Safe public demonstration** | Demo users are restricted at the backend to isolated fictional data and cannot access live infrastructure or configuration APIs. |
 | **08** | **Production-style deployment** | A single Docker image serves the web UI and API, with SQLite persistence and HTTPS reverse-proxy support. |
-| **09** | **Compact operational interface** | A shared action and typography system keeps dense dashboards, forms, tables, and mobile cards consistent without reducing readable text or practical touch targets. |
+| **09** | **Compact operational interface** | A shared action, typography, badge, and icon-control system keeps dense dashboards, forms, tables, and mobile cards consistent, with optically centered 14px action icons and practical touch targets. |
 
 ## Product tour
 
@@ -127,7 +127,7 @@ The demo environment contains fictional servers, Docker workloads, service state
 - Coordinated server, Agent, Docker, domain/service, alert, update, and Proxmox summaries with stable loading states
 - Recent alerts and service reachability
 - Compact responsive composition that keeps summary metrics in a two-column phone grid without horizontal scrolling
-- Responsive dark interface with collapsible navigation
+- Responsive dark interface with compact 13px sidebar navigation, proportionate icons, and a balanced collapsed/mobile presentation
 - Subtle motion with `prefers-reduced-motion` support
 - Screenshot privacy mode for safer demos and portfolio captures
 
@@ -154,6 +154,16 @@ The demo environment contains fictional servers, Docker workloads, service state
 - Persistent history across `1h`, `6h`, `24h`, `7d`, and `30d` ranges
 - Additional NodeGuard backend or plain health-URL monitors
 - Per-monitor self-signed HTTPS support for trusted internal services
+
+### Proxmox VE
+
+- Read-only multi-connection inventory for nodes, QEMU virtual machines, LXC containers, and storage
+- Compact node detail pages with Overview and History tabs
+- On-demand Proxmox RRD charts for CPU, memory, root storage, network I/O, and disk I/O across `1h`, `6h`, `12h`, `24h`, `7d`, `30d`, and `90d`
+- Honest **Not available** treatment for optional fields and telemetry, including thermals when Proxmox does not supply samples
+- No VM/LXC controls, no arbitrary API proxy, and no separate NodeGuard Proxmox time-series database
+
+See **[`docs/PROXMOX.md`](docs/PROXMOX.md)** for token permissions, data sources, range mapping, security boundaries, and limitations.
 
 ### Docker containers
 
@@ -559,6 +569,9 @@ GET    /api/alerts/:id
 DELETE /api/alerts/:id
 GET    /api/updates
 GET    /api/updates/machines/:agentId
+GET    /api/proxmox
+GET    /api/proxmox/connections/:id/nodes/:node
+GET    /api/proxmox/connections/:id/nodes/:node/history?range=1h|6h|12h|24h|7d|30d|90d
 POST   /api/checks/run
 ```
 

@@ -2,20 +2,26 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   Box,
   Check,
   CheckCircle2,
   CloudCog,
+  Cpu,
   Database,
   HardDrive,
+  Eye,
   LoaderCircle,
   LockKeyhole,
+  MemoryStick,
+  Network,
   Pencil,
   Plus,
   Power,
   RefreshCw,
   Server,
   ShieldCheck,
+  Thermometer,
   Trash2,
   X,
   XCircle,
@@ -35,7 +41,10 @@ import { createPortal } from "react-dom";
 import { apiFetch, getDefaultBackendUrl } from "../api/client";
 import { ApiError } from "../api/errors";
 import { useSettingsStore } from "../store/settingsStore";
+import { useProxmoxNodeDetail, useProxmoxNodeHistory } from "../hooks/useNodeGuardQueries";
+import type { ProxmoxNodeDetail, ProxmoxNodeHistory, ProxmoxNodeHistoryPoint, ProxmoxNodeHistoryRange, ProxmoxNodeTab } from "../types/nodeguard";
 import { MonitoredExternalLink } from "./MonitoredExternalLink";
+import { NodeGuardSelect } from "./NodeGuardSelect";
 
 type ProxmoxStatus =
   | "available"
@@ -714,7 +723,13 @@ function ConnectionsOverview({ connections }: { connections: ProxmoxConnection[]
   );
 }
 
-function NodesTable({ nodes }: { nodes: ProxmoxNode[] }) {
+export function NodesTable({
+  nodes,
+  onViewNode,
+}: {
+  nodes: ProxmoxNode[];
+  onViewNode?: (connectionId: string, node: string) => void;
+}) {
   if (nodes.length === 0) {
     return (
       <EmptyState
@@ -737,6 +752,7 @@ function NodesTable({ nodes }: { nodes: ProxmoxNode[] }) {
             <th>Uptime</th>
             <th>Version</th>
             <th>Last sync</th>
+            <th className="proxmox-actions-heading">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -781,6 +797,18 @@ function NodesTable({ nodes }: { nodes: ProxmoxNode[] }) {
                 </td>
                 <td data-label="Version">{node.version || "Unavailable"}</td>
                 <td data-label="Last sync">{formatDate(node.lastSyncAt)}</td>
+                <td data-label="Actions" className="proxmox-node-row-actions">
+                  <button
+                    aria-label={`View details for ${node.node ?? node.name ?? "Proxmox node"}`}
+                    className="proxmox-icon-button"
+                    disabled={!node.connectionId || !(node.node ?? node.name)}
+                    onClick={() => onViewNode?.(node.connectionId, node.node ?? node.name ?? "")}
+                    title="View node details"
+                    type="button"
+                  >
+                    <Eye size={16} aria-hidden="true" />
+                  </button>
+                </td>
               </tr>
             );
           })}
@@ -969,7 +997,11 @@ function StorageTable({ storage }: { storage: ProxmoxStorage[] }) {
   );
 }
 
-export function ProxmoxPage() {
+export function ProxmoxPage({
+  onViewNode,
+}: {
+  onViewNode?: (connectionId: string, node: string) => void;
+}) {
   const { snapshot, loading, refreshing, error, reload } = useProxmoxSnapshot();
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -1069,7 +1101,7 @@ export function ProxmoxPage() {
             <ConnectionsOverview connections={snapshot.connections} />
           </Panel>
           <Panel title="Nodes" icon={<Server size={18} />}>
-            <NodesTable nodes={snapshot.nodes} />
+            <NodesTable nodes={snapshot.nodes} onViewNode={onViewNode} />
           </Panel>
           <Panel title="Virtual machines and containers" icon={<Box size={18} />}>
             <GuestsTable guests={snapshot.guests} />
@@ -1079,6 +1111,494 @@ export function ProxmoxPage() {
           </Panel>
         </>
       )}
+    </div>
+  );
+}
+
+export const PROXMOX_NODE_HISTORY_RANGES: ReadonlyArray<{
+  value: ProxmoxNodeHistoryRange;
+  label: string;
+}> = [
+  { value: "1h", label: "1 hour" },
+  { value: "6h", label: "6 hours" },
+  { value: "12h", label: "12 hours" },
+  { value: "24h", label: "24 hours" },
+  { value: "7d", label: "7 days" },
+  { value: "30d", label: "30 days" },
+  { value: "90d", label: "90 days" },
+];
+
+export function nextProxmoxNodeTab(
+  current: ProxmoxNodeTab,
+  key: string,
+): ProxmoxNodeTab | null {
+  if (key === "Home") return "overview";
+  if (key === "End") return "history";
+  if (key !== "ArrowLeft" && key !== "ArrowRight") return null;
+  return current === "overview" ? "history" : "overview";
+}
+
+function availableText(value: string | number | null | undefined): string {
+  return value === null || value === undefined || value === "" ? "Not available" : String(value);
+}
+
+function detailBytes(value: number | null): string {
+  return value === null ? "Not available" : formatBytes(value);
+}
+
+function detailPercent(value: number | null): string {
+  return value === null ? "Not available" : `${value.toFixed(value >= 10 ? 1 : 2)}%`;
+}
+
+function detailDate(value: string | null): string {
+  return value ? formatDate(value) : "Not available";
+}
+
+function formatRate(value: number | null): string {
+  return value === null ? "Not available" : `${formatBytes(value)}/s`;
+}
+
+function DetailRows({
+  rows,
+}: {
+  rows: Array<{ label: string; value: ReactNode; title?: string; long?: boolean }>;
+}) {
+  return (
+    <dl className="proxmox-node-detail-list">
+      {rows.map((row) => (
+        <div className={row.long ? "proxmox-node-detail-row--long" : undefined} key={row.label}>
+          <dt>{row.label}</dt>
+          <dd title={row.title ?? (typeof row.value === "string" ? row.value : undefined)}>{row.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function NodeDetailCard({
+  title,
+  icon,
+  children,
+  className = "",
+}: {
+  title: string;
+  icon?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`proxmox-node-detail-card ${className}`.trim()}>
+      <header className="proxmox-node-detail-card__header">
+        {icon ? <span aria-hidden="true">{icon}</span> : null}
+        <h2>{title}</h2>
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function NodeResourceUsage({
+  label,
+  percent,
+  used,
+  total,
+  tone,
+}: {
+  label: string;
+  percent: number | null;
+  used: number | null;
+  total: number | null;
+  tone: "cyan" | "amber";
+}) {
+  const hasCapacity = used !== null && total !== null;
+  return (
+    <div className="proxmox-node-resource-usage">
+      <div className="proxmox-node-resource-usage__heading">
+        <span>{label}</span>
+        <strong>{detailPercent(percent)}</strong>
+      </div>
+      {percent !== null ? <ProgressBar tone={tone} value={percent} /> : null}
+      <span className="proxmox-node-resource-usage__summary">
+        {hasCapacity ? `${detailBytes(used)} / ${detailBytes(total)}` : "Not available"}
+      </span>
+    </div>
+  );
+}
+
+export function ProxmoxNodeOverview({ detail }: { detail: ProxmoxNodeDetail }) {
+  return (
+    <div className="proxmox-node-overview-grid">
+      <NodeDetailCard icon={<Server size={15} />} title="System">
+        <DetailRows rows={[
+          { label: "Display name", value: availableText(detail.displayName), title: detail.displayName },
+          { label: "Node", value: availableText(detail.node), title: detail.node },
+          { label: "Status", value: <StatusBadge status={detail.status as ProxmoxStatus} /> },
+          { label: "Uptime", value: detail.uptimeSeconds === null ? "Not available" : formatUptime(detail.uptimeSeconds) },
+          { label: "Last sync", value: detailDate(detail.lastSyncAt) },
+        ]} />
+      </NodeDetailCard>
+      <NodeDetailCard icon={<Database size={15} />} title="Platform">
+        <DetailRows rows={[
+          { label: "Proxmox VE", value: availableText(detail.platform.pveVersion), title: detail.platform.pveVersion ?? undefined, long: true },
+          { label: "Kernel", value: availableText(detail.platform.kernelVersion), title: detail.platform.kernelVersion ?? undefined, long: true },
+          { label: "Cluster", value: availableText(detail.platform.cluster), title: detail.platform.cluster ?? undefined },
+          { label: "Connection", value: availableText(detail.platform.connection), title: detail.platform.connection ?? undefined },
+        ]} />
+      </NodeDetailCard>
+      <NodeDetailCard icon={<Cpu size={15} />} title="Hardware">
+        <DetailRows rows={[
+          { label: "CPU model", value: availableText(detail.hardware.cpuModel), title: detail.hardware.cpuModel ?? undefined, long: true },
+          { label: "CPU cores", value: availableText(detail.hardware.cpuCores) },
+          { label: "CPU sockets", value: availableText(detail.hardware.cpuSockets) },
+          { label: "Architecture", value: availableText(detail.hardware.architecture) },
+        ]} />
+      </NodeDetailCard>
+      <NodeDetailCard icon={<MemoryStick size={15} />} title="Memory">
+        <NodeResourceUsage label="Usage" percent={detail.memory.usagePercent} used={detail.memory.usedBytes} total={detail.memory.totalBytes} tone="amber" />
+        <DetailRows rows={[
+          { label: "Free", value: detailBytes(detail.memory.freeBytes) },
+          { label: "Reclaimable / cache", value: detailBytes(detail.memory.reclaimableBytes) },
+        ]} />
+      </NodeDetailCard>
+      <NodeDetailCard icon={<HardDrive size={15} />} title="Storage">
+        <NodeResourceUsage label="Root usage" percent={detail.storage.usagePercent} used={detail.storage.usedBytes} total={detail.storage.totalBytes} tone="cyan" />
+        <DetailRows rows={[
+          { label: "Root free", value: detailBytes(detail.storage.freeBytes) },
+          { label: "Disk read", value: formatRate(detail.storage.readBytesPerSecond) },
+          { label: "Disk write", value: formatRate(detail.storage.writeBytesPerSecond) },
+        ]} />
+      </NodeDetailCard>
+      <NodeDetailCard icon={<Network size={15} />} title="Telemetry">
+        <DetailRows rows={[
+          { label: "Connection health", value: <StatusBadge status={detail.connectionStatus as ProxmoxStatus} /> },
+          { label: "Network input", value: formatRate(detail.telemetry.networkInBytesPerSecond) },
+          { label: "Network output", value: formatRate(detail.telemetry.networkOutBytesPerSecond) },
+          { label: "Monitoring state", value: titleCase(detail.telemetry.state) },
+          { label: "Source", value: detail.telemetry.source, title: detail.telemetry.source },
+          { label: "Last telemetry", value: detailDate(detail.lastTelemetryAt) },
+        ]} />
+      </NodeDetailCard>
+      <NodeDetailCard icon={<Thermometer size={15} />} title="Thermals">
+        {detail.thermals.sensors.length ? (
+          <DetailRows rows={[
+            ...detail.thermals.sensors.map((sensor) => ({ label: sensor.name, value: `${sensor.celsius.toFixed(1)}°C` })),
+            { label: "Last updated", value: detailDate(detail.thermals.lastUpdatedAt) },
+          ]} />
+        ) : (
+          <div className="proxmox-node-unavailable">
+            <Thermometer aria-hidden="true" size={18} />
+            <strong>Not available</strong>
+            <span>Temperature telemetry is not exposed by this node.</span>
+          </div>
+        )}
+      </NodeDetailCard>
+    </div>
+  );
+}
+
+type HistorySeries = {
+  key: keyof Omit<ProxmoxNodeHistoryPoint, "timestamp" | "temperaturesCelsius">;
+  label: string;
+  color: string;
+};
+
+const PROXMOX_CHART_WIDTH = 640;
+const PROXMOX_CHART_HEIGHT = 230;
+const PROXMOX_CHART_PLOT = { left: 72, right: 14, top: 16, bottom: 30 };
+
+function chartPath(
+  points: ProxmoxNodeHistoryPoint[],
+  key: HistorySeries["key"],
+  width: number,
+  height: number,
+  max: number,
+): string {
+  const plot = PROXMOX_CHART_PLOT;
+  let path = "";
+  points.forEach((point, index) => {
+    const value = point[key];
+    if (typeof value !== "number" || !Number.isFinite(value)) return;
+    const x = plot.left + (index / Math.max(1, points.length - 1)) * (width - plot.left - plot.right);
+    const y = plot.top + (1 - Math.max(0, Math.min(max, value)) / max) * (height - plot.top - plot.bottom);
+    const previous = index > 0 ? points[index - 1]?.[key] : null;
+    path += `${typeof previous === "number" ? "L" : "M"}${x.toFixed(2)} ${y.toFixed(2)} `;
+  });
+  return path.trim();
+}
+
+function compactAxisTime(timestamp: string, range: ProxmoxNodeHistoryRange): string {
+  const date = new Date(timestamp);
+  return new Intl.DateTimeFormat(undefined, range.endsWith("h")
+    ? { hour: "2-digit", minute: "2-digit" }
+    : { month: "short", day: "numeric" }).format(date);
+}
+
+function ProxmoxHistoryChart({
+  title,
+  icon,
+  points,
+  series,
+  range,
+  percent = false,
+}: {
+  title: string;
+  icon: ReactNode;
+  points: ProxmoxNodeHistoryPoint[];
+  series: HistorySeries[];
+  range: ProxmoxNodeHistoryRange;
+  percent?: boolean;
+}) {
+  const usable = points.filter((point) => series.some((item) => typeof point[item.key] === "number"));
+  const [activeIndex, setActiveIndex] = useState(Math.max(0, usable.length - 1));
+  const width = PROXMOX_CHART_WIDTH;
+  const height = PROXMOX_CHART_HEIGHT;
+  const values = usable.flatMap((point) => series.map((item) => point[item.key])).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const max = percent ? 100 : Math.max(1, ...values) * 1.08;
+  const active = usable[Math.min(activeIndex, Math.max(0, usable.length - 1))];
+  const valueFormatter = percent ? (value: number) => `${value.toFixed(1)}%` : (value: number) => formatRate(value);
+
+  useEffect(() => {
+    setActiveIndex(Math.max(0, usable.length - 1));
+  }, [usable.length]);
+
+  if (!usable.length) {
+    return (
+      <HistoryUnavailableCard description="No usable samples were returned for this metric." icon={icon} title={title} />
+    );
+  }
+
+  const updateFromPointer = (event: React.PointerEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    setActiveIndex(Math.round(ratio * (usable.length - 1)));
+  };
+
+  return (
+    <section className="proxmox-history-chart-card">
+      <header className="proxmox-history-chart-card__header">
+        <div className="proxmox-history-chart-card__title">
+          <span aria-hidden="true">{icon}</span>
+          <h2>{title}</h2>
+        </div>
+        <div className="proxmox-chart-legend" aria-label={`${title} legend`}>
+          {series.map((item) => {
+            const latest = active?.[item.key];
+            return <span key={item.key}><i style={{ backgroundColor: item.color }} />{item.label} <strong>{typeof latest === "number" ? valueFormatter(latest) : "Not available"}</strong></span>;
+          })}
+        </div>
+      </header>
+      <div className="proxmox-history-chart-wrap">
+        <svg
+          aria-label={`${title} history. Use left and right arrow keys to inspect samples.`}
+          className="proxmox-history-chart"
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft") { event.preventDefault(); setActiveIndex((value) => Math.max(0, value - 1)); }
+            if (event.key === "ArrowRight") { event.preventDefault(); setActiveIndex((value) => Math.min(usable.length - 1, value + 1)); }
+          }}
+          onPointerMove={updateFromPointer}
+          role="img"
+          tabIndex={0}
+          viewBox={`0 0 ${width} ${height}`}
+        >
+          {[0, 0.5, 1].map((ratio) => {
+            const y = PROXMOX_CHART_PLOT.top + ratio * (height - PROXMOX_CHART_PLOT.top - PROXMOX_CHART_PLOT.bottom);
+            const value = max * (1 - ratio);
+            return <g key={ratio}><line className="proxmox-chart-grid-line" x1={PROXMOX_CHART_PLOT.left} x2={width - PROXMOX_CHART_PLOT.right} y1={y} y2={y} /><text className="proxmox-chart-axis" x={PROXMOX_CHART_PLOT.left - 7} y={y + 4} textAnchor="end">{percent ? `${Math.round(value)}%` : formatRate(value)}</text></g>;
+          })}
+          {series.map((item) => <path className="proxmox-chart-line" d={chartPath(usable, item.key, width, height, max)} key={item.key} style={{ stroke: item.color }} />)}
+          {active ? (() => {
+            const x = PROXMOX_CHART_PLOT.left + (activeIndex / Math.max(1, usable.length - 1)) * (width - PROXMOX_CHART_PLOT.left - PROXMOX_CHART_PLOT.right);
+            return <line className="proxmox-chart-cursor" x1={x} x2={x} y1={PROXMOX_CHART_PLOT.top} y2={height - PROXMOX_CHART_PLOT.bottom} />;
+          })() : null}
+          <text className="proxmox-chart-axis" x={PROXMOX_CHART_PLOT.left} y={height - 8}>{compactAxisTime(usable[0]!.timestamp, range)}</text>
+          <text className="proxmox-chart-axis" x={width - PROXMOX_CHART_PLOT.right} y={height - 8} textAnchor="end">{compactAxisTime(usable.at(-1)!.timestamp, range)}</text>
+        </svg>
+      </div>
+      <div className="proxmox-chart-current" aria-live="polite">
+        <span>Selected sample</span>
+        <strong>{active ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(active.timestamp)) : "Not available"}</strong>
+      </div>
+    </section>
+  );
+}
+
+function HistoryUnavailableCard({
+  title,
+  description,
+  icon,
+}: {
+  title: string;
+  description: string;
+  icon: ReactNode;
+}) {
+  return (
+    <section className="proxmox-history-chart-card proxmox-history-chart-card--unavailable">
+      <header className="proxmox-history-chart-card__header">
+        <div className="proxmox-history-chart-card__title">
+          <span aria-hidden="true">{icon}</span>
+          <h2>{title}</h2>
+        </div>
+      </header>
+      <div className="proxmox-node-unavailable">
+        <span aria-hidden="true" className="proxmox-node-unavailable__icon">{icon}</span>
+        <strong>Not available</strong>
+        <span>{description}</span>
+      </div>
+    </section>
+  );
+}
+
+export function ProxmoxNodeHistoryView({
+  history,
+}: {
+  history: ProxmoxNodeHistory;
+}) {
+  return (
+    <div className="proxmox-node-history-grid">
+      <ProxmoxHistoryChart
+        icon={<Activity size={15} />}
+        percent
+        points={history.points}
+        range={history.range}
+        series={[
+          { key: "cpuUsagePercent", label: "CPU", color: "#8b5cf6" },
+          { key: "memoryUsagePercent", label: "Memory", color: "#f59e0b" },
+          { key: "rootUsagePercent", label: "Root", color: "#22c55e" },
+        ]}
+        title="Utilization"
+      />
+      <ProxmoxHistoryChart
+        icon={<Network size={15} />}
+        points={history.points}
+        range={history.range}
+        series={[
+          { key: "networkInBytesPerSecond", label: "Inbound", color: "#10b981" },
+          { key: "networkOutBytesPerSecond", label: "Outbound", color: "#fb923c" },
+        ]}
+        title="Network I/O"
+      />
+      <ProxmoxHistoryChart
+        icon={<HardDrive size={15} />}
+        points={history.points}
+        range={history.range}
+        series={[
+          { key: "diskReadBytesPerSecond", label: "Read", color: "#3b82f6" },
+          { key: "diskWriteBytesPerSecond", label: "Write", color: "#f59e0b" },
+        ]}
+        title="Disk I/O"
+      />
+      <HistoryUnavailableCard description="Temperature history is not exposed by this node." icon={<Thermometer size={15} />} title="Thermals" />
+    </div>
+  );
+}
+
+function ProxmoxNodeSkeleton({ view }: { view: ProxmoxNodeTab }) {
+  const count = view === "history" ? 4 : 7;
+  return (
+    <div aria-label={view === "history" ? "Loading history" : "Loading node overview"} className={`proxmox-node-skeleton proxmox-node-skeleton--${view}`} role="status">
+      {Array.from({ length: count }, (_, index) => (
+        <div className="proxmox-node-skeleton__card" key={index}>
+          <span />
+          <i />
+          <i />
+          <i />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ProxmoxNodeDetailPage({
+  connectionId,
+  node,
+  tab,
+  range,
+  onBack,
+  onTabChange,
+  onRangeChange,
+}: {
+  connectionId: string;
+  node: string;
+  tab: ProxmoxNodeTab;
+  range: ProxmoxNodeHistoryRange;
+  onBack: () => void;
+  onTabChange: (tab: ProxmoxNodeTab) => void;
+  onRangeChange: (range: ProxmoxNodeHistoryRange) => void;
+}) {
+  const detail = useProxmoxNodeDetail(connectionId, node);
+  const history = useProxmoxNodeHistory(connectionId, node, range, tab === "history");
+  const tabs: ProxmoxNodeTab[] = ["overview", "history"];
+
+  const handleTabKey = (event: React.KeyboardEvent<HTMLButtonElement>, current: ProxmoxNodeTab) => {
+    const next = nextProxmoxNodeTab(current, event.key);
+    if (!next) return;
+    event.preventDefault();
+    onTabChange(next);
+    window.requestAnimationFrame(() => document.getElementById(`proxmox-node-tab-${next}`)?.focus());
+  };
+
+  return (
+    <div className="proxmox-page proxmox-node-page">
+      <header className="proxmox-node-heading">
+        <button aria-label="Back to Proxmox" className="proxmox-icon-button" onClick={onBack} title="Back to Proxmox" type="button"><ArrowLeft size={16} /></button>
+        <div className="proxmox-node-heading__identity">
+          <h2>{detail.data?.displayName ?? node}</h2>
+          <p>{detail.data ? `${detail.data.node} · ${detail.data.connectionName}` : node}</p>
+        </div>
+        <div className="proxmox-node-heading__state">
+          {detail.data ? <StatusBadge status={detail.data.status as ProxmoxStatus} /> : null}
+          <span className="proxmox-node-heading__sync">Last sync {detailDate(detail.data?.lastSyncAt ?? null)}</span>
+        </div>
+      </header>
+
+      <div className="proxmox-node-tabs">
+        <div className="proxmox-node-tabs__list" role="tablist" aria-label="Proxmox node details">
+          {tabs.map((value) => (
+            <button aria-controls={`proxmox-node-${value}`} aria-selected={tab === value} id={`proxmox-node-tab-${value}`} key={value} onClick={() => onTabChange(value)} onKeyDown={(event) => handleTabKey(event, value)} role="tab" tabIndex={tab === value ? 0 : -1} type="button">{titleCase(value)}</button>
+          ))}
+        </div>
+        {tab === "history" ? (
+          <div className="proxmox-history-controls">
+            {history.isFetching && history.data ? <span className="proxmox-history-controls__refresh" role="status"><LoaderCircle className="proxmox-spin" size={13} />Refreshing</span> : null}
+            <span aria-hidden="true" className="proxmox-history-controls__label">Range</span>
+            <NodeGuardSelect
+              className="proxmox-history-range-select"
+              label="History range"
+              labelPosition="hidden"
+              onChange={(value) => onRangeChange(value as ProxmoxNodeHistoryRange)}
+              options={PROXMOX_NODE_HISTORY_RANGES}
+              value={range}
+            />
+          </div>
+        ) : null}
+      </div>
+
+      {detail.isPending && !detail.data ? <ProxmoxNodeSkeleton view={tab} /> : null}
+      {detail.error && !detail.data ? (
+        <Panel title="Node unavailable" icon={<AlertTriangle size={18} />} actions={<button className="proxmox-button proxmox-button--secondary" onClick={() => void detail.refetch()} type="button"><RefreshCw size={16} />Retry</button>}>
+          <ErrorBanner message={detail.error instanceof Error ? detail.error.message : "Unable to load the Proxmox node."} />
+        </Panel>
+      ) : null}
+      {detail.error && detail.data ? <div className="proxmox-node-stale-notice">Showing the last available node details. Refresh failed.</div> : null}
+      {detail.data?.stale ? <div className="proxmox-node-stale-notice">This node is showing stale Proxmox telemetry from the last successful synchronization.</div> : null}
+
+      {tab === "overview" && detail.data ? (
+        <div aria-labelledby="proxmox-node-tab-overview" id="proxmox-node-overview" role="tabpanel"><ProxmoxNodeOverview detail={detail.data} /></div>
+      ) : null}
+
+      {tab === "history" && !detail.isPending ? (
+        <div aria-labelledby="proxmox-node-tab-history" id="proxmox-node-history" role="tabpanel">
+          {history.isPending && !history.data ? <ProxmoxNodeSkeleton view="history" /> : null}
+          {history.error && !history.data ? (
+            <Panel title="History unavailable" icon={<AlertTriangle size={18} />} actions={<button className="proxmox-button proxmox-button--secondary" onClick={() => void history.refetch()} type="button"><RefreshCw size={16} />Retry</button>}>
+              <ErrorBanner message={history.error instanceof Error ? history.error.message : "Unable to load Proxmox history."} />
+            </Panel>
+          ) : null}
+          {history.error && history.data ? <div className="proxmox-node-stale-notice">Showing the last available history. Refresh failed.</div> : null}
+          {history.data && history.data.points.length === 0 ? <EmptyState title="No history available" description="Proxmox returned no RRD samples for this node and range." icon={<Activity size={20} />} /> : null}
+          {history.data && history.data.points.length > 0 ? <ProxmoxNodeHistoryView history={history.data} /> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
