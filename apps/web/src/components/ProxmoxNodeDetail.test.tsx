@@ -166,6 +166,17 @@ test("Overview renders all required groups and explicit Not available values", (
   assert.match(markup, /title="Primary cluster"/);
 });
 
+test("Overview uses balanced desktop rows and a natural single-column phone layout", () => {
+  const css = readFileSync(new URL("../proxmox.css", import.meta.url), "utf8");
+
+  assert.match(css, /\.proxmox-node-overview-grid\s*\{[^}]*grid-template-columns:\s*repeat\(12,\s*minmax\(0,\s*1fr\)\)[^}]*align-items:\s*stretch[^}]*gap:\s*8px/s);
+  assert.match(css, /\.proxmox-node-overview-grid\s*>\s*\.proxmox-node-detail-card\s*\{[^}]*grid-column:\s*span 3[^}]*height:\s*100%/s);
+  assert.match(css, /\.proxmox-node-overview-grid\s*>\s*\.proxmox-node-detail-card:nth-child\(n \+ 5\)\s*\{[^}]*grid-column:\s*span 4/s);
+  assert.match(css, /\.proxmox-node-detail-card\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column/s);
+  assert.match(css, /@media \(max-width:\s*1180px\)[\s\S]*?\.proxmox-node-overview-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(css, /@media \(max-width:\s*520px\)[\s\S]*?\.proxmox-node-overview-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)[^}]*align-items:\s*start/);
+});
+
 test("History exposes all seven ranges, responsive accessible charts, and thermal no-data state", () => {
   assert.deepEqual(PROXMOX_NODE_HISTORY_RANGES.map((item) => item.value), ["1h", "6h", "12h", "24h", "7d", "30d", "90d"]);
   const markup = renderToStaticMarkup(createElement(ProxmoxNodeHistoryView, { history }));

@@ -159,6 +159,7 @@ The demo environment contains fictional servers, Docker workloads, service state
 
 - Read-only multi-connection inventory for nodes, QEMU virtual machines, LXC containers, and storage
 - Compact node detail pages with Overview and History tabs
+- Balanced Overview card grid with four equal cards followed by three equal cards on wide screens, two columns on tablets, and natural-height cards on phones
 - On-demand Proxmox RRD charts for CPU, memory, root storage, network I/O, and disk I/O across `1h`, `6h`, `12h`, `24h`, `7d`, `30d`, and `90d`
 - Honest **Not available** treatment for optional fields and telemetry, including thermals when Proxmox does not supply samples
 - No VM/LXC controls, no arbitrary API proxy, and no separate NodeGuard Proxmox time-series database

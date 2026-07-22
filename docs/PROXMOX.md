@@ -73,6 +73,8 @@ Each node row includes a compact **View details** action. The dedicated node pag
 - **Overview** reads the current node status and groups available system, platform, hardware, memory, root-storage, network/disk-rate, source, and thermal fields.
 - **History** reads Proxmox node RRD data and charts utilization, network I/O, and disk I/O. Thermal history is shown only when Proxmox supplies real temperature samples; otherwise the section says **Not available**.
 
+On wide screens, Overview uses a balanced four-card first row and three-card second row. Cards in each row share equal widths and heights, including the compact unavailable Thermals state. The layout becomes two columns on tablets and one natural-height column on phones. Long platform and hardware values remain available through their text title without widening or overflowing the cards.
+
 History supports `1h`, `6h`, `12h`, `24h`, `7d`, `30d`, and `90d`. NodeGuard maps these ranges to Proxmox's native RRD timeframes, then filters the returned UTC samples to the exact requested window:
 
 | NodeGuard range | Proxmox timeframe |
