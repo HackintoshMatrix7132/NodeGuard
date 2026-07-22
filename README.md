@@ -1,7 +1,4 @@
-<!--
-  Product screenshots are stored in screenshots/ and use only
-  the isolated fictional demo environment.
--->
+<!-- Product screenshots use only NodeGuard's isolated fictional demo data. -->
 
 <div align="center">
 
@@ -9,14 +6,12 @@
 
 ### Monitor your servers. Protect your stack.
 
-**A self-hosted infrastructure monitoring platform for Linux hosts, Docker workloads, domains, services, updates, and alerts.**
-
-Built with React, TypeScript, Node.js, Go, SQLite, and Docker.
+**A self-hosted, read-only monitoring platform for Linux hosts, Docker workloads, Proxmox VE, domains, services, updates, and alerts.**
 
 [**Live Demo**](https://nodeguard.muthu.eu) · [**Quick Start**](#quick-start) · [**Agent Setup**](#nodeguard-agent) · [**Architecture**](#architecture)
 
 ![React](https://img.shields.io/badge/React-Frontend-61DAFB?logo=react&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-Full%20Stack-3178C6?logo=typescript&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-Web%20%2B%20API-3178C6?logo=typescript&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-API-339933?logo=node.js&logoColor=white)
 ![Go](https://img.shields.io/badge/Go-Linux%20Agent-00ADD8?logo=go&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Deployment-2496ED?logo=docker&logoColor=white)
@@ -28,532 +23,388 @@ Built with React, TypeScript, Node.js, Go, SQLite, and Docker.
   <img src="screenshots/nodeguard-dashboard.png" alt="NodeGuard dashboard showing infrastructure health, active issues, fleet availability, alerts, updates, and service reachability" width="100%">
 </p>
 
-> **Project status:** Active development. NodeGuard is deployed against a real self-hosted homelab, while the public demo uses a fully isolated fictional environment.
->
-> **Screenshot note:** Every screenshot below was captured from the isolated demo account and contains fictional infrastructure data.
+> **Status:** NodeGuard is under active development and runs against a real self-hosted homelab. The public demo and all screenshots use a backend-isolated fictional environment.
 
-## Why I built NodeGuard
-
-I built NodeGuard because many infrastructure-monitoring tools felt too complex for the quick operational questions I needed to answer in my homelab:
-
-- Are my servers healthy?
-- Which container or service needs attention?
-- Is a domain reachable, slow, or close to SSL expiry?
-- Are important updates available?
-- What changed, and when did the problem begin?
-
-NodeGuard brings those answers into one focused, read-only dashboard. The project is not only a frontend concept: it includes a TypeScript API, persistent monitoring history, a secure Go agent, Docker deployment, authentication, alert lifecycle management, and a live demo environment.
+NodeGuard answers the day-to-day questions that matter in a homelab without becoming a remote-administration plane: which machines are unhealthy, which workloads stopped, which endpoints are slow, which certificates need attention, what updates are available, and when an incident began.
 
 ## Highlights
 
-| | Capability | What it provides |
-|---|---|---|
-| **01** | **Unified infrastructure overview** | Health, active issues, resource status, recent alerts, monitored services, and update totals in one dashboard. |
-| **02** | **Secure remote monitoring** | An outbound-only Go agent with one-time enrollment, stable machine identity, rotating per-agent credentials, diagnostics, safe reinstall, and systemd integration. |
-| **03** | **Deep Docker visibility** | Searchable and sortable inventory with runtime state, health, image, stack, IP, ports, uptime, details, and bounded log previews. |
-| **04** | **Service and domain monitoring** | Expected status codes, custom paths, latency trends, rolling 30-day uptime, SSL state, diagnostics, and manual checks. |
-| **05** | **Persistent alert lifecycle** | Active and resolved incidents with first/last seen timestamps, occurrence counts, failed checks, likely causes, and suggested actions. |
-| **06** | **Read-only update discovery** | Linux Agents discover APT package updates on Debian, Ubuntu, and Proxmox VE hosts, including security-origin and reboot-required status. |
-| **07** | **Safe public demonstration** | Demo users are restricted at the backend to isolated fictional data and cannot access live infrastructure or configuration APIs. |
-| **08** | **Production-style deployment** | A single Docker image serves the web UI and API, with SQLite persistence and HTTPS reverse-proxy support. |
-| **09** | **Compact operational interface** | A shared action, typography, badge, and icon-control system keeps dense dashboards, forms, tables, and mobile cards consistent, with optically centered 14px action icons and practical touch targets. |
+- Unified health overview for Linux machines, Agents, Docker, domains, updates, alerts, and Proxmox VE.
+- Outbound-only Go Agent with one-time enrollment, per-machine credentials, stable machine identity, retry buffering, and systemd packaging.
+- Persistent and bounded SQLite history for resource metrics, service checks, alert lifecycle, inventories, and integration state.
+- Read-only Docker, Proxmox, and APT visibility—no shell, reboot, package installation, or workload lifecycle controls.
+- Responsive React interface with dense tables on desktop and compact cards on mobile.
+- Server-enforced Demo Mode containing sanitized fictional data.
+- Single-image Docker deployment with health checks, graceful shutdown, persistent storage, and documented backup/restore.
+- API/web unit tests, Chromium end-to-end coverage, Go validation, generated contract drift checks, and GitHub Actions CI.
 
 ## NodeGuard in action
 
-The isolated demo environment shows the same read-only monitoring workflows across desktop and mobile without exposing live infrastructure.
-
 <p>
-  <img src="screenshots/nodeguard-machines.png" alt="NodeGuard Machines page showing Linux host inventory, hardware, runtime details, and resource utilization" width="100%">
+  <img src="screenshots/nodeguard-machines.png" alt="NodeGuard Machines page showing Linux host inventory and resource utilization" width="100%">
   <br>
-  <sub><strong>Linux machine monitoring:</strong> Inspect host inventory, hardware, Docker runtime details, CPU, memory, disk, swap, and monitored endpoints from one compact view.</sub>
+  <sub><strong>Machines:</strong> Host inventory, hardware, Docker availability, current resources, and persisted history.</sub>
 </p>
 
 <p>
-  <img src="screenshots/nodeguard-proxmox.png" alt="NodeGuard Proxmox page showing connection health, nodes, virtual machines, containers, storage, and resource usage" width="100%">
+  <img src="screenshots/nodeguard-proxmox.png" alt="NodeGuard Proxmox page showing nodes, virtual machines, containers, storage, and resource usage" width="100%">
   <br>
-  <sub><strong>Proxmox infrastructure:</strong> Follow connection availability, node capacity, virtual machines, LXC guests, storage, and synchronization state without exposing lifecycle controls.</sub>
+  <sub><strong>Proxmox VE:</strong> Read-only connection, node, guest, storage, capacity, and synchronization health.</sub>
 </p>
 
 <p>
-  <img src="screenshots/nodeguard-proxmox-node-overview.png" alt="NodeGuard Proxmox node overview showing system, platform, hardware, memory, storage, telemetry, and thermal availability" width="100%">
+  <img src="screenshots/nodeguard-proxmox-node-overview.png" alt="NodeGuard Proxmox node overview showing system, hardware, memory, storage, telemetry, and thermals" width="100%">
   <br>
-  <sub><strong>Node overview:</strong> A balanced operational summary of platform, hardware, capacity, storage, network telemetry, and data availability.</sub>
+  <sub><strong>Node overview:</strong> Current platform, hardware, capacity, storage, and available telemetry.</sub>
 </p>
 
 <p>
-  <img src="screenshots/nodeguard-proxmox-node-history.png" alt="NodeGuard Proxmox node history showing utilization, network throughput, and disk throughput charts over 24 hours" width="100%">
+  <img src="screenshots/nodeguard-proxmox-node-history.png" alt="NodeGuard Proxmox node history showing utilization and throughput charts" width="100%">
   <br>
-  <sub><strong>Proxmox history:</strong> On-demand RRD charts for utilization, network traffic, and disk throughput across selectable time ranges.</sub>
+  <sub><strong>Node history:</strong> On-demand Proxmox RRD charts across selectable time ranges.</sub>
 </p>
 
 <p>
-  <img src="screenshots/nodeguard-containers.png" alt="NodeGuard Containers page showing searchable Docker workloads with state, health, stack, image, network, ports, and uptime" width="100%">
+  <img src="screenshots/nodeguard-containers.png" alt="NodeGuard Containers page showing searchable Docker workloads, state, health, image, network, ports, and uptime" width="100%">
   <br>
-  <sub><strong>Docker workload visibility:</strong> Search and filter containers across hosts while keeping runtime state, Docker health, image, networking, ports, and uptime distinct.</sub>
+  <sub><strong>Containers:</strong> Searchable, host-scoped Docker inventory with runtime state kept distinct from health.</sub>
 </p>
 
 <p align="center">
-  <img src="screenshots/nodeguard-dashboard-mobile.png" alt="NodeGuard responsive mobile dashboard showing active issues and infrastructure health summaries" width="390">
+  <img src="screenshots/nodeguard-dashboard-mobile.png" alt="NodeGuard mobile dashboard showing infrastructure health and active issues" width="390">
   <br>
-  <sub><strong>Responsive operations:</strong> The same high-signal health and incident summary remains usable on a phone without horizontal scrolling.</sub>
+  <sub><strong>Mobile:</strong> The same operational summary without horizontal scrolling.</sub>
 </p>
 
 ## Live demo
 
-Visit **[nodeguard.muthu.eu](https://nodeguard.muthu.eu)** and sign in with the isolated demo account:
+Open **[nodeguard.muthu.eu](https://nodeguard.muthu.eu)** and sign in with:
 
 ```text
 Username: demo
 Password: demo
 ```
 
-The demo environment contains fictional servers, Docker workloads, service states, metric trends, updates, and alert history. The live/demo boundary is enforced by the authenticated account on the backend rather than by a client-side mode switch.
+Demo data is selected by the authenticated account and enforced at the API boundary. It contains fictional hosts, services, workloads, metrics, updates, and alerts, and cannot access live integration settings or infrastructure mutations.
 
 ## Features
 
-### Dashboard
+### Dashboard and machines
 
-- Overall infrastructure status and primary issue summary
-- Active issue count and real status breakdowns
-- Coordinated server, Agent, Docker, domain/service, alert, update, and Proxmox summaries with stable loading states
-- Recent alerts and service reachability
-- Compact responsive composition that keeps summary metrics in a two-column phone grid without horizontal scrolling
-- Responsive dark interface with compact 13px sidebar navigation, proportionate icons, and a balanced collapsed/mobile presentation
-- Subtle motion with `prefers-reduced-motion` support
-- Screenshot privacy mode for safer demos and portfolio captures
+- Overall infrastructure status, primary issue, active incidents, reachability, update totals, and recent alerts.
+- Local-host metrics collected with `systeminformation` plus remote Agent hosts.
+- CPU, memory, disk, and swap summaries with `1h`, `6h`, `24h`, `7d`, and `30d` history.
+- Additional NodeGuard backend or plain health-URL monitors.
+- Per-monitor self-signed HTTPS support for trusted internal services without disabling TLS verification globally.
 
-### Linux and Docker agents
+### NodeGuard Agents
 
-- Secure one-time enrollment tokens
-- Stable Agent-managed machine identity that is never inferred from a hostname
-- Unique long-term credential per agent
-- Outbound HTTPS communication only
-- Heartbeats with online, stale, and offline states
-- Linux host inventory and resource metrics
-- Read-only Docker inventory and runtime health
-- Scheduled APT metadata refresh and package-update discovery for Debian, Ubuntu, and Proxmox VE
-- Security-origin package and reboot-required reporting with bounded package details
-- Bounded in-memory retry queue during temporary outages
-- Static Linux `amd64` and `arm64` releases
-- Automated installation, checksum verification, systemd setup, upgrades, exact-identity re-enrollment, diagnostics, and safe uninstallation
-- Agent rename, credential rotation, revocation, and separately confirmed permanent deletion
-
-### Machines and resource history
-
-- Local host metrics through `systeminformation`
-- CPU, memory, disk, and swap summaries
-- Persistent history across `1h`, `6h`, `24h`, `7d`, and `30d` ranges
-- Additional NodeGuard backend or plain health-URL monitors
-- Per-monitor self-signed HTTPS support for trusted internal services
-
-### Proxmox VE
-
-- Read-only multi-connection inventory for nodes, QEMU virtual machines, LXC containers, and storage
-- Compact node detail pages with Overview and History tabs
-- Balanced Overview card grid with four equal cards followed by three equal cards on wide screens, two columns on tablets, and natural-height cards on phones
-- On-demand Proxmox RRD charts for CPU, memory, root storage, network I/O, and disk I/O across `1h`, `6h`, `12h`, `24h`, `7d`, `30d`, and `90d`
-- Honest **Not available** treatment for optional fields and telemetry, including thermals when Proxmox does not supply samples
-- No VM/LXC controls, no arbitrary API proxy, and no separate NodeGuard Proxmox time-series database
-
-See **[`docs/PROXMOX.md`](docs/PROXMOX.md)** for token permissions, data sources, range mapping, security boundaries, and limitations.
+- Short-lived, hashed, single-use enrollment tokens.
+- Random stable installation identity, stored separately from credentials and never inferred from hostname.
+- Unique revocable credential per Agent; only its hash is stored by the API.
+- Outbound HTTPS only—no inbound listener, SSH, remote shell, or arbitrary command channel.
+- Linux inventory, CPU, memory, disk, swap, network, Docker metadata, and APT update discovery.
+- Heartbeat-based online, stale, and offline states.
+- Bounded in-memory delivery queue with backoff during temporary failures.
+- Checksum-verified static Linux `amd64` and `arm64` releases and a hardened systemd service.
+- Transactional exact-identity re-enrollment, credential rotation, revocation, diagnostics, and safe uninstall.
 
 ### Docker containers
 
-- Search, filters, sorting, and responsive mobile cards
-- Runtime state and Docker health
-- Host, Compose/Swarm stack, image, IP address, ports, and uptime
-- Expandable details and bounded log preview
-- Monitored-container checks for workloads that should exist and remain healthy
-- Strictly read-only behavior: no start, stop, restart, delete, exec, or prune actions
+- Local and Agent-reported read-only Docker inventory.
+- Search, filters, sorting, desktop tables, and responsive mobile cards.
+- Runtime state, Docker health, host, stack, image, network, ports, uptime, details, and bounded log previews.
+- Monitored-container checks for expected workloads.
+- No start, stop, restart, delete, exec, prune, or volume actions.
 
 ### Domains and services
 
-- Public domains, internal URLs, and reverse-proxy routes
-- Custom paths such as `/health`, `/login`, or `/api/status`
-- Configurable expected HTTP status codes
-- Reachability, response time, rolling 30-day uptime, and SSL state
-- Latency trends, expanded diagnostics, duplicate/edit/delete, and manual checks
-- One retained history sample per minute to avoid excessive database growth
+- Public domains, internal endpoints, reverse proxies, and custom paths.
+- Configurable expected HTTP status codes.
+- Availability, response time, latency trend, rolling uptime, SSL state, and expanded diagnostics.
+- Add, duplicate, edit, delete, and manually re-check monitor configurations.
+- Minute-sampled, retention-bounded history.
 
-### Alerts
+### Proxmox VE
 
-- Active, resolved, and all-history views
-- Search, pagination, and operational detail columns
-- First seen, last seen, occurrence count, and failed checks
-- Possible cause and suggested next steps
-- Persisted history with dismissal and deletion behavior
-- Deduplicated recurring alerts
+- Multiple read-only Proxmox connections using dedicated API tokens.
+- Nodes, QEMU virtual machines, LXC containers, storage pools, and health summaries.
+- Current node detail plus on-demand RRD history for `1h` through `90d` ranges.
+- Encrypted token secrets and custom CA certificates; HTTPS verification is always required.
+- Background synchronization with non-overlapping runs, stale-snapshot preservation, and failure thresholds.
+- No guest lifecycle actions, console, shell, migration, backup, or update controls.
 
-### Update Center
+See **[`docs/PROXMOX.md`](docs/PROXMOX.md)** for permissions, private-CA setup, data sources, security boundaries, and limitations.
 
-- Machine-focused inventory reported by authenticated NodeGuard Agents
-- Search by machine, hostname, operating system, or package
-- Available, security-origin, reboot-required, unsupported, delayed, failed, stale, and offline states
-- Installed and candidate versions in an accessible machine-detail dialog
-- Dashboard, sidebar, and Agent-detail update summaries
-- Scheduled background checks with bounded retries and payloads
-- Read-only discovery: the Agent may refresh APT metadata, but never installs, removes, configures, upgrades, or reboots
+### Alerts and update discovery
+
+- Active, resolved, and complete alert history with first/last seen, occurrence count, failed checks, likely causes, and suggested actions.
+- Persistent dismissal/deletion and deduplication of recurring incidents.
+- Agent-reported Debian, Ubuntu, and Proxmox VE APT inventories.
+- Available, security-origin, reboot-required, unsupported, busy, failed, retained, stale, and offline states.
+- Fixed, shell-free discovery commands with bounded output; raw package-manager output is never sent to the browser.
+- Discovery only: NodeGuard never installs packages or reboots a machine.
+
+See **[`docs/MACHINE_UPDATES.md`](docs/MACHINE_UPDATES.md)** for the update protocol and failure behavior.
 
 ### Settings and diagnostics
 
-- Refresh interval controls
-- Screenshot privacy mode
-- Diagnostics export
-- Session information and logout
-- Account-enforced Live and Demo environments
+- Session details, refresh controls, screenshot privacy, and sanitized diagnostics export.
+- Owner-managed Agent enrollment and credential lifecycle.
+- Encrypted Proxmox integration configuration.
+- Account-enforced Live and Demo data modes.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    B[Browser] -->|HTTPS + HTTP-only session| A["NodeGuard Web + API<br/>React / Express / TypeScript"]
-
-    A --> DB[("SQLite<br/>configuration, latest inventories, history, alerts")]
-    A --> LH["Local Linux host<br/>systeminformation"]
-    A --> D["Docker Engine<br/>dockerode / read-only metadata"]
-    A --> H["Domains and services<br/>HTTP + TLS checks"]
-    R1[Remote Linux / Docker host<br/>metrics, containers, APT updates] -->|Outbound HTTPS<br/>unique agent credential| A
-    R2[Remote Linux / Docker host<br/>metrics, containers, APT updates] -->|Outbound HTTPS<br/>unique agent credential| A
+    Browser[Browser] -->|HTTPS + HTTP-only session| App[NodeGuard web + API]
+    App --> SQLite[(SQLite)]
+    App -->|systeminformation| Local[Local Linux host]
+    App -->|read-only Docker API| Docker[Local Docker Engine]
+    App -->|HTTP/TLS checks| Services[Domains and services]
+    App -->|verified HTTPS API| Proxmox[Proxmox VE]
+    Agent1[Remote Linux Agent] -->|Outbound HTTPS + Agent credential| App
+    Agent2[Remote Linux Agent] -->|Outbound HTTPS + Agent credential| App
 ```
 
-### Request and trust boundaries
+### Components
 
-- The browser never connects directly to Docker, SSH, a host shell, or the Docker socket.
-- Human users authenticate with username/password sessions stored in HTTP-only cookies.
-- Agents use separate machine credentials and never receive or reuse human passwords.
-- Each Agent has its own credential; enrollment tokens are short-lived and single-use.
-- Each Agent installation also has a root-owned random machine identity. It is not a secret or credential, is never inferred from the hostname, and only scopes token-authorized replacement to the same installation.
-- Demo sessions are rejected at the backend boundary for live infrastructure, configuration, integration, and diagnostic APIs.
-- Monitoring is intentionally read-only.
+| Component | Location | Responsibility |
+|---|---|---|
+| Web dashboard | `apps/web` | React 19 SPA, responsive UI, TanStack Query server state, Zustand settings, demo presentation |
+| API | `apps/api` | Express authentication, validation, monitoring, integrations, Agent ingestion, static web serving |
+| Database | `apps/api/src/services/database.ts` | SQLite schema, migrations, prepared access, transactions, and legacy imports |
+| Linux Agent | `agent` | Linux/Docker/APT collection, scheduling, retry queue, authentication, systemd lifecycle |
+| Agent contract | `contracts/agent-contract.json` | Canonical ingestion paths and drift-sensitive protocol constants generated for Go and TypeScript |
+| Deployment | `Dockerfile`, `docker-compose.yml` | Multi-stage Agent/web/API build and single-container runtime |
 
-## Engineering decisions
+### Trust boundaries
 
-### Read-only by design
+- Human users authenticate with username/password sessions in HTTP-only cookies.
+- Agents authenticate independently with a per-machine bearer credential.
+- Stable machine identity is non-secret and never authenticates requests.
+- Integration credentials are encrypted with AES-256-GCM and never returned after storage.
+- The browser never connects directly to Docker, Proxmox credentials, SSH, a shell, or the Docker socket.
+- Demo sessions are blocked from live data, integration management, and diagnostics.
+- The optional legacy API key exists for compatible machine callers and should be treated as a privileged secret.
+- NodeGuard is deliberately observational; remediation stays in the system that owns the workload.
 
-NodeGuard focuses on visibility rather than remote administration. It does not expose shell access, package installation, reboots, or Docker lifecycle controls. This reduces the impact of an application compromise and keeps operational actions in the systems that own them.
+### Persistence and lifecycle
 
-### Outbound-only remote agent
+SQLite is authoritative for users and sessions, monitor configuration, domain history, metric history, alerts, Agent enrollment and credentials, inventories, updates, and Proxmox snapshots/settings. Legacy JSON server-monitor data is imported once when present; remote monitor API keys are encrypted before persistence.
 
-The Go agent does not open an inbound listener. It collects a fixed set of Linux, Docker, and APT update data and sends reports to NodeGuard over outbound HTTPS. This avoids requiring inbound firewall rules or remote-shell access on monitored hosts. Update discovery uses only hard-coded package-manager operations and cannot accept commands from the server.
+The API exports an application factory for isolated tests. Production startup initializes the owner, removes expired sessions, starts metric retention sampling and Proxmox synchronization, then listens for HTTP traffic. `SIGINT` and `SIGTERM` stop HTTP intake, drain background work, close SQLite, and enforce a bounded shutdown deadline.
 
-### Generated Agent protocol constants
+Metric and check histories use sampling and retention limits. Raw Agent metrics are pruned with the same configurable retention horizon as minute history. Update inventory stores only the latest bounded result per Agent.
 
-`contracts/agent-contract.json` is the language-neutral source for Agent ingestion paths and the drift-sensitive APT update protocol vocabulary. `npm run contracts:generate` deterministically refreshes the tracked TypeScript and Go outputs; `npm run contracts:check` is read-only and fails when an output is missing or stale. Payload structures remain owned and validated in their existing Go and TypeScript modules rather than being broadly generated.
-
-### Separate human and machine authentication
-
-Human sessions, optional legacy machine API keys, enrollment tokens, stable machine identities, and per-Agent credentials have distinct purposes. The stable identity is a non-secret UUID stored separately under `/var/lib/nodeguard-agent`; it never authenticates a request. Agent credentials are stored in root-owned mode-`0600` configuration on the host and only as hashes by NodeGuard. Re-enrollment requires a valid one-time token, matches the exact stable identity, and rotates the credential transactionally without using hostname or display name as identity.
-
-### Persistent but bounded monitoring history
-
-SQLite stores resource trends, endpoint history, alerts, and configuration for a simple single-instance deployment. Sampling, retention, result limits, and agent retry buffers are bounded to prevent a fast UI refresh interval from creating unbounded storage or memory growth.
-
-When an older `data/server-monitors.json` file is imported, NodeGuard encrypts any remote API keys in SQLite and removes the plaintext legacy file only after the transaction commits. An unreadable legacy file is preserved and reported in the API log for manual recovery.
-
-### Server-enforced demo isolation
-
-Demo Mode is not just mock data selected in the browser. The account identity determines the data mode, and the API rejects demo access to live infrastructure and sensitive configuration routes.
-
-## Technology stack
-
-| Layer | Technologies |
-|---|---|
-| **Frontend** | React, Vite, TypeScript, TanStack Query, Zustand, Lucide, custom CSS |
-| **Backend** | Node.js, TypeScript, Express, SQLite, `better-sqlite3`, `systeminformation`, `dockerode` |
-| **Security** | HTTP-only sessions, scrypt password hashes, Helmet, rate limiting, origin controls |
-| **Agent** | Go 1.23+, Linux `/proc`, `/etc/os-release`, filesystem/network collectors, Docker Engine API, bounded APT discovery |
-| **Deployment** | Docker, Docker Compose, HTTPS reverse proxy, persistent volumes |
-
-## Repository structure
+## Repository layout
 
 ```text
-nodeguard/
+NodeGuard/
+├── .github/
+│   ├── FUNDING.yml                 # GitHub funding metadata
+│   └── workflows/
+│       ├── ci.yml                  # API/web/contracts/Playwright CI
+│       └── agent-release.yml       # Go validation and Agent release assets
 ├── apps/
-│   ├── web/                 # React + Vite dashboard
-│   └── api/                 # Express + TypeScript API
-├── agent/                   # Go monitoring agent and installer
-├── agent-releases/          # Generated, untracked versioned Agent binaries and checksums
-├── contracts/               # Canonical cross-language Agent protocol constants
-├── docs/
-│   ├── BACKUP_RESTORE.md     # Verified SQLite-volume backup and recovery procedure
-│   ├── MACHINE_UPDATES.md    # Agent-reported package update architecture and operations
-│   ├── PROXMOX.md            # Read-only Proxmox integration setup and security
-│   ├── UI_AUDIT.md           # Current focused browser and interface audit
-│   └── UI_UX_AUDIT.md        # Historical broad UI/UX audit
-├── scripts/                 # Dependency-free contract generation and drift checks
-├── screenshots/             # Tracked README and social product screenshots
-├── docker-compose.yml       # Production deployment
-├── Dockerfile               # Combined web/API image
-├── .env.example             # Configuration template
-└── README.md
+│   ├── api/
+│   │   ├── src/app.ts              # Express application factory and route ordering
+│   │   ├── src/index.ts            # Production startup and graceful shutdown
+│   │   ├── src/config/             # Environment and CORS policy
+│   │   ├── src/middleware/         # Human/Agent auth and error handling
+│   │   ├── src/routes/             # HTTP route groups
+│   │   ├── src/services/           # Database, monitoring, crypto, Proxmox, alerts, Agents
+│   │   ├── src/cli/                # Backup, verification, and restore CLI
+│   │   └── tsconfig.*.json          # Separate production and test builds
+│   └── web/
+│       ├── e2e/                    # Playwright fixtures and browser scenarios
+│       ├── public/                 # Static public assets
+│       └── src/
+│           ├── app/                # SPA shell and shared application UI
+│           ├── api/                # API client and endpoint definitions
+│           ├── components/         # Shared and Proxmox components
+│           ├── hooks/              # TanStack Query orchestration
+│           ├── pages/              # Dashboard, Machines, Agents, Containers, Domains, Updates, Alerts, Settings
+│           ├── store/              # Persisted UI settings
+│           ├── styles/             # Design, density, controls, motion, and page styles
+│           └── utils/              # Formatting, status, routing, and presentation helpers
+├── agent/
+│   ├── cmd/nodeguard-agent/        # Agent CLI entry point
+│   ├── internal/                   # Client, collectors, config, identity, runner, queue, updates
+│   ├── packaging/                  # systemd service
+│   ├── tests/                      # Installer integration test
+│   ├── install-agent.sh            # Public bootstrap wrapper
+│   └── install.sh                  # Installer implementation
+├── contracts/                      # Canonical cross-language Agent constants
+├── docs/                           # Backup, Proxmox, updates, and UI documentation
+├── scripts/                        # Contract generation and drift tests
+├── screenshots/                    # Sanitized README/product images
+├── .env.example                    # Safe configuration template
+├── Dockerfile                      # Production multi-stage image
+├── docker-compose.yml              # Single-instance deployment
+├── playwright.config.ts            # Isolated Chromium E2E environment
+└── package.json                    # npm workspaces and root commands
 ```
+
+## Requirements
+
+### Docker deployment
+
+- Docker Engine with Compose v2
+- A persistent volume for SQLite
+- Strong owner, demo, and integration secrets
+- HTTPS reverse proxy and an additional access layer for public exposure
+
+### Source development
+
+- Node.js 22+
+- npm
+- Go 1.23+ for Agent changes
+- Chromium installed through Playwright for browser tests
 
 ## Quick start
 
 ### Local development
 
-1. Install dependencies:
-
 ```bash
+git clone https://github.com/HackintoshMatrix7132/NodeGuard.git
+cd NodeGuard
 npm install
-```
-
-2. Create the API environment file:
-
-```bash
 cp .env.example apps/api/.env
 ```
 
-3. Set at least these values in `apps/api/.env`:
+At minimum, replace these values in `apps/api/.env`:
 
 ```env
 NODE_ENV=development
+NODEGUARD_HOST=0.0.0.0
 PORT=3000
 NODEGUARD_ADMIN_USERNAME=admin
-NODEGUARD_ADMIN_PASSWORD=change_this_local_password
+NODEGUARD_ADMIN_PASSWORD=choose_a_strong_local_password
 NODEGUARD_DEMO_USERNAME=demo
 NODEGUARD_DEMO_PASSWORD=demo
-NODEGUARD_INTEGRATION_SECRET=generate_a_long_random_secret
+NODEGUARD_INTEGRATION_SECRET=replace_with_at_least_32_random_bytes
 ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 DATABASE_URL=file:data/nodeguard.sqlite
 ```
 
-Generate an integration secret with:
-
-```bash
-openssl rand -hex 32
-```
-
-4. Start the API and web app together:
+Generate the integration secret with `openssl rand -hex 32`, then start both workspaces:
 
 ```bash
 npm run dev
 ```
 
-5. Open:
-
-```text
-http://localhost:5173
-```
-
-The admin account always uses live data. The demo account is always restricted to the isolated fictional environment.
+Open `http://localhost:5173`. The frontend development server calls the API on port `3000`.
 
 ### Production with Docker Compose
-
-1. Create the root environment file:
 
 ```bash
 cp .env.example .env
 ```
 
-2. Configure strong admin, demo, and integration secrets.
-
-3. Build and start NodeGuard:
+Set strong values for `NODEGUARD_ADMIN_PASSWORD`, `NODEGUARD_DEMO_PASSWORD`, and `NODEGUARD_INTEGRATION_SECRET`, then run:
 
 ```bash
 docker compose up -d --build
-```
-
-4. Follow the logs:
-
-```bash
+docker compose ps
 docker compose logs -f nodeguard
 ```
 
-5. Stop the deployment:
+NodeGuard listens on port `3000`. The named `nodeguard-data` volume is mounted at `/data`; the local Docker socket is mounted read-only for metadata collection. A read-only socket mount is still highly privileged, so deploy only on a trusted host and remove that mount if local Docker visibility is unnecessary.
+
+Stop the service gracefully with:
 
 ```bash
 docker compose down
 ```
 
-The Compose deployment persists SQLite data under `/data` and mounts `/var/run/docker.sock` read-only for Docker metadata. The Docker socket remains highly privileged despite the read-only mount and fixed application behavior; review the deployment and restrict access to the NodeGuard host.
-
-Use the consistency-checked, recovery-safe workflow in **[`docs/BACKUP_RESTORE.md`](docs/BACKUP_RESTORE.md)** to back up or restore the SQLite volume. Live backups use SQLite's online backup API; restores require a graceful API stop, an explicit confirmation, source verification, and a preserved pre-restore copy.
-
-For internet exposure, place NodeGuard behind HTTPS and an additional access layer such as Cloudflare Access or a VPN.
+For public access, terminate HTTPS at a reverse proxy and add Cloudflare Access, a VPN, or another real access layer. Configure `TRUST_PROXY` for the exact proxy-hop count and normally leave `SESSION_COOKIE_SECURE=auto`.
 
 ## NodeGuard Agent
 
-See **[`agent/README.md`](agent/README.md)** for complete installation, upgrade, systemd, troubleshooting, buffering, Docker-socket, and uninstallation guidance.
-
-From **Agents → Add Agent**, generate and run the one-command installer:
+The API serves the installer and versioned checksummed binaries built into the production image. In **Agents → Add Agent**, create a short-lived enrollment token, then run:
 
 ```bash
 curl -fsSL https://nodeguard.muthu.eu/install-agent.sh | sudo bash -s -- \
   --server https://nodeguard.muthu.eu
 ```
 
-Copy the short-lived token shown by NodeGuard separately; the installer requests it through a hidden terminal prompt.
+Enter the enrollment token at the hidden prompt. For protected unattended automation, use `NODEGUARD_ENROLLMENT_TOKEN` with `--non-interactive`.
 
-The installer:
-
-1. Detects the Linux distribution and CPU architecture.
-2. Downloads the matching `amd64` or `arm64` release.
-3. Verifies the SHA-256 checksum.
-4. Creates or preserves a protected stable machine identity.
-5. Exchanges the one-time token for a unique Agent credential.
-6. Installs the binary, root-owned configuration, and systemd service atomically.
-7. Starts the service and verifies authenticated connectivity.
-
-The installer prompts for the one-time token through the controlling terminal so it is not placed in the generated command or long-lived process arguments. For unattended automation, provide `NODEGUARD_ENROLLMENT_TOKEN` through a suitably protected environment and use `--non-interactive`.
-
-Managed local paths are:
+The installation manages:
 
 ```text
-/usr/local/bin/nodeguard-agent              binary (0755)
-/etc/nodeguard-agent/config.json            credential/configuration (root, 0600)
-/var/lib/nodeguard-agent/machine-id         stable non-secret identity (root, 0600)
-/etc/systemd/system/nodeguard-agent.service systemd unit (0644)
+/usr/local/bin/nodeguard-agent
+/etc/nodeguard-agent/config.json
+/var/lib/nodeguard-agent/machine-id
+/etc/systemd/system/nodeguard-agent.service
 ```
 
 Useful commands:
 
 ```bash
-nodeguard-agent --help
 nodeguard-agent version
 sudo nodeguard-agent status
-sudo nodeguard-agent status --json
 sudo nodeguard-agent doctor
-sudo nodeguard-agent config show
 sudo nodeguard-agent config validate
 sudo systemctl status nodeguard-agent
 sudo journalctl -u nodeguard-agent -f
-sudo systemctl restart nodeguard-agent
 ```
 
-Running the installer again inspects the existing binary, service, configuration, credential, and stable identity. A healthy current installation is left intact unless `--force-reinstall` is requested. If the Agent was revoked/deleted or its credential is stale, a fresh one-time token re-enrolls the exact same machine identity and rotates the credential; hostname collisions never replace another Agent. A normal uninstall removes the service, binary, credential, configuration, and runtime cache but preserves `/var/lib/nodeguard-agent/machine-id` so a later reinstall can reclaim the same registration. Purge is explicit and destructive:
+A normal uninstall preserves the stable machine identity so a later token-authorized reinstall can reclaim the same registration. Purge removes it only after explicit confirmation:
 
 ```bash
 sudo nodeguard-agent uninstall
 sudo nodeguard-agent uninstall --purge
-sudo nodeguard-agent uninstall --purge --yes  # non-interactive confirmation
 ```
 
-Normal uninstall is local-only and deliberately leaves the backend registration/history in NodeGuard. Revoke or permanently delete that record from **Agents** when appropriate. See the Agent guide for `enroll`, `re-enroll --replace-existing`, installer flags, recovery, exit codes, and troubleshooting.
-
-The Agent has no inbound listener, remote shell, generic command execution, update installation, reboot, or Docker lifecycle endpoints. It can refresh local APT metadata with fixed arguments so update discovery remains accurate.
+Read **[`agent/README.md`](agent/README.md)** for installation, upgrade, recovery, diagnostics, configuration, Docker permissions, and troubleshooting. Manual installation details are in **[`agent/docs/MANUAL_INSTALL.md`](agent/docs/MANUAL_INSTALL.md)**.
 
 ## Configuration
 
-### Key environment variables
+`.env.example` is the canonical reference. Important settings include:
 
 | Variable | Purpose |
 |---|---|
-| `NODEGUARD_HOST` | API bind address; defaults to `0.0.0.0` for container deployments (the E2E suite binds only to `127.0.0.1`) |
-| `NODEGUARD_ADMIN_USERNAME` | Live owner/admin username |
-| `NODEGUARD_ADMIN_PASSWORD` | Live owner/admin password |
-| `NODEGUARD_DEMO_USERNAME` | Isolated demo username |
-| `NODEGUARD_DEMO_PASSWORD` | Isolated demo password |
-| `NODEGUARD_INTEGRATION_SECRET` | Encrypts saved Proxmox credentials and remote server-monitor API keys at rest |
-| `DATABASE_URL` | SQLite database location |
-| `ALLOWED_ORIGINS` | Allowed separate frontend origins |
-| `TRUST_PROXY` | Numeric count of trusted reverse-proxy hops (`0` when none) |
-| `SESSION_COOKIE_SECURE` | `auto`, `true`, or `false` cookie behavior |
-| `VITE_NODEGUARD_SUPPORT_URL` | Optional public HTTPS support link embedded in the frontend build |
-| `METRIC_HISTORY_RETENTION_DAYS` | Minute history and raw Agent-metric retention period (minimum 30 days) |
-| `AGENT_UPDATE_INTERVAL_SECONDS` | Agent package-update check interval; defaults to 6 hours and is clamped to the safe minimum |
-| `AGENT_STALE_AFTER_SECONDS` | Time before an agent is marked stale |
-| `AGENT_OFFLINE_AFTER_SECONDS` | Time before an agent is marked offline |
+| `NODEGUARD_HOST`, `PORT` | API bind address and port |
+| `NODEGUARD_ADMIN_USERNAME`, `NODEGUARD_ADMIN_PASSWORD` | Live owner credentials; an explicit password is required in production |
+| `NODEGUARD_DEMO_USERNAME`, `NODEGUARD_DEMO_PASSWORD` | Isolated demo credentials |
+| `NODEGUARD_INTEGRATION_SECRET` | Stable encryption secret for Proxmox and remote-monitor credentials |
+| `DATABASE_URL` | SQLite location, such as `file:/data/nodeguard.sqlite` |
+| `ALLOWED_ORIGINS` | Comma-separated allowed browser origins |
+| `TRUST_PROXY` | Exact trusted reverse-proxy hop count |
+| `SESSION_COOKIE_SECURE` | `auto`, `true`, or `false`; `auto` follows Express request security |
+| `NODEGUARD_API_KEY` | Optional legacy machine API key |
+| `VITE_NODEGUARD_SUPPORT_URL` | Optional public HTTPS support link embedded at build time; never a secret |
+| `METRIC_SAMPLE_INTERVAL_SECONDS` | Local metric sampling interval |
+| `METRIC_HISTORY_RETENTION_DAYS` | Minute-history and raw Agent-metric retention, minimum 30 days |
+| `DOMAIN_CHECK_TIMEOUT_MS` | Domain/service request timeout |
+| `AGENT_*_INTERVAL_SECONDS` | Agent reporting and update schedules supplied during enrollment |
+| `AGENT_STALE_AFTER_SECONDS`, `AGENT_OFFLINE_AFTER_SECONDS` | Agent liveness thresholds |
+| `CPU_*`, `MEMORY_*`, `DISK_*` | Alert thresholds |
+| `NODEGUARD_PROXMOX_*` | Proxmox synchronization, failure, storage, and timeout policy |
 
-`VITE_NODEGUARD_SUPPORT_URL` is public build-time configuration. NodeGuard shows the support action only for a valid `https://` URL; a missing or invalid value hides it. Never place PayPal credentials or other secrets in `VITE_*` variables.
-
-<details>
-<summary><strong>View the full environment-variable reference</strong></summary>
-
-```env
-NODE_ENV=development
-PORT=3000
-VITE_NODEGUARD_SUPPORT_URL=https://ko-fi.com/hackintoshmatrix
-NODEGUARD_ADMIN_USERNAME=admin
-NODEGUARD_ADMIN_PASSWORD=replace_me
-NODEGUARD_DEMO_USERNAME=demo
-NODEGUARD_DEMO_PASSWORD=demo
-NODEGUARD_INTEGRATION_SECRET=replace_with_at_least_32_random_bytes
-SESSION_DURATION_DAYS=7
-REMEMBERED_SESSION_DURATION_DAYS=30
-SESSION_COOKIE_NAME=nodeguard_session
-SESSION_COOKIE_SECURE=auto
-NODEGUARD_API_KEY=optional_legacy_machine_key
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
-DATABASE_URL=file:data/nodeguard.sqlite
-TRUST_PROXY=0
-REQUEST_JSON_LIMIT=512kb
-RATE_LIMIT_WINDOW_MS=60000
-RATE_LIMIT_MAX=1200
-WEB_DIST_DIR=apps/web/dist
-MONITORED_DOMAINS=https://example.com,https://status.example.com
-SERVER_DISPLAY_NAME=local-nodeguard-host
-LOG_PREVIEW_LINES=80
-DOMAIN_CHECK_TIMEOUT_MS=5000
-AGENT_INSTALLER_PATH=agent/install-agent.sh
-AGENT_RELEASE_DIR=agent-releases
-AGENT_RELEASE_VERSION=0.3.1
-AGENT_ENROLLMENT_TTL_MINUTES=10
-AGENT_HEARTBEAT_INTERVAL_SECONDS=20
-AGENT_METRICS_INTERVAL_SECONDS=30
-AGENT_DOCKER_INTERVAL_SECONDS=60
-AGENT_INVENTORY_INTERVAL_SECONDS=21600
-AGENT_UPDATE_INTERVAL_SECONDS=21600
-AGENT_STALE_AFTER_SECONDS=75
-AGENT_OFFLINE_AFTER_SECONDS=180
-AGENT_TIMESTAMP_TOLERANCE_SECONDS=900
-AGENT_MAX_CONTAINERS=500
-AGENT_RATE_LIMIT_MAX=600
-AGENT_ENROLLMENT_RATE_LIMIT_MAX=10
-METRIC_SAMPLE_INTERVAL_SECONDS=60
-METRIC_HISTORY_RETENTION_DAYS=30
-CPU_WARNING_PERCENT=80
-CPU_CRITICAL_PERCENT=90
-MEMORY_WARNING_PERCENT=80
-MEMORY_CRITICAL_PERCENT=90
-DISK_WARNING_PERCENT=80
-DISK_CRITICAL_PERCENT=90
-
-# Proxmox VE read-only integration
-NODEGUARD_PROXMOX_SYNC_INTERVAL_SECONDS=30
-NODEGUARD_PROXMOX_FAILURE_THRESHOLD=3
-NODEGUARD_PROXMOX_STORAGE_WARNING_PERCENT=80
-NODEGUARD_PROXMOX_STORAGE_CRITICAL_PERCENT=90
-NODEGUARD_PROXMOX_REQUEST_TIMEOUT_MS=10000
-```
-
-Never commit `.env` files, API keys, access tokens, passwords, private IP addresses, database files, or generated diagnostics.
-
-</details>
-
-## Machine update discovery
-
-NodeGuard Agents discover operating-system package updates on Debian, Ubuntu, and Proxmox VE machines. Shortly after startup, each Agent refreshes APT metadata with strict partial-failure detection, reads `apt list --upgradable` with fixed shell-free arguments, reports security-origin packages and the standard reboot-required indicator, then sends a bounded inventory over its existing authenticated outbound connection.
-
-Unknown, failed, busy, unsupported, retained, and stale inventories remain distinct from a confirmed zero-update result. Later failures do not erase the last successful counts or package details, and the UI separates the latest attempted check from the latest successful inventory.
-
-The NodeGuard API reads only the latest report stored in SQLite. Opening the Updates page never runs APT, connects to a machine, or starts a remote command. NodeGuard does not install, remove, configure, or upgrade packages and cannot reboot a machine. See **[`docs/MACHINE_UPDATES.md`](docs/MACHINE_UPDATES.md)** for architecture, supported states, security boundaries, configuration, and troubleshooting.
+Never commit `.env`, SQLite databases, tokens, generated diagnostics, logs, or private infrastructure details. Preserve `NODEGUARD_INTEGRATION_SECRET` in backups; changing it makes stored encrypted integration credentials unreadable.
 
 ## API overview
 
 <details>
-<summary><strong>View API routes</strong></summary>
+<summary><strong>Public, session, application, integration, and Agent routes</strong></summary>
 
-### Public
-
-```text
-GET /health
-GET /install-agent.sh
-GET /agent/releases/latest/version
-GET /agent/releases/:version/nodeguard-agent-linux-amd64
-GET /agent/releases/:version/nodeguard-agent-linux-arm64
-GET /agent/releases/:version/checksums.txt
-```
-
-### Authentication
+### Public and authentication
 
 ```text
+GET  /health
+GET  /install-agent.sh
+GET  /agent/releases/latest/version
+GET  /agent/releases/:version/:asset
 GET  /api/auth/me
 POST /api/auth/login
 POST /api/auth/logout
 ```
 
-### Protected application routes
+### Live application data
 
 ```text
 GET    /api/overview
@@ -564,7 +415,7 @@ PUT    /api/servers/monitors/:id
 DELETE /api/servers/monitors/:id
 GET    /api/servers/:id
 GET    /api/servers/:id/metrics
-GET    /api/servers/:id/metrics/history?range=1h|6h|24h|7d|30d
+GET    /api/servers/:id/metrics/history
 GET    /api/servers/:id/containers
 GET    /api/containers
 GET    /api/containers/monitors
@@ -577,19 +428,32 @@ POST   /api/domains
 PUT    /api/domains/:id
 DELETE /api/domains/:id
 GET    /api/alerts
-GET    /api/alerts?status=all
-GET    /api/alerts?status=resolved
 GET    /api/alerts/:id
 DELETE /api/alerts/:id
 GET    /api/updates
 GET    /api/updates/machines/:agentId
-GET    /api/proxmox
-GET    /api/proxmox/connections/:id/nodes/:node
-GET    /api/proxmox/connections/:id/nodes/:node/history?range=1h|6h|12h|24h|7d|30d|90d
 POST   /api/checks/run
 ```
 
-### Owner/admin agent management
+### Proxmox VE
+
+```text
+GET    /api/proxmox
+GET    /api/proxmox/connections
+GET    /api/proxmox/connections/:id/nodes/:node
+GET    /api/proxmox/connections/:id/nodes/:node/history
+POST   /api/proxmox/connections/test
+POST   /api/proxmox/connections
+PUT    /api/proxmox/connections/:id
+PATCH  /api/proxmox/connections/:id/enabled
+POST   /api/proxmox/connections/:id/sync
+POST   /api/proxmox/sync
+DELETE /api/proxmox/connections/:id
+```
+
+Demo sessions may read fictional Proxmox inventory and node data. Connection management and synchronization require a live owner/admin session.
+
+### Agent administration and ingestion
 
 ```text
 GET    /api/agents
@@ -602,94 +466,115 @@ DELETE /api/agents/enrollment-tokens/:id
 POST   /api/agents/:id/rotate-credential
 POST   /api/agents/:id/revoke
 DELETE /api/agents/:id
+
+POST   /api/agent/register
+GET    /api/agent/status
+POST   /api/agent/heartbeat
+POST   /api/agent/inventory
+POST   /api/agent/metrics
+POST   /api/agent/docker
+POST   /api/agent/updates
 ```
 
-### Agent ingestion API
-
-```text
-POST /api/agent/register
-GET  /api/agent/status
-POST /api/agent/heartbeat
-POST /api/agent/inventory
-POST /api/agent/metrics
-POST /api/agent/docker
-POST /api/agent/updates
-```
-
-Agent v0.3 registration includes a stable non-secret machine identity and an idempotent client-generated credential. An exact retry can recover from a lost registration response; replacement still requires a valid token and can affect only the matching identity.
-
-Protected application routes require a signed-in session. Optional `Authorization: Bearer <api-key>` and `x-api-key: <api-key>` support remains available for machine-to-machine callers.
+Application routes use human sessions or the optional legacy API key. Agent ingestion uses dedicated bearer credentials; registration uses a one-time enrollment token.
 
 </details>
 
-## Scripts
+## Backup and restore
+
+NodeGuard includes a SQLite-aware maintenance CLI:
 
 ```bash
-npm run dev          # Start API and web development servers
-npm run dev:api      # Start only the API
-npm run dev:web      # Start only the web client
-npm run contracts:generate # Regenerate tracked Agent contract outputs
-npm run contracts:check # Verify generated Agent contracts without writing files
-npm run contracts:test # Test manifest validation and drift detection
-npm run build        # Build the project
-npm run typecheck    # Run TypeScript checks
-npm run lint         # Run linting
-npm test             # Run tests
-npm run test:e2e     # Run Chromium browser end-to-end tests
-npm run test:e2e:install # Install the Chromium browser used by Playwright
+npm run build --workspace apps/api
+npm run db:backup --workspace apps/api -- --database file:data/nodeguard.sqlite --output ./backups/nodeguard.sqlite
+npm run db:verify --workspace apps/api -- --source ./backups/nodeguard.sqlite
 ```
 
-The browser suite starts an isolated loopback-only API and a production-built Vite preview, uses an in-memory SQLite database, and verifies login, navigation, live configuration mutations, responsive layouts, and browser/network diagnostics. GitHub Actions runs the API/web checks and this suite on every pull request and push to `main`.
+The backup command uses SQLite's online backup API and verifies the result. Restore requires the API to be stopped, the literal `--confirm RESTORE`, a verified source, and creates a verified pre-restore recovery copy before atomic replacement.
 
-## Security notes
+Follow **[`docs/BACKUP_RESTORE.md`](docs/BACKUP_RESTORE.md)** exactly for Docker-volume backup, off-host storage, restore, and recovery testing. Back up the integration secret separately through your secret-management system.
 
-- NodeGuard is a monitoring tool, not a replacement for network segmentation, host hardening, backups, or an identity-aware access proxy.
-- Use HTTPS for all non-local deployments.
-- Human passwords are stored as scrypt hashes; sessions use HTTP-only cookies.
-- Production startup requires configured admin and demo passwords.
-- Demo sessions cannot access live infrastructure, integrations, configuration, or diagnostics.
-- Raw backend errors are hidden in production.
-- The frontend never receives direct Docker-socket, shell, SSH, or privileged host access.
-- Agent enrollment tokens expire and become invalid after one use.
-- Stable machine identities are random, non-secret, stored separately with root-only permissions, and never inferred from hostnames.
-- Long-term agent credentials are unique per host and can be rotated or revoked.
-- Re-enrollment is token-authorized and exact-identity scoped; it invalidates the previous credential without replacing unrelated Agents.
-- Agent update reports contain package metadata only; commands, repository credentials, raw command output, and environment variables are never accepted or exposed.
-- Docker-socket access is highly privileged even when mounted read-only. Review the source, restrict host access, and disable Docker collection where it is not needed.
-- Keep `.env` files, database files, logs, tokens, private IP addresses, and generated diagnostics out of version control.
+## Development and validation
+
+Run JavaScript commands from the repository root:
+
+```bash
+npm run dev                 # API and Vite development servers
+npm run dev:api             # API only
+npm run dev:web             # Web only
+npm run contracts:generate  # Regenerate tracked Go/TypeScript constants
+npm run contracts:check     # Read-only generated-contract drift check
+npm run contracts:test      # Contract generator tests
+npm run typecheck           # API and web TypeScript
+npm run lint                # Web lint/type validation
+npm test                    # Contract, API, and web tests
+npm run build               # Production API and web builds
+npm run test:e2e:install    # Install Playwright Chromium
+npm run test:e2e            # Isolated Chromium E2E suite
+```
+
+The API uses `tsconfig.build.json` for production code and `tsconfig.test.json` for test output, so tests are not shipped in the production API directory. The Playwright suite starts a loopback-only API with an in-memory SQLite database and a production-built Vite preview. It covers login, protected navigation, safe mutations, responsive layouts, keyboard interaction, console errors, and failed requests.
+
+Validate the Agent from its module directory:
+
+```bash
+cd agent
+make fmt-check vet test installer-test build-linux-amd64 build-linux-arm64
+```
+
+### Continuous integration and releases
+
+- `.github/workflows/ci.yml` runs contract drift checks, API/web typechecking, linting, tests, production builds, and Chromium E2E on pull requests and pushes to `main`.
+- `.github/workflows/agent-release.yml` runs shell validation plus Go formatting, vetting, tests, installer tests, and cross-architecture release builds.
+- Tags matching `agent-v*` publish the checksummed Agent binaries to a GitHub release. Pull requests build artifacts without publishing a release.
+
+## Security
+
+- Use HTTPS for every non-loopback Agent and every non-local deployment.
+- Put publicly reachable NodeGuard instances behind an identity-aware proxy, VPN, or equivalent access layer.
+- Use strong, unique owner/demo passwords and a stable high-entropy integration secret.
+- Passwords use scrypt hashes; sessions use HTTP-only cookies and configurable secure-cookie behavior.
+- Helmet, request-size limits, CORS/origin policy, and rate limits protect the API boundary.
+- Enrollment tokens are hashed, single-use, short-lived, and revocable.
+- Agent credentials are unique, stored as hashes server-side, and excluded from logs and client responses.
+- Proxmox and remote server-monitor secrets are encrypted at rest and authorization headers are stripped on cross-origin redirects.
+- TLS verification remains enabled; private Proxmox CAs are configured explicitly.
+- Docker socket access remains highly privileged even with a read-only mount.
+- NodeGuard does not replace network segmentation, host hardening, access control, or tested backups.
+
+See **[`agent/docs/SECURITY.md`](agent/docs/SECURITY.md)** and **[`docs/PROXMOX.md`](docs/PROXMOX.md)** for subsystem-specific boundaries.
 
 ## Known limitations
 
-- SQLite targets a single NodeGuard instance and homelab-scale deployment.
-- Local-backend per-container CPU usage is unavailable; agents report it where the Docker Engine exposes a valid one-shot sample.
-- Push, email, and mobile notifications are not implemented yet.
-- Agent retry buffering is memory-only and does not survive an Agent process restart.
-- Multi-user roles, password reset, and two-factor authentication are not yet available.
-- NodeGuard provides monitoring and diagnostics, not remote remediation.
+- SQLite is intended for one homelab deployment, not a horizontally scaled cluster.
+- Local-backend per-container CPU is unavailable; Agents report it only when Docker provides a valid one-shot sample.
+- Alert history exists, but push, email, and mobile notifications are not implemented.
+- The Agent retry queue is memory-only and is lost when the process restarts.
+- APT is the only package-update provider today.
+- Proxmox node history is fetched on demand from RRD and is not stored as a second time-series database.
+- NodeGuard has no multi-user team administration, password reset, or two-factor authentication.
+- Monitoring and diagnostics are read-only; NodeGuard does not remediate incidents.
 
-## Roadmap
+## Documentation
 
-- Additional read-only package providers beyond APT and optional reliable Agent-to-Proxmox identity linking
-- Notification channels for critical and recovery events
-- Multi-user roles and stronger account-management flows
-- Expanded agent metrics and historical analysis
-- Optional external database support for larger deployments
+| Document | Topic |
+|---|---|
+| [`agent/README.md`](agent/README.md) | Agent installation, operation, recovery, upgrade, and troubleshooting |
+| [`agent/docs/SECURITY.md`](agent/docs/SECURITY.md) | Agent threat model and security boundaries |
+| [`agent/docs/MANUAL_INSTALL.md`](agent/docs/MANUAL_INSTALL.md) | Manual Agent installation |
+| [`agent/docs/UPGRADE.md`](agent/docs/UPGRADE.md) | Agent upgrade workflow |
+| [`agent/docs/TROUBLESHOOTING.md`](agent/docs/TROUBLESHOOTING.md) | Agent diagnostics |
+| [`docs/PROXMOX.md`](docs/PROXMOX.md) | Proxmox setup, permissions, TLS, data, and operations |
+| [`docs/MACHINE_UPDATES.md`](docs/MACHINE_UPDATES.md) | APT inventory architecture and states |
+| [`docs/BACKUP_RESTORE.md`](docs/BACKUP_RESTORE.md) | Consistent SQLite backup, verification, restore, and recovery |
 
-## Portfolio demo flow
+## Contributing
 
-1. Sign in with the public `demo` account and explain that its data boundary is enforced by the backend.
-2. Start on **Dashboard** and walk through the overall status, main issue, active incidents, fleet availability, Docker health, updates, and domain reachability.
-3. Open **Machines** and change a resource-history time range to demonstrate persistent metrics.
-4. Open **Agents**, select a host, and explain outbound-only reporting, inventory, heartbeats, and unique per-agent credentials.
-5. Open **Containers**, use the state/host/health filters, and inspect a monitored workload.
-6. Open **Domains**, expand an endpoint, and show expected HTTP responses, latency, rolling uptime, SSL state, and diagnostics.
-7. Open **Alerts**, select an incident, and explain first/last seen timestamps, occurrences, failed checks, likely cause, and suggested next steps.
-8. Open **Updates** and inspect a machine's available packages, security-origin updates, reboot state, and last successful Agent check.
-9. Finish in **Settings** by showing the demo-only session, refresh controls, and hidden live configuration and diagnostics.
+Keep changes within the active web, API, Agent, and deployment architecture. Preserve read-only behavior, update tests and documentation together, and run the applicable validation commands above. Do not commit `.env`, databases, tokens, logs, generated build output, or private infrastructure data.
 
 ## Support NodeGuard
 
-NodeGuard is an independent project. Support helps cover hosting costs and continued development of new integrations, performance improvements, and features.
+NodeGuard is an independent project. Support helps cover hosting and continued development.
 
 [![Support NodeGuard on Ko-fi](https://img.shields.io/badge/Support-NodeGuard-29ABE0?logo=ko-fi&logoColor=white)](https://ko-fi.com/hackintoshmatrix)
 
