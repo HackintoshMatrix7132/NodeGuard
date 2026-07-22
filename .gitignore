@@ -75,7 +75,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 nodeguard-diagnostics.json
-/screenshots/
+/screenshots/*
+!/screenshots/nodeguard-*.png
 
 ###############################################################################
 # Test, cache, and tool output

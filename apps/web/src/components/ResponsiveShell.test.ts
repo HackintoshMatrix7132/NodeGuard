@@ -7,6 +7,7 @@ import { readAppSource } from "../test/sourceInspection";
 const appSource = readAppSource();
 const mobileCss = readFileSync(new URL("../mobile.css", import.meta.url), "utf8");
 const proxmoxCss = readFileSync(new URL("../proxmox.css", import.meta.url), "utf8");
+const controlAlignmentCss = readFileSync(new URL("../styles/control-alignment.css", import.meta.url), "utf8");
 
 test("mobile shell keeps route content in the first flow position", () => {
   assert.match(mobileCss, /\.app-shell\.sidebar-collapsed\s*\{[^}]*display:\s*block/s);
@@ -46,4 +47,11 @@ test("major routes and responsive inventories use compact shared variants", () =
   assert.match(mobileCss, /\.alert-mobile-card\s*\{[^}]*padding:\s*6px 7px/s);
   assert.match(proxmoxCss, /\.proxmox-node-table tr,[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/s);
   assert.match(proxmoxCss, /\.proxmox-guest-table/);
+});
+
+test("domain row actions use scoped compact desktop and touch dimensions", () => {
+  assert.match(controlAlignmentCss, /body \.domain-row-actions\s*\{[^}]*gap:\s*4px/s);
+  assert.match(controlAlignmentCss, /body \.domain-row-actions \.domain-details-toggle\s*\{[^}]*height:\s*var\(--ng-icon-control-size\)[^}]*gap:\s*4px[^}]*padding-inline:\s*5px/s);
+  assert.match(controlAlignmentCss, /body \.domain-row-actions \.icon-only\s*\{[^}]*width:\s*var\(--ng-icon-control-size\)[^}]*height:\s*var\(--ng-icon-control-size\)/s);
+  assert.match(controlAlignmentCss, /@media \(max-width:\s*760px\)[\s\S]*?body \.domain-row-actions \.domain-details-toggle\s*\{[^}]*height:\s*36px[^}]*min-height:\s*36px/s);
 });

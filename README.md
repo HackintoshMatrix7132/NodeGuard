@@ -1,5 +1,5 @@
 <!--
-  Product screenshots are stored in docs/screenshots/ and use only
+  Product screenshots are stored in screenshots/ and use only
   the isolated fictional demo environment.
 -->
 
@@ -25,7 +25,7 @@ Built with React, TypeScript, Node.js, Go, SQLite, and Docker.
 </div>
 
 <p align="center">
-  <img src="docs/screenshots/dashboard-overview.png" alt="NodeGuard dashboard showing infrastructure health, active issues, resource status, alerts, and service reachability" width="100%">
+  <img src="screenshots/nodeguard-dashboard.png" alt="NodeGuard dashboard showing infrastructure health, active issues, fleet availability, alerts, updates, and service reachability" width="100%">
 </p>
 
 > **Project status:** Active development. NodeGuard is deployed against a real self-hosted homelab, while the public demo uses a fully isolated fictional environment.
@@ -58,48 +58,45 @@ NodeGuard brings those answers into one focused, read-only dashboard. The projec
 | **08** | **Production-style deployment** | A single Docker image serves the web UI and API, with SQLite persistence and HTTPS reverse-proxy support. |
 | **09** | **Compact operational interface** | A shared action, typography, badge, and icon-control system keeps dense dashboards, forms, tables, and mobile cards consistent, with optically centered 14px action icons and practical touch targets. |
 
-## Product tour
+## NodeGuard in action
 
-The dashboard above provides the high-level operational view. The pages below show how NodeGuard turns that summary into host inventory, container visibility, endpoint diagnostics, update discovery, and actionable incident context.
+The isolated demo environment shows the same read-only monitoring workflows across desktop and mobile without exposing live infrastructure.
 
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <img src="docs/screenshots/agents-fleet.png" alt="NodeGuard Agents page showing online, stale, and offline Linux hosts with operating system, resource, Docker, and connection details">
-      <br>
-      <strong>Multi-host Linux agent fleet</strong><br>
-      Track online, stale, and offline hosts, then inspect operating-system inventory, CPU, RAM, storage, uptime, Docker availability, heartbeats, and agent credentials from one place.
-    </td>
-    <td width="50%" valign="top">
-      <img src="docs/screenshots/docker-containers.png" alt="NodeGuard Containers page showing searchable and filterable Docker workload inventory with runtime state, health, stack, image, IP, ports, and uptime">
-      <br>
-      <strong>Docker workload visibility</strong><br>
-      Search, sort, and filter container inventory across hosts; inspect runtime state, Docker health, stack, image, network information, published ports, uptime, and monitored-workload status.
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <img src="docs/screenshots/domains-services.png" alt="NodeGuard Domains and Services page showing endpoint status, latency, expected HTTP responses, rolling uptime, SSL state, and expanded diagnostics">
-      <br>
-      <strong>Domains and service diagnostics</strong><br>
-      Monitor public and internal endpoints with expected HTTP codes, latency trends, rolling 30-day uptime, SSL expiry, detailed results, manual checks, and reusable monitor configuration.
-    </td>
-    <td width="50%" valign="top">
-      <img src="docs/screenshots/alerts.png" alt="NodeGuard Alerts page showing active incidents, severity, source, timestamps, occurrence history, likely cause, failed checks, and suggested next steps">
-      <br>
-      <strong>Actionable alert history</strong><br>
-      Move beyond a simple red status: each incident retains severity, first and last seen times, occurrences, failed checks, a likely cause, and suggested next steps.
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2" valign="top">
-      <img src="docs/screenshots/update-center.png" alt="NodeGuard Update Center showing machine update totals, operating systems, package counts, security updates, reboot status, and Agent freshness">
-      <br>
-      <strong>Read-only Update Center</strong><br>
-      Scan Agent-managed Linux machines by update count, security-origin packages, reboot requirement, check state, and freshness; then inspect bounded package details without installing anything.
-    </td>
-  </tr>
-</table>
+<p>
+  <img src="screenshots/nodeguard-machines.png" alt="NodeGuard Machines page showing Linux host inventory, hardware, runtime details, and resource utilization" width="100%">
+  <br>
+  <sub><strong>Linux machine monitoring:</strong> Inspect host inventory, hardware, Docker runtime details, CPU, memory, disk, swap, and monitored endpoints from one compact view.</sub>
+</p>
+
+<p>
+  <img src="screenshots/nodeguard-proxmox.png" alt="NodeGuard Proxmox page showing connection health, nodes, virtual machines, containers, storage, and resource usage" width="100%">
+  <br>
+  <sub><strong>Proxmox infrastructure:</strong> Follow connection availability, node capacity, virtual machines, LXC guests, storage, and synchronization state without exposing lifecycle controls.</sub>
+</p>
+
+<p>
+  <img src="screenshots/nodeguard-proxmox-node-overview.png" alt="NodeGuard Proxmox node overview showing system, platform, hardware, memory, storage, telemetry, and thermal availability" width="100%">
+  <br>
+  <sub><strong>Node overview:</strong> A balanced operational summary of platform, hardware, capacity, storage, network telemetry, and data availability.</sub>
+</p>
+
+<p>
+  <img src="screenshots/nodeguard-proxmox-node-history.png" alt="NodeGuard Proxmox node history showing utilization, network throughput, and disk throughput charts over 24 hours" width="100%">
+  <br>
+  <sub><strong>Proxmox history:</strong> On-demand RRD charts for utilization, network traffic, and disk throughput across selectable time ranges.</sub>
+</p>
+
+<p>
+  <img src="screenshots/nodeguard-containers.png" alt="NodeGuard Containers page showing searchable Docker workloads with state, health, stack, image, network, ports, and uptime" width="100%">
+  <br>
+  <sub><strong>Docker workload visibility:</strong> Search and filter containers across hosts while keeping runtime state, Docker health, image, networking, ports, and uptime distinct.</sub>
+</p>
+
+<p align="center">
+  <img src="screenshots/nodeguard-dashboard-mobile.png" alt="NodeGuard responsive mobile dashboard showing active issues and infrastructure health summaries" width="390">
+  <br>
+  <sub><strong>Responsive operations:</strong> The same high-signal health and incident summary remains usable on a phone without horizontal scrolling.</sub>
+</p>
 
 ## Live demo
 
@@ -282,9 +279,9 @@ nodeguard/
 │   ├── MACHINE_UPDATES.md    # Agent-reported package update architecture and operations
 │   ├── PROXMOX.md            # Read-only Proxmox integration setup and security
 │   ├── UI_AUDIT.md           # Current focused browser and interface audit
-│   ├── UI_UX_AUDIT.md        # Historical broad UI/UX audit
-│   └── screenshots/          # Tracked README product screenshots
+│   └── UI_UX_AUDIT.md        # Historical broad UI/UX audit
 ├── scripts/                 # Dependency-free contract generation and drift checks
+├── screenshots/             # Tracked README and social product screenshots
 ├── docker-compose.yml       # Production deployment
 ├── Dockerfile               # Combined web/API image
 ├── .env.example             # Configuration template

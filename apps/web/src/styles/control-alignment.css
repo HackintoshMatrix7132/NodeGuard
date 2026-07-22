@@ -156,7 +156,22 @@ body .domain-details-toggle:not([aria-expanded="true"]):hover > svg {
 }
 
 body .domain-row-actions {
-  gap: 5px;
+  gap: 4px;
+}
+
+body .domain-row-actions .domain-details-toggle {
+  height: var(--ng-icon-control-size);
+  min-height: var(--ng-icon-control-size);
+  gap: 4px;
+  padding-inline: 5px;
+}
+
+body .domain-row-actions .icon-only {
+  width: var(--ng-icon-control-size);
+  min-width: var(--ng-icon-control-size);
+  max-width: var(--ng-icon-control-size);
+  height: var(--ng-icon-control-size);
+  min-height: var(--ng-icon-control-size) !important;
 }
 
 body .pill {
@@ -220,5 +235,10 @@ body .package-updates-table {
     max-width: 36px;
     height: 36px;
     min-height: 36px !important;
+  }
+
+  body .domain-row-actions .domain-details-toggle {
+    height: 36px;
+    min-height: 36px;
   }
 }

@@ -37,6 +37,72 @@ test("demo login, refresh, and primary desktop navigation stay healthy", async (
   await expectNoHorizontalOverflow(page);
 });
 
+test("domain row actions stay compact, accessible, and non-destructive", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signIn(page, "demo", "demo");
+  await page.getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("button", { name: "Domains", exact: true })
+    .click();
+
+  const rows = page.locator(".domain-entry");
+  await expect(rows).toHaveCount(9);
+  for (const row of await rows.all()) {
+    await expect(row.locator(".domain-row-actions button")).toHaveCount(5);
+  }
+
+  const firstRow = rows.first();
+  const details = firstRow.getByRole("button", { name: /details for https:\/\/vault\.demo\.example/ });
+  const check = firstRow.getByRole("button", { name: "Check https://vault.demo.example" });
+  const duplicate = firstRow.getByRole("button", { name: "Duplicate https://vault.demo.example" });
+  const edit = firstRow.getByRole("button", { name: "Edit https://vault.demo.example" });
+  const remove = firstRow.getByRole("button", { name: "Remove https://vault.demo.example" });
+
+  await expect(firstRow.locator(".domain-row-actions")).toHaveCSS("gap", "4px");
+  await expect(details).toHaveCSS("height", "32px");
+  for (const button of [check, duplicate, edit, remove]) {
+    await expect(button).toHaveCSS("width", "32px");
+    await expect(button).toHaveCSS("height", "32px");
+  }
+
+  await details.click();
+  await expect(details).toHaveAttribute("aria-expanded", "true");
+  await expect(firstRow.getByText("Current status")).toBeVisible();
+  await details.click();
+  await expect(details).toHaveAttribute("aria-expanded", "false");
+
+  await check.click();
+  await duplicate.click();
+  const duplicateDialog = page.getByRole("dialog", { name: "Duplicate domain / service" });
+  await expect(duplicateDialog).toBeVisible();
+  await duplicateDialog.getByRole("button", { name: "Close dialog" }).click();
+
+  await edit.click();
+  const editDialog = page.getByRole("dialog", { name: "Edit domain / service" });
+  await expect(editDialog).toBeVisible();
+  await editDialog.getByRole("button", { name: "Close dialog" }).click();
+
+  await remove.click();
+  const deleteDialog = page.getByRole("dialog", { name: "Delete domain monitor" });
+  await expect(deleteDialog).toBeVisible();
+  await deleteDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(deleteDialog).toBeHidden();
+
+  await details.focus();
+  await expect(details).toBeFocused();
+  for (const button of [check, duplicate, edit, remove]) {
+    await page.keyboard.press("Tab");
+    await expect(button).toBeFocused();
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectNoHorizontalOverflow(page);
+  await expect(details).toHaveCSS("height", "36px");
+  for (const button of [check, duplicate, edit, remove]) {
+    await expect(button).toHaveCSS("width", "36px");
+    await expect(button).toHaveCSS("height", "36px");
+  }
+});
+
 test("live domain monitor create, update, and delete mutations persist through the API", async ({ page }, testInfo) => {
   const runMarker = `e2e-${Date.now()}-${testInfo.workerIndex}-${testInfo.retry}`;
   const initialPath = `/health?source=${runMarker}`;
