@@ -188,7 +188,7 @@ Demo sessions may read fictional Proxmox data but cannot call connection-managem
 - Confirm the NodeGuard backend host can route to TCP port 8006 on Proxmox.
 - Check firewalls and reverse proxies between NodeGuard and Proxmox.
 - Confirm Proxmox's API service is healthy.
-- Increase `NODEGUARD_PROXMOX_REQUEST_TIMEOUT_MS` only when the network and API are known to be slow.
+- Increase `NODEGUARD_PROXMOX_REQUEST_TIMEOUT_MS` only when the network and API are known to be slow. NodeGuard clamps this total request deadline to 2–60 seconds so shutdown cannot be held open indefinitely by a trickling endpoint.
 
 ### Data is marked stale
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { readStylesheetSource } from "../test/sourceInspection";
 import { getProxmoxDashboardCardView, type ProxmoxSnapshot } from "./ProxmoxIntegration";
 
 const emptySnapshot: ProxmoxSnapshot = {
@@ -70,7 +71,7 @@ test("distinguishes unavailable, retained, and issue states without dropping the
 
 test("uses one stable dashboard grid and the shared monitored link in both Proxmox surfaces", () => {
   const integration = readFileSync(new URL("./ProxmoxIntegration.tsx", import.meta.url), "utf8");
-  const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const styles = readStylesheetSource();
   const proxmoxStyles = readFileSync(new URL("../proxmox.css", import.meta.url), "utf8");
 
   assert.doesNotMatch(styles, /dashboard-metric-grid:(?:not\()?has\(\.proxmox-dashboard-card/);

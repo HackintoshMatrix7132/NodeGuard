@@ -2,11 +2,12 @@ node_modules
 **/node_modules
 dist
 **/dist
+dist-test
+**/dist-test
 build
 agent/bin
 coverage
 .git
-.expo
 .cache
 .vite
 .turbo
@@ -16,8 +17,11 @@ logs
 .env.*
 !.env.example
 apps/api/data
+/backups
 Dockerfile
 docker-compose.override.yml
 compose.override.yml
 README.md
 AGENTS.md
+/docs
+/screenshots

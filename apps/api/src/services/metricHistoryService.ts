@@ -132,6 +132,7 @@ export function getMetricHistory(serverId: string, range: MetricHistoryRange, no
 }
 
 let capturePromise: Promise<void> | null = null;
+let sampler: NodeJS.Timeout | null = null;
 
 export function captureMetricSample() {
   if (capturePromise) return capturePromise;
@@ -149,8 +150,18 @@ export function captureMetricSample() {
 }
 
 export function startMetricHistorySampler() {
+  if (sampler) return sampler;
+
   void captureMetricSample();
-  const timer = setInterval(() => void captureMetricSample(), env.metricSampleIntervalSeconds * 1000);
-  timer.unref();
-  return timer;
+  sampler = setInterval(() => void captureMetricSample(), env.metricSampleIntervalSeconds * 1000);
+  sampler.unref();
+  return sampler;
+}
+
+export async function stopMetricHistorySampler() {
+  if (sampler) {
+    clearInterval(sampler);
+    sampler = null;
+  }
+  await capturePromise;
 }

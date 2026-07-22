@@ -125,10 +125,6 @@ export function normalizeDomainInput(input: CreateDomainInput) {
   };
 }
 
-export function normalizeDomain(value: string) {
-  return normalizeDomainInput({ domain: value });
-}
-
 function ensureLegacyImport() {
   if (legacyImported) {
     return;

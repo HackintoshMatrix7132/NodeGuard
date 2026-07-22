@@ -1,0 +1,128 @@
+/* Keep the navigation mounted so opening and closing share one reversible motion. */
+.sidebar-slot {
+  display: contents;
+}
+
+.app-shell {
+  transition:
+    grid-template-columns 300ms ease-out,
+    opacity 240ms ease,
+    transform 240ms ease,
+    filter 240ms ease;
+}
+
+.sidebar {
+  animation: none;
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition:
+    opacity 300ms ease-out,
+    transform 300ms ease-out,
+    visibility 0s linear 0s,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.app-shell.sidebar-collapsed .sidebar {
+  display: flex;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(10px);
+  transition-delay: 0s, 0s, 300ms, 0s, 0s;
+}
+
+.brand > span,
+.sidebar-nav-label,
+.sidebar-action-label {
+  min-width: 0;
+  white-space: nowrap;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity 110ms ease 120ms,
+    transform 160ms ease 120ms;
+}
+
+.sidebar-nav-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.sidebar nav button,
+.sidebar .sidebar-logout {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sidebar nav button > svg,
+.sidebar .sidebar-logout > svg {
+  flex: 0 0 auto;
+}
+
+.app-shell.sidebar-collapsed .brand > span,
+.app-shell.sidebar-collapsed .sidebar-nav-label,
+.app-shell.sidebar-collapsed .sidebar-action-label {
+  opacity: 0;
+  transform: translateX(-6px);
+  transition-delay: 0s;
+}
+
+.sidebar-reveal {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-6px);
+  transition:
+    opacity 140ms ease,
+    transform 300ms ease-out,
+    visibility 0s linear 0s,
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.app-shell.sidebar-collapsed .sidebar-reveal {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0);
+  transition-delay: 160ms, 160ms, 160ms, 0s, 0s, 0s;
+}
+
+@media (max-width: 640px) {
+  .app-shell,
+  .app-shell.sidebar-collapsed {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+  }
+
+  .sidebar-slot {
+    display: grid;
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 0;
+    overflow: hidden;
+    grid-template-rows: minmax(0, 1fr);
+    transition: grid-template-rows 300ms ease-out;
+  }
+
+  .app-shell.sidebar-collapsed .sidebar-slot {
+    grid-template-rows: minmax(0, 0fr);
+  }
+
+  .sidebar-slot > .sidebar {
+    min-height: 0;
+  }
+
+  .workspace,
+  .app-shell.sidebar-collapsed .workspace {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+

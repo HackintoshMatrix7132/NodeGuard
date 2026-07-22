@@ -128,7 +128,6 @@
 }
 
 .proxmox-integration-heading p,
-.proxmox-form-intro,
 .proxmox-settings-row__identity p,
 .proxmox-connection-row__identity p,
 .proxmox-empty p {
@@ -261,37 +260,24 @@
   white-space: nowrap;
 }
 
-.proxmox-status--online,
-.proxmox-status--available,
-.proxmox-status--ok,
-.proxmox-status--healthy,
-.proxmox-status--enabled,
 .proxmox-status--success {
   border-color: rgba(74, 222, 128, 0.7);
   color: #86efac;
   background: rgba(22, 101, 52, 0.2);
 }
 
-.proxmox-status--warning,
-.proxmox-status--stale,
-.proxmox-status--pending {
+.proxmox-status--warning {
   border-color: rgba(251, 191, 36, 0.72);
   color: #fde047;
   background: rgba(133, 77, 14, 0.18);
 }
 
-.proxmox-status--critical,
-.proxmox-status--offline,
-.proxmox-status--unavailable,
-.proxmox-status--error,
 .proxmox-status--danger {
   border-color: rgba(248, 113, 113, 0.72);
   color: #fda4af;
   background: rgba(127, 29, 29, 0.2);
 }
 
-.proxmox-status--disabled,
-.proxmox-status--unknown,
 .proxmox-status--neutral {
   border-color: #536176;
   color: #b6c2d2;
@@ -321,8 +307,7 @@
 
 .proxmox-filter-row input,
 .proxmox-form-grid input,
-.proxmox-form-grid textarea,
-.proxmox-delete-dialog input {
+.proxmox-form-grid textarea {
   width: 100%;
   min-width: 0;
   min-height: 2.35rem;
@@ -339,15 +324,13 @@
 
 .proxmox-filter-row input:hover,
 .proxmox-form-grid input:hover,
-.proxmox-form-grid textarea:hover,
-.proxmox-delete-dialog input:hover {
+.proxmox-form-grid textarea:hover {
   border-color: #3f526f;
 }
 
 .proxmox-filter-row input:focus-visible,
 .proxmox-form-grid input:focus-visible,
-.proxmox-form-grid textarea:focus-visible,
-.proxmox-delete-dialog input:focus-visible {
+.proxmox-form-grid textarea:focus-visible {
   border-color: #2eb5e8;
   box-shadow: 0 0 0 2px rgba(46, 181, 232, 0.18);
 }
@@ -363,8 +346,7 @@
   gap: 0.75rem;
 }
 
-.proxmox-form-grid label,
-.proxmox-delete-dialog label {
+.proxmox-form-grid label {
   display: grid;
   gap: 0.3rem;
   min-width: 0;
@@ -389,7 +371,6 @@
   cursor: pointer;
 }
 
-.proxmox-checkbox input,
 .proxmox-checkbox-row input {
   width: 1rem;
   height: 1rem;
@@ -795,14 +776,6 @@
 
 .proxmox-dialog-backdrop.is-closing .proxmox-dialog {
   animation: proxmox-dialog-out 170ms ease-in both;
-}
-
-.proxmox-delete-dialog ul {
-  margin: 0;
-  padding-left: 1.15rem;
-  color: var(--muted, #a5b2c7);
-  font-size: 0.8rem;
-  line-height: 1.55;
 }
 
 .proxmox-delete-dialog p {
@@ -1450,8 +1423,7 @@
   font-size: var(--ng-type-body, 13px);
 }
 
-.proxmox-node-stale-notice,
-.proxmox-node-refreshing {
+.proxmox-node-stale-notice {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1463,12 +1435,6 @@
   background: rgba(245, 158, 11, 0.08);
   font-size: var(--ng-type-helper, 12px);
   line-height: 1.3;
-}
-
-.proxmox-node-refreshing {
-  border-color: var(--ng-border);
-  color: var(--ng-muted);
-  background: var(--ng-surface);
 }
 
 .proxmox-node-history-grid {
@@ -1981,9 +1947,7 @@
 }
 
 .proxmox-summary-card__label,
-.proxmox-table th,
-.proxmox-field > span,
-.proxmox-checkbox > span {
+.proxmox-table th {
   font-size: var(--ng-type-label, 11px);
   font-weight: 700;
   line-height: 1.2;

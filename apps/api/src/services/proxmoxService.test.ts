@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
+process.env.DATABASE_URL = ":memory:";
+
+const {
   getDemoProxmoxSnapshot,
   runWithProxmoxSyncLock,
   summarizeProxmoxStorage,
-} from "./proxmoxService.js";
+} = await import("./proxmoxService.js");
 
 test("Proxmox storage summary distinguishes capacity and availability issues", () => {
   const previousWarning = process.env.NODEGUARD_PROXMOX_STORAGE_WARNING_PERCENT;

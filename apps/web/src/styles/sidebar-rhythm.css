@@ -1,0 +1,99 @@
+/* Sidebar type and rhythm: aligned with the shared compact application scale. */
+:root {
+  --ng-type-sidebar-brand: var(--ng-type-page-title, 16px);
+  --ng-type-sidebar-nav: var(--ng-type-button, 13px);
+  --ng-sidebar-nav-weight: 600;
+  --ng-sidebar-nav-active-weight: 700;
+  --ng-sidebar-item-height: 34px;
+  --ng-sidebar-icon-size: 16px;
+  --ng-sidebar-item-gap: 7px;
+}
+
+.brand {
+  font-size: var(--ng-type-sidebar-brand);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+
+.brand-logo {
+  width: 28px;
+  height: 28px;
+}
+
+.sidebar nav button,
+.sidebar .sidebar-logout {
+  min-height: var(--ng-sidebar-item-height);
+  gap: var(--ng-sidebar-item-gap);
+  padding-block: 0;
+  padding-inline: 8px;
+  border-radius: var(--ng-button-radius, 6px);
+  font-size: var(--ng-type-sidebar-nav);
+  font-weight: var(--ng-sidebar-nav-weight);
+  line-height: 1;
+  letter-spacing: 0.005em;
+}
+
+.sidebar nav button.active {
+  font-weight: var(--ng-sidebar-nav-active-weight);
+}
+
+.sidebar nav button:focus-visible,
+.sidebar .sidebar-logout:focus-visible,
+.sidebar-toggle:focus-visible,
+.sidebar-reveal:focus-visible {
+  outline: 2px solid rgba(56, 217, 255, 0.82);
+  outline-offset: 2px;
+}
+
+.app-shell.sidebar-collapsed .sidebar-reveal::after {
+  content: attr(aria-label);
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  z-index: 10;
+  padding: 5px 7px;
+  border: 1px solid var(--ng-border-strong);
+  border-radius: var(--ng-button-radius, 6px);
+  color: var(--ng-text);
+  background: #111827;
+  box-shadow: var(--ng-shadow);
+  font-size: var(--ng-type-helper, 12px);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(4px, -50%);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.app-shell.sidebar-collapsed .sidebar-reveal:hover::after,
+.app-shell.sidebar-collapsed .sidebar-reveal:focus-visible::after {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.sidebar nav button > svg,
+.sidebar .sidebar-logout > svg {
+  width: var(--ng-sidebar-icon-size);
+  height: var(--ng-sidebar-icon-size);
+  flex-basis: var(--ng-sidebar-icon-size);
+  stroke-width: 2;
+}
+
+.sidebar-nav-label,
+.sidebar-action-label {
+  font: inherit;
+  line-height: 1;
+  letter-spacing: inherit;
+}
+
+@media (max-width: 760px) {
+  .sidebar nav button,
+  .sidebar .sidebar-logout {
+    min-height: 40px;
+  }
+}
+

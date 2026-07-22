@@ -13,6 +13,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/contract"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/model"
 )
 
@@ -80,7 +81,7 @@ func NewAPTProviderWithOptions(options APTProviderOptions) *APTProvider {
 }
 
 func (provider *APTProvider) Name() string {
-	return "apt"
+	return contract.AgentUpdateProvider
 }
 
 func parseOSRelease(path string) (osRelease, error) {
@@ -237,10 +238,10 @@ func (provider *APTProvider) detectProxmox(ctx context.Context, info *osRelease)
 func (provider *APTProvider) checkPackageLocks(info osRelease) (model.UpdateInventory, bool) {
 	busy, err := provider.lockChecker.Busy()
 	if err != nil {
-		return provider.failure(info, true, model.UpdateStatusCheckFailed, "package_lock_check_failed", "The package manager lock state could not be checked safely."), false
+		return provider.failure(info, true, model.UpdateStatusCheckFailed, contract.AgentUpdateErrorPackageLockCheckFailed, "The package manager lock state could not be checked safely."), false
 	}
 	if busy {
-		return provider.failure(info, true, model.UpdateStatusPackageManagerBusy, "package_manager_busy", "The package manager is currently busy. NodeGuard will retry automatically."), false
+		return provider.failure(info, true, model.UpdateStatusPackageManagerBusy, contract.AgentUpdateErrorPackageManagerBusy, "The package manager is currently busy. NodeGuard will retry automatically."), false
 	}
 	return model.UpdateInventory{}, true
 }
@@ -248,14 +249,14 @@ func (provider *APTProvider) checkPackageLocks(info osRelease) (model.UpdateInve
 func (provider *APTProvider) Check(ctx context.Context) model.UpdateInventory {
 	info, err := parseOSRelease(provider.osReleasePath)
 	if err != nil {
-		return provider.failure(info, true, model.UpdateStatusCheckFailed, "os_detection_failed", "Operating system information could not be read safely.")
+		return provider.failure(info, true, model.UpdateStatusCheckFailed, contract.AgentUpdateErrorOSDetectionFailed, "Operating system information could not be read safely.")
 	}
 	if !supportsAPT(info) {
-		return provider.failure(info, false, model.UpdateStatusUnsupported, "unsupported_os", "Update discovery is not available for this operating system.")
+		return provider.failure(info, false, model.UpdateStatusUnsupported, contract.AgentUpdateErrorUnsupportedOS, "Update discovery is not available for this operating system.")
 	}
 	provider.detectProxmox(ctx, &info)
 	if !provider.runner.Available("apt-get") || !provider.runner.Available("apt") {
-		return provider.failure(info, true, model.UpdateStatusCheckFailed, "apt_unavailable", "The required APT tools are not available on this machine.")
+		return provider.failure(info, true, model.UpdateStatusCheckFailed, contract.AgentUpdateErrorAPTUnavailable, "The required APT tools are not available on this machine.")
 	}
 	if inventory, ready := provider.checkPackageLocks(info); !ready {
 		return inventory
@@ -267,15 +268,15 @@ func (provider *APTProvider) Check(ctx context.Context) model.UpdateInventory {
 	cancelRefresh()
 	if refreshError != nil {
 		if errors.Is(refreshError, ErrCommandOutputTooLarge) {
-			return provider.failure(info, true, model.UpdateStatusMetadataRefreshFailed, "metadata_output_too_large", "APT package metadata refresh produced too much diagnostic output.")
+			return provider.failure(info, true, model.UpdateStatusMetadataRefreshFailed, contract.AgentUpdateErrorMetadataOutputTooLarge, "APT package metadata refresh produced too much diagnostic output.")
 		}
 		if packageManagerBusy(refreshResult) {
-			return provider.failure(info, true, model.UpdateStatusPackageManagerBusy, "package_manager_busy", "The package manager is currently busy. NodeGuard will retry automatically.")
+			return provider.failure(info, true, model.UpdateStatusPackageManagerBusy, contract.AgentUpdateErrorPackageManagerBusy, "The package manager is currently busy. NodeGuard will retry automatically.")
 		}
 		if errors.Is(refreshContextError, context.DeadlineExceeded) || errors.Is(refreshError, context.DeadlineExceeded) {
-			return provider.failure(info, true, model.UpdateStatusMetadataRefreshFailed, "metadata_refresh_timeout", "APT package metadata refresh timed out.")
+			return provider.failure(info, true, model.UpdateStatusMetadataRefreshFailed, contract.AgentUpdateErrorMetadataRefreshTimeout, "APT package metadata refresh timed out.")
 		}
-		return provider.failure(info, true, model.UpdateStatusMetadataRefreshFailed, "metadata_refresh_failed", "APT package metadata could not be refreshed.")
+		return provider.failure(info, true, model.UpdateStatusMetadataRefreshFailed, contract.AgentUpdateErrorMetadataRefreshFailed, "APT package metadata could not be refreshed.")
 	}
 	if inventory, ready := provider.checkPackageLocks(info); !ready {
 		return inventory
@@ -287,24 +288,24 @@ func (provider *APTProvider) Check(ctx context.Context) model.UpdateInventory {
 	cancelQuery()
 	if queryError != nil {
 		if errors.Is(queryError, ErrCommandOutputTooLarge) {
-			return provider.failure(info, true, model.UpdateStatusCheckFailed, "check_output_too_large", "APT returned an update list that exceeded the safe output limit.")
+			return provider.failure(info, true, model.UpdateStatusCheckFailed, contract.AgentUpdateErrorCheckOutputTooLarge, "APT returned an update list that exceeded the safe output limit.")
 		}
 		if packageManagerBusy(queryResult) {
-			return provider.failure(info, true, model.UpdateStatusPackageManagerBusy, "package_manager_busy", "The package manager is currently busy. NodeGuard will retry automatically.")
+			return provider.failure(info, true, model.UpdateStatusPackageManagerBusy, contract.AgentUpdateErrorPackageManagerBusy, "The package manager is currently busy. NodeGuard will retry automatically.")
 		}
 		if errors.Is(queryContextError, context.DeadlineExceeded) || errors.Is(queryError, context.DeadlineExceeded) {
-			return provider.failure(info, true, model.UpdateStatusCheckFailed, "check_timeout", "APT update discovery timed out.")
+			return provider.failure(info, true, model.UpdateStatusCheckFailed, contract.AgentUpdateErrorCheckTimeout, "APT update discovery timed out.")
 		}
-		return provider.failure(info, true, model.UpdateStatusCheckFailed, "check_failed", "APT could not determine the available package updates.")
+		return provider.failure(info, true, model.UpdateStatusCheckFailed, contract.AgentUpdateErrorCheckFailed, "APT could not determine the available package updates.")
 	}
 
 	packages, total, securityCount, parseError := parseUpgradableList(queryResult.Stdout, provider.maxPackages)
 	if parseError != nil {
-		return provider.failure(info, true, model.UpdateStatusCheckFailed, "malformed_apt_output", "APT returned an unexpected update list.")
+		return provider.failure(info, true, model.UpdateStatusCheckFailed, contract.AgentUpdateErrorMalformedAPTOutput, "APT returned an unexpected update list.")
 	}
 	rebootRequired, rebootError := rebootRequired(provider.rebootRequiredPath)
 	if rebootError != nil {
-		return provider.failure(info, true, model.UpdateStatusCheckFailed, "reboot_state_unavailable", "The reboot-required state could not be read safely.")
+		return provider.failure(info, true, model.UpdateStatusCheckFailed, contract.AgentUpdateErrorRebootStateUnavailable, "The reboot-required state could not be read safely.")
 	}
 	checkedAt := provider.now().UTC()
 	return model.UpdateInventory{

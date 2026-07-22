@@ -1,4 +1,5 @@
 import type { AgentDetail, AgentSummary, Alert, Container, DockerSnapshot, DomainCheck, MachineUpdateDetail, MetricHistory, MetricHistoryRange, MetricSnapshot, MonitoredServerStatus, Overview, Server, UpdateCenterSnapshot } from "./types/nodeguard";
+import { AGENT_UPDATE_PROVIDER } from "./generated/agentContract";
 
 const now = () => new Date().toISOString();
 const ago = ({ minutes = 0, hours = 0, days = 0 }: { minutes?: number; hours?: number; days?: number }) => new Date(Date.now() - (((days * 24 + hours) * 60 + minutes) * 60 * 1000)).toISOString();
@@ -168,7 +169,7 @@ const agentHostByContainer: Record<string, { serverId: string; hostName: string 
   port001: { serverId: "agent-docker-main", hostName: "Docker main" },
   home001: { serverId: "agent-docker-main", hostName: "Docker main" },
   immich001: { serverId: "agent-photos-vm", hostName: "Photos VM" },
-  postgres001: { serverId: "agent-photos-vm", hostName: "Photos VM" },
+  pg001: { serverId: "agent-photos-vm", hostName: "Photos VM" },
   redis001: { serverId: "agent-photos-vm", hostName: "Photos VM" },
   paper001: { serverId: "agent-photos-vm", hostName: "Photos VM" }
 };
@@ -281,7 +282,7 @@ export const demoMachineUpdates: MachineUpdateDetail[] = [
     displayName: "Photos VM",
     hostname: "photos-vm",
     agentStatus: "online",
-    provider: "apt",
+    provider: AGENT_UPDATE_PROVIDER,
     supported: true,
     status: "ok",
     freshness: "current",
@@ -314,7 +315,7 @@ export const demoMachineUpdates: MachineUpdateDetail[] = [
     displayName: "Docker main",
     hostname: "docker-main",
     agentStatus: "online",
-    provider: "apt",
+    provider: AGENT_UPDATE_PROVIDER,
     supported: true,
     status: "ok",
     freshness: "current",
@@ -334,7 +335,7 @@ export const demoMachineUpdates: MachineUpdateDetail[] = [
     displayName: "PVE main",
     hostname: "pve-main",
     agentStatus: "online",
-    provider: "apt",
+    provider: AGENT_UPDATE_PROVIDER,
     supported: true,
     status: "ok",
     freshness: "current",
@@ -360,7 +361,7 @@ export const demoMachineUpdates: MachineUpdateDetail[] = [
     displayName: "Backup appliance",
     hostname: "backup-appliance",
     agentStatus: "stale",
-    provider: "apt",
+    provider: AGENT_UPDATE_PROVIDER,
     supported: false,
     status: "unsupported",
     freshness: "waiting",
@@ -380,7 +381,7 @@ export const demoMachineUpdates: MachineUpdateDetail[] = [
     displayName: "Edge node",
     hostname: "edge-node",
     agentStatus: "offline",
-    provider: "apt",
+    provider: AGENT_UPDATE_PROVIDER,
     supported: true,
     status: "ok",
     freshness: "stale",

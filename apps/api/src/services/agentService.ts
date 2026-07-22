@@ -514,6 +514,10 @@ export function recordAgentMetrics(agentId: string, input: AgentMetricsInput) {
         sample.loadAverage1, sample.loadAverage5, sample.loadAverage15, sample.systemUptimeSeconds, sample.timestamp);
       recordMetricSnapshot(metricToSnapshot(agentId, sample));
     }
+    const retentionBoundary = new Date(
+      Date.now() - env.metricHistoryRetentionDays * 24 * 60 * 60 * 1000
+    ).toISOString();
+    database.prepare("DELETE FROM agent_metrics WHERE sampled_at < ?").run(retentionBoundary);
     const latest = samples.reduce((left, right) => left.timestamp > right.timestamp ? left : right);
     database.prepare("UPDATE agents SET last_metrics_at = ?, system_uptime_seconds = ?, updated_at = ? WHERE id = ? AND revoked_at IS NULL")
       .run(latest.timestamp, latest.systemUptimeSeconds, nowIso(), agentId);

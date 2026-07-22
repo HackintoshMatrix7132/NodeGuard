@@ -1,0 +1,211 @@
+/* Shared action and type scale: compact controls without flattening hierarchy. */
+:root {
+  --ng-type-page-title: 16px;
+  --ng-type-section-title: 14px;
+  --ng-type-card-title: 13px;
+  --ng-type-body: 13px;
+  --ng-type-label: 11px;
+  --ng-type-helper: 12px;
+  --ng-type-button: 13px;
+  --ng-type-badge: 11px;
+  --ng-button-height: 32px;
+  --ng-button-compact-height: 30px;
+  --ng-button-icon-size: 32px;
+  --ng-button-padding-x: 10px;
+  --ng-button-gap: 6px;
+  --ng-button-radius: 6px;
+}
+
+.topbar-title h1 {
+  font-size: var(--ng-type-page-title);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.panel-header h2,
+.panel h2,
+.modal-header h2 {
+  font-size: var(--ng-type-section-title);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.server-info-group h3,
+.settings-subheading,
+.alert-detail h3,
+.diagnostic-panel h3 {
+  font-size: var(--ng-type-card-title);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.settings-description,
+.muted,
+.metric-detail,
+.resource-context,
+.table-row small,
+.data-row small {
+  font-size: var(--ng-type-helper);
+  line-height: 1.35;
+}
+
+.info span,
+.info small,
+.inline-form label,
+.modal-form label,
+.agent-toolbar > label,
+.container-table-header,
+.alert-table-header,
+.agents-table th,
+.updates-table th,
+.package-updates-table th {
+  font-size: var(--ng-type-label);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.info strong,
+.table-row strong,
+.data-row strong,
+.agents-table td,
+.updates-table td,
+.package-updates-table td {
+  font-size: var(--ng-type-body);
+  line-height: 1.3;
+}
+
+.pill,
+.environment-badge,
+.nav-count,
+.alert-count {
+  font-size: var(--ng-type-badge);
+  line-height: 1;
+}
+
+body .primary-button,
+body .secondary-button,
+body .danger-button,
+body .modal-submit,
+.dashboard-panel-action,
+.icon-button,
+.small-action-button,
+.panel-header > button,
+.inline-form button,
+.button-row button,
+.settings-inline-action button,
+button.agent-generate-button,
+button.agent-view-button,
+.agent-command-actions button,
+.agent-detail-actions > button,
+.agent-lifecycle-actions button,
+.machine-update-card > button,
+.agent-update-summary-footer button,
+.agent-update-empty button {
+  min-height: var(--ng-button-height);
+  gap: var(--ng-button-gap);
+  padding: 4px var(--ng-button-padding-x);
+  border-radius: var(--ng-button-radius);
+  font-size: var(--ng-type-button);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.panel-header > button,
+.dashboard-panel-action,
+.small-action-button,
+.container-table-header button,
+.history-ranges button,
+.alert-view-tabs button,
+.alert-pagination button {
+  min-height: var(--ng-button-compact-height);
+}
+
+.icon-only,
+.panel .icon-only,
+.alert-pagination .icon-only {
+  width: var(--ng-button-icon-size);
+  min-width: var(--ng-button-icon-size);
+  min-height: var(--ng-button-icon-size) !important;
+  height: var(--ng-button-icon-size);
+  padding: 0 !important;
+  border-radius: var(--ng-button-radius);
+}
+
+body .primary-button svg,
+body .secondary-button svg,
+body .danger-button svg,
+body .modal-submit svg,
+.dashboard-panel-action svg,
+.icon-button svg,
+.small-action-button svg,
+.panel-header > button svg,
+.inline-form button svg,
+.button-row button svg,
+.settings-inline-action button svg,
+.icon-only svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  stroke-width: 2;
+}
+
+.segmented button,
+.alert-view-tabs button,
+.history-ranges button,
+.container-table-header button,
+.alert-pagination button {
+  padding-inline: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.panel button:disabled,
+.icon-button:disabled,
+.dashboard-panel-action:disabled {
+  opacity: 0.48;
+}
+
+@media (max-width: 760px) {
+  body .primary-button,
+  body .secondary-button,
+  body .danger-button,
+  body .modal-submit,
+  .dashboard-panel-action,
+  .icon-button,
+  .small-action-button,
+  .panel-header > button,
+  .inline-form button,
+  .button-row button,
+  .settings-inline-action button,
+  button.agent-generate-button,
+  button.agent-view-button,
+  .agent-command-actions button,
+  .agent-detail-actions > button,
+  .agent-lifecycle-actions button {
+    min-height: 38px;
+    font-size: var(--ng-type-button);
+  }
+
+  .panel-header > button,
+  .dashboard-panel-action,
+  .small-action-button,
+  .alert-view-tabs button,
+  .history-ranges button {
+    min-height: 34px;
+  }
+
+  .icon-only,
+  .panel .icon-only,
+  .alert-pagination .icon-only {
+    width: 36px;
+    min-width: 36px;
+    min-height: 36px !important;
+    height: 36px;
+  }
+}
+

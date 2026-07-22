@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
+import { readAppSource } from "../test/sourceInspection";
+
+const appSource = readAppSource();
 const mobileCss = readFileSync(new URL("../mobile.css", import.meta.url), "utf8");
 const proxmoxCss = readFileSync(new URL("../proxmox.css", import.meta.url), "utf8");
 

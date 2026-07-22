@@ -1,10 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 process.env.DATABASE_URL = ":memory:";
+process.env.NODEGUARD_INTEGRATION_SECRET = "nodeguard-database-migration-test-secret";
 
-const { ensureAgentMachineIdentitySchema, ensureAgentUpdateErrorCodeSchema, removeLegacyHomeAssistantUpdateSchema } = await import("./database.js");
+const {
+  ensureAgentMachineIdentitySchema,
+  ensureAgentUpdateErrorCodeSchema,
+  ensureServerMonitorApiKeyEncryptionSchema,
+  removeLegacyHomeAssistantUpdateSchema
+} = await import("./database.js");
+const { decryptIntegrationValue } = await import("./integrationCrypto.js");
 
 test("legacy Home Assistant update tables are removed once without touching unrelated data", () => {
   const database = new Database(":memory:");
@@ -24,6 +34,137 @@ test("legacy Home Assistant update tables are removed once without touching unre
   assert.equal(removeLegacyHomeAssistantUpdateSchema(database), false);
   assert.equal((database.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 1);
   database.close();
+});
+
+test("server monitor API-key migration encrypts legacy plaintext transactionally and is idempotent", () => {
+  const database = new Database(":memory:");
+  database.exec(`
+    CREATE TABLE server_monitors (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      backend_url TEXT NOT NULL,
+      api_key TEXT,
+      allow_insecure_tls INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+    INSERT INTO server_monitors (id, name, backend_url, api_key, created_at)
+    VALUES ('remote-a', 'Remote A', 'https://remote.example', 'legacy-secret', '2026-07-22T00:00:00.000Z');
+  `);
+
+  assert.equal(ensureServerMonitorApiKeyEncryptionSchema(database), true);
+  const stored = database.prepare(`
+    SELECT api_key, encrypted_api_key, api_key_iv, api_key_tag
+    FROM server_monitors WHERE id = 'remote-a'
+  `).get() as {
+    api_key: string | null;
+    encrypted_api_key: string;
+    api_key_iv: string;
+    api_key_tag: string;
+  };
+  assert.equal(stored.api_key, null);
+  assert.equal(JSON.stringify(stored).includes("legacy-secret"), false);
+  assert.equal(decryptIntegrationValue({
+    encrypted: stored.encrypted_api_key,
+    iv: stored.api_key_iv,
+    tag: stored.api_key_tag
+  }), "legacy-secret");
+
+  assert.equal(ensureServerMonitorApiKeyEncryptionSchema(database), false);
+  assert.deepEqual(database.prepare(`
+    SELECT api_key, encrypted_api_key, api_key_iv, api_key_tag
+    FROM server_monitors WHERE id = 'remote-a'
+  `).get(), stored);
+  assert.equal((database.prepare(`
+    SELECT COUNT(*) AS count FROM schema_migrations
+    WHERE name = '2026-07-22-encrypt-server-monitor-api-keys'
+  `).get() as { count: number }).count, 1);
+  database.close();
+});
+
+test("server monitor API-key migration checkpoints and securely removes plaintext from SQLite files", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "nodeguard-api-key-migration-"));
+  const databasePath = path.join(directory, "nodeguard.sqlite");
+  const secret = "plaintext-migration-sentinel-4d877d";
+  const database = new Database(databasePath);
+  database.pragma("journal_mode = WAL");
+  database.pragma("wal_autocheckpoint = 0");
+  database.exec(`
+    CREATE TABLE server_monitors (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      backend_url TEXT NOT NULL,
+      api_key TEXT,
+      allow_insecure_tls INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+  `);
+  database.prepare(`
+    INSERT INTO server_monitors (id, name, backend_url, api_key, created_at)
+    VALUES ('remote-disk', 'Remote disk', 'https://remote.example', ?, '2026-07-22T00:00:00.000Z')
+  `).run(secret);
+
+  try {
+    const before = [databasePath, `${databasePath}-wal`]
+      .filter(existsSync)
+      .map((filePath) => readFileSync(filePath))
+      .some((contents) => contents.includes(Buffer.from(secret)));
+    assert.equal(before, true, "the fixture must begin with a plaintext SQLite/WAL credential");
+
+    assert.equal(ensureServerMonitorApiKeyEncryptionSchema(database), true);
+    database.close();
+    const after = [databasePath, `${databasePath}-wal`, `${databasePath}-shm`]
+      .filter(existsSync)
+      .map((filePath) => readFileSync(filePath))
+      .some((contents) => contents.includes(Buffer.from(secret)));
+    assert.equal(after, false);
+  } finally {
+    if (database.open) database.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("server monitor API-key migration rolls back rather than retaining a partial ciphertext", () => {
+  const names = [
+    "NODEGUARD_INTEGRATION_ENCRYPTION_KEY",
+    "NODEGUARD_SESSION_SECRET",
+    "NODEGUARD_AUTH_SECRET",
+    "NODEGUARD_INTEGRATION_SECRET"
+  ] as const;
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  const database = new Database(":memory:");
+  database.exec(`
+    CREATE TABLE server_monitors (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      backend_url TEXT NOT NULL,
+      api_key TEXT,
+      allow_insecure_tls INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+    INSERT INTO server_monitors (id, name, backend_url, api_key, created_at)
+    VALUES ('remote-b', 'Remote B', 'https://remote.example', 'must-survive-rollback', '2026-07-22T00:00:00.000Z');
+  `);
+
+  try {
+    for (const name of names) delete process.env[name];
+    assert.throws(
+      () => ensureServerMonitorApiKeyEncryptionSchema(database),
+      /integration encryption secret is required/
+    );
+    assert.deepEqual(database.prepare("SELECT api_key FROM server_monitors").get(), {
+      api_key: "must-survive-rollback"
+    });
+    const columns = database.prepare("PRAGMA table_info(server_monitors)").all() as { name: string }[];
+    assert.equal(columns.some((column) => column.name === "encrypted_api_key"), false);
+    assert.equal((database.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as { count: number }).count, 0);
+  } finally {
+    for (const name of names) {
+      const value = previous[name];
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    database.close();
+  }
 });
 
 test("Agent machine identity migration is idempotent and enforces one registration per identity", () => {

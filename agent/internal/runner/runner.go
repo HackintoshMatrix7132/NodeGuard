@@ -11,6 +11,7 @@ import (
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/client"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/collectors"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/config"
+	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/contract"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/model"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/queue"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/updates"
@@ -53,7 +54,7 @@ func New(cfg config.Config, version string, logger *slog.Logger) *Runner {
 
 func (runner *Runner) enqueue(path string, payload any) {
 	coalesceKey := ""
-	if path == "/api/agent/updates" {
+	if path == contract.AgentEndpointUpdates {
 		coalesceKey = "agent-updates-state"
 		if inventory, ok := payload.(model.UpdateInventory); ok && inventory.Status == model.UpdateStatusOK {
 			coalesceKey = "agent-updates-success"
@@ -61,12 +62,12 @@ func (runner *Runner) enqueue(path string, payload any) {
 	}
 	runner.queue.Add(queue.Item{
 		Path: path, CoalesceKey: coalesceKey, Payload: payload, CreatedAt: time.Now(),
-		RetainUntilReplaced: path == "/api/agent/updates",
+		RetainUntilReplaced: path == contract.AgentEndpointUpdates,
 	})
 }
 
 func (runner *Runner) heartbeat() {
-	runner.enqueue("/api/agent/heartbeat", model.Heartbeat{
+	runner.enqueue(contract.AgentEndpointHeartbeat, model.Heartbeat{
 		AgentID: runner.config.AgentID, MachineIdentity: runner.machineIdentity, AgentVersion: runner.version,
 		ProcessUptimeSeconds: int64(time.Since(runner.startedAt).Seconds()), Timestamp: time.Now().UTC(),
 	})
@@ -78,12 +79,12 @@ func (runner *Runner) collectInventory() {
 		runner.logger.Error("host inventory collection failed", "event", "inventory_failed", "error", err.Error())
 		return
 	}
-	runner.enqueue("/api/agent/inventory", inventory)
+	runner.enqueue(contract.AgentEndpointInventory, inventory)
 }
 
 func (runner *Runner) collectMetrics() {
 	sample := runner.metrics.Collect()
-	runner.enqueue("/api/agent/metrics", model.MetricsPayload{Samples: []model.MetricSample{sample}})
+	runner.enqueue(contract.AgentEndpointMetrics, model.MetricsPayload{Samples: []model.MetricSample{sample}})
 	runner.logger.Info("host metrics collected", "event", "metrics_collected")
 }
 
@@ -101,7 +102,7 @@ func (runner *Runner) collectDocker(ctx context.Context) {
 		runner.logger.Info("Docker connection restored", "event", "docker_restored")
 	}
 	runner.dockerAvailable = &available
-	runner.enqueue("/api/agent/docker", payload)
+	runner.enqueue(contract.AgentEndpointDocker, payload)
 }
 
 func retryDelay(failures int) time.Duration {
@@ -207,7 +208,7 @@ func (runner *Runner) sendNext(ctx context.Context) {
 		runner.failures++
 		delay := retryDelay(runner.failures)
 		runner.nextAttempt = time.Now().Add(delay)
-		if !runner.connectionFailed || item.Path == "/api/agent/heartbeat" {
+		if !runner.connectionFailed || item.Path == contract.AgentEndpointHeartbeat {
 			runner.logger.Warn("NodeGuard request failed", "event", "heartbeat_failed", "path", item.Path, "retryIn", delay.String(), "error", err.Error())
 		}
 		runner.connectionFailed = true
@@ -270,7 +271,7 @@ func (runner *Runner) Run(ctx context.Context) error {
 		case inventory := <-updateResults:
 			updateRunning = false
 			inventory = runner.preserveLastSuccessfulUpdate(inventory)
-			runner.enqueue("/api/agent/updates", inventory)
+			runner.enqueue(contract.AgentEndpointUpdates, inventory)
 			if updateStatusIsTransient(inventory.Status) {
 				updateFailures++
 				delay := updateRetryDelay(updateFailures, updateInterval)

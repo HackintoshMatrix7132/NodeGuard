@@ -6,7 +6,15 @@ import {
   normalizeProxmoxNodeRrd,
   normalizeProxmoxNodeStatus,
   normalizeProxmoxTransportError,
+  parseProxmoxRequestTimeoutMs,
 } from "./proxmoxClient.js";
+
+test("Proxmox request timeouts are finite and bounded for shutdown", () => {
+  assert.equal(parseProxmoxRequestTimeoutMs(undefined), 10_000);
+  assert.equal(parseProxmoxRequestTimeoutMs("invalid"), 10_000);
+  assert.equal(parseProxmoxRequestTimeoutMs("1"), 2_000);
+  assert.equal(parseProxmoxRequestTimeoutMs("90000"), 60_000);
+});
 
 test("Proxmox base URLs are normalized without changing the endpoint", () => {
   assert.equal(

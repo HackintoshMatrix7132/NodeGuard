@@ -2,16 +2,21 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ProxmoxApiRequestError, type ProxmoxNodeRrdRecord } from "./proxmoxClient.js";
-import {
+import type {
+  ProxmoxNodeContext,
+  ProxmoxNodeDataSource,
+  ProxmoxNodeHistoryPoint,
+} from "./proxmoxNodeService.js";
+
+process.env.DATABASE_URL = ":memory:";
+
+const {
   PROXMOX_HISTORY_RANGE_CONFIG,
   ProxmoxNodeServiceError,
   createProxmoxNodeService,
   downsampleProxmoxHistory,
   validateProxmoxHistoryRange,
-  type ProxmoxNodeContext,
-  type ProxmoxNodeDataSource,
-  type ProxmoxNodeHistoryPoint,
-} from "./proxmoxNodeService.js";
+} = await import("./proxmoxNodeService.js");
 
 const now = Date.UTC(2026, 6, 19, 12, 0, 0);
 

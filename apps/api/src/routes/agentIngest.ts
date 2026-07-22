@@ -1,5 +1,6 @@
 import { Router } from "express";
 
+import { AGENT_ROUTE_PATHS } from "../generated/agentContract.js";
 import { requireAgent } from "../middleware/agentAuth.js";
 import {
   AgentPayloadError,
@@ -39,7 +40,7 @@ function sendAgentError(error: unknown, response: Parameters<typeof requireAgent
   return false;
 }
 
-agentIngestRouter.post("/register", (request, response, next) => {
+agentIngestRouter.post(AGENT_ROUTE_PATHS.register, (request, response, next) => {
   try {
     response.setHeader("Cache-Control", "no-store");
     response.status(201).json(registerAgent(parseAgentRegistration(request.body)));
@@ -50,7 +51,7 @@ agentIngestRouter.post("/register", (request, response, next) => {
 
 agentIngestRouter.use(requireAgent);
 
-agentIngestRouter.get("/status", (_request, response, next) => {
+agentIngestRouter.get(AGENT_ROUTE_PATHS.status, (_request, response, next) => {
   try {
     response.json(getAgentStatusPayload(agentId(response)));
   } catch (error) {
@@ -58,7 +59,7 @@ agentIngestRouter.get("/status", (_request, response, next) => {
   }
 });
 
-agentIngestRouter.post("/heartbeat", (request, response, next) => {
+agentIngestRouter.post(AGENT_ROUTE_PATHS.heartbeat, (request, response, next) => {
   try {
     response.json(recordAgentHeartbeat(agentId(response), parseAgentHeartbeat(request.body)));
   } catch (error) {
@@ -66,7 +67,7 @@ agentIngestRouter.post("/heartbeat", (request, response, next) => {
   }
 });
 
-agentIngestRouter.post("/inventory", (request, response, next) => {
+agentIngestRouter.post(AGENT_ROUTE_PATHS.inventory, (request, response, next) => {
   try {
     response.json(recordAgentInventory(agentId(response), parseAgentInventory(request.body)));
   } catch (error) {
@@ -74,7 +75,7 @@ agentIngestRouter.post("/inventory", (request, response, next) => {
   }
 });
 
-agentIngestRouter.post("/metrics", (request, response, next) => {
+agentIngestRouter.post(AGENT_ROUTE_PATHS.metrics, (request, response, next) => {
   try {
     response.json(recordAgentMetrics(agentId(response), parseAgentMetrics(request.body)));
   } catch (error) {
@@ -82,7 +83,7 @@ agentIngestRouter.post("/metrics", (request, response, next) => {
   }
 });
 
-agentIngestRouter.post("/docker", (request, response, next) => {
+agentIngestRouter.post(AGENT_ROUTE_PATHS.docker, (request, response, next) => {
   try {
     response.json(recordAgentDocker(agentId(response), parseAgentDocker(request.body)));
   } catch (error) {
@@ -90,7 +91,7 @@ agentIngestRouter.post("/docker", (request, response, next) => {
   }
 });
 
-agentIngestRouter.post("/updates", (request, response, next) => {
+agentIngestRouter.post(AGENT_ROUTE_PATHS.updates, (request, response, next) => {
   try {
     response.json(recordAgentUpdates(agentId(response), parseAgentUpdates(request.body)));
   } catch (error) {

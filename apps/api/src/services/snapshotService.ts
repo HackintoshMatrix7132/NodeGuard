@@ -8,7 +8,7 @@ import { getDomainChecks } from "./domainCheckService.js";
 import { listMonitoredServerStatuses } from "./serverMonitorService.js";
 import { getSystemSnapshot } from "./systemMetrics.js";
 import { getUpdateAlerts } from "./updateService.js";
-import { getProxmoxAlerts, getProxmoxSnapshot } from "./proxmoxService.js";
+import { getProxmoxAlerts } from "./proxmoxService.js";
 
 function worstStatus(statuses: HealthStatus[]): HealthStatus {
   if (statuses.includes("critical") || statuses.includes("offline")) {

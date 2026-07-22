@@ -150,7 +150,7 @@ The automated geometry sweep compared `documentElement.scrollWidth` with `client
 - **Severity/category:** High / Performance
 - **What is wrong:** The DevTools network log recorded repeated overview, machine, domain, container, agent, alert-list, and open alert-detail requests; many returned 304 and several resource groups repeated at short intervals.
 - **Why it matters:** This increases backend/network work and makes duplicate-request or refresh flicker defects harder to distinguish.
-- **Likely source:** refresh-interval/query configuration in `apps/web/src/App.tsx`
+- **Likely source:** refresh-interval/query configuration in `apps/web/src/app/AppShell.tsx`
 - **Suggested fix:** Inventory query ownership, deduplicate shared keys, pause detail polling when hidden, and enforce a sensible minimum interval while preserving user-configured freshness.
 - **Evidence:** Request sequence included `/api/agents` repeatedly from request IDs 175–203 and repeated `/api/alerts?status=all` plus the open alert-detail endpoint from 220 onward.
 
@@ -174,7 +174,7 @@ The automated geometry sweep compared `documentElement.scrollWidth` with `client
 - **Severity/category:** High / Consistency
 - **What is wrong:** The audited live state displayed Critical overall health while Active Issues reported none and the Critical Alerts summary showed a non-zero historical count.
 - **Why it matters:** Operators cannot tell whether the dashboard is describing active incidents, retained history, or infrastructure health.
-- **Likely source:** dashboard presentation/aggregation in `apps/web/src/App.tsx` and returned overview semantics
+- **Likely source:** dashboard presentation/aggregation in `apps/web/src/pages/Dashboard.tsx` and returned overview semantics
 - **Suggested fix:** Label historical counts explicitly and make the overall-health explanation identify the active condition that drives it. Any aggregation-contract change needs separate backend/API scope.
 - **Evidence:** Direct visual comparison of the three simultaneously visible dashboard surfaces.
 
@@ -186,7 +186,7 @@ The automated geometry sweep compared `documentElement.scrollWidth` with `client
 - **Severity/category:** Medium / Accessibility
 - **What is wrong:** Chrome reported form-field issues for two login fields locally and twelve controls across the preserved navigation session.
 - **Why it matters:** Labels may still work by nesting, but missing stable form metadata weakens autofill, diagnostics, and automated accessibility tooling.
-- **Likely source:** form markup in `apps/web/src/App.tsx` and `apps/web/src/components/ProxmoxIntegration.tsx`
+- **Likely source:** form markup in `apps/web/src/app/AppShell.tsx`, `apps/web/src/pages/SettingsPage.tsx`, and `apps/web/src/components/ProxmoxIntegration.tsx`
 - **Suggested fix:** Add unique `id`/`name` pairs and explicit `htmlFor` without changing submitted payloads.
 - **Evidence:** Chrome DevTools Issues: “A form field element should have an id or name attribute.”
 
@@ -222,7 +222,7 @@ The automated geometry sweep compared `documentElement.scrollWidth` with `client
 - **Severity/category:** Medium / Responsive
 - **What is wrong:** The current inventory produces a page around 1,535px tall even before expanding diagnostics.
 - **Why it matters:** Reaching a later service or its actions takes substantially more navigation than desktop scanning.
-- **Likely source:** domain mobile-card composition in `apps/web/src/App.tsx` and `apps/web/src/styles.css`
+- **Likely source:** domain mobile-card composition in `apps/web/src/pages/DomainsPage.tsx` and the ordered modules imported by `apps/web/src/styles.css`
 - **Suggested fix:** Add a compact search/filter row and consider collapsible secondary diagnostics metadata.
 - **Evidence:** DevTools geometry at 390 × 844: 0px horizontal overflow, 1,535px document height.
 
@@ -234,7 +234,7 @@ The automated geometry sweep compared `documentElement.scrollWidth` with `client
 - **Severity/category:** Medium / Responsive
 - **What is wrong:** The system/resource/detail composition measured approximately 1,669px tall on both small-phone widths.
 - **Why it matters:** Important runtime sections are separated by more scrolling than the compact desktop hierarchy implies.
-- **Likely source:** machine detail composition in `apps/web/src/App.tsx` and mobile rules in `apps/web/src/styles.css`
+- **Likely source:** machine detail composition in `apps/web/src/pages/MachinesPage.tsx` and mobile rules in the ordered modules imported by `apps/web/src/styles.css`
 - **Suggested fix:** Group secondary key/value fields into denser two-column definition grids and collapse optional history controls until selected.
 - **Evidence:** DevTools route/viewport geometry sweep.
 
@@ -246,7 +246,7 @@ The automated geometry sweep compared `documentElement.scrollWidth` with `client
 - **Severity/category:** Low / Spacing
 - **What is wrong:** Typography is now consistent, but the live settings page remains approximately 1,416px tall at 390px.
 - **Why it matters:** The most frequently inspected connection and integration status is concise, while lower secondary sections still require a long traversal.
-- **Likely source:** settings section composition in `apps/web/src/App.tsx` and `apps/web/src/styles.css`
+- **Likely source:** settings section composition in `apps/web/src/pages/SettingsPage.tsx` and the ordered modules imported by `apps/web/src/styles.css`
 - **Suggested fix:** Consider disclosure for About/Diagnostics details and align more read-only key/value pairs in two columns.
 - **Evidence:** DevTools geometry sweep at 390 × 844.
 
@@ -260,7 +260,7 @@ The automated geometry sweep compared `documentElement.scrollWidth` with `client
 - **Severity/category:** Medium / Loading
 - **What is wrong:** Source and naturally occurring live states were inspected, but production data was not manipulated and Chrome request interception fixtures were not available in the project.
 - **Why it matters:** Visual regressions can hide in rare state combinations even when populated layouts pass.
-- **Likely source:** shared state blocks and per-route query render branches in `apps/web/src/App.tsx`
+- **Likely source:** shared state blocks in `apps/web/src/app/status.tsx` and per-route query render branches under `apps/web/src/pages/`
 - **Suggested fix:** Add safe deterministic frontend fixtures or an E2E test mode for state variants, including slow and failed background refetch while retaining cached data.
 - **Evidence:** Naturally available loading, empty, populated, and detail states passed; the remaining variants were source-reviewed only.
 
@@ -281,7 +281,7 @@ The automated geometry sweep compared `documentElement.scrollWidth` with `client
 
 The new tokens define page, section, card, body, label, helper, button, and badge text roles plus default, compact, icon, gap, padding, and radius action geometry. Primary, secondary, ghost, danger, icon-only, and compact toolbar roles now share sizing while retaining their existing colors, borders, hover, focus, active, disabled, and loading semantics.
 
-The current CSS remains intentionally additive because a wholesale rewrite would be out of scope and high risk. NG-AUD-009 tracks consolidation work.
+The current CSS remains an intentionally ordered cascade split into focused modules under `apps/web/src/styles/`; a wholesale selector rewrite would still be out of scope and high risk. NG-AUD-009 tracks deeper consolidation work.
 
 ## Mobile-specific findings
 

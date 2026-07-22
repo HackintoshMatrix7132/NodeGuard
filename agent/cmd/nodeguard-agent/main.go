@@ -23,6 +23,7 @@ import (
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/client"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/collectors"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/config"
+	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/contract"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/identity"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/logging"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/model"
@@ -421,7 +422,7 @@ func (app *application) enroll(args []string, reEnroll bool) error {
 		// definitive rejected old credential may continue without a successful
 		// bind; every ambiguous or conflicting result fails before registration.
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		bindErr := client.New(previous).Post(ctx, "/api/agent/heartbeat", model.Heartbeat{
+		bindErr := client.New(previous).Post(ctx, contract.AgentEndpointHeartbeat, model.Heartbeat{
 			AgentID: previous.AgentID, MachineIdentity: machineIdentity, AgentVersion: version.Version, Timestamp: time.Now().UTC(),
 		})
 		cancel()

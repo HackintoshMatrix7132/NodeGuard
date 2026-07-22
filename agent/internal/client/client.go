@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/config"
+	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/contract"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/model"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/version"
 )
@@ -54,7 +55,7 @@ func Register(ctx context.Context, serverURL string, request model.RegistrationR
 	var lastError error
 	for attempt := 0; attempt < 3; attempt++ {
 		var response model.RegistrationResponse
-		if err := client.doJSON(ctx, http.MethodPost, "/api/agent/register", request, &response, false); err != nil {
+		if err := client.doJSON(ctx, http.MethodPost, contract.AgentEndpointRegister, request, &response, false); err != nil {
 			lastError = err
 			if !registrationRetryable(err) || attempt == 2 {
 				return response, err
@@ -106,7 +107,7 @@ func (client *Client) Post(ctx context.Context, path string, payload any) error 
 
 func (client *Client) Status(ctx context.Context) (model.AgentStatus, error) {
 	var status model.AgentStatus
-	err := client.doJSON(ctx, http.MethodGet, "/api/agent/status", nil, &status, true)
+	err := client.doJSON(ctx, http.MethodGet, contract.AgentEndpointStatus, nil, &status, true)
 	return status, err
 }
 

@@ -3,11 +3,12 @@ package updates
 import (
 	"context"
 
+	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/contract"
 	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/model"
 )
 
 const (
-	SchemaVersion      = 1
+	SchemaVersion      = contract.AgentUpdateSchemaVersion
 	MaximumPackageRows = 500
 )
 

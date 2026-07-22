@@ -24,7 +24,6 @@ import {
   Thermometer,
   Trash2,
   X,
-  XCircle,
 } from "lucide-react";
 import {
   FormEvent,

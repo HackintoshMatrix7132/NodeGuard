@@ -90,10 +90,6 @@ function findContainer(containers: Container[], containerRef: string) {
   );
 }
 
-export async function listContainerMonitors() {
-  return readStoredMonitors();
-}
-
 export async function listContainerMonitorStatuses(docker: Pick<DockerSnapshot, "dockerAvailable" | "containers" | "message">): Promise<ContainerMonitorStatus[]> {
   const monitors = readStoredMonitors();
   const now = new Date().toISOString();

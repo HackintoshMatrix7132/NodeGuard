@@ -92,17 +92,11 @@ The dashboard above provides the high-level operational view. The pages below sh
     </td>
   </tr>
   <tr>
-    <td width="50%" valign="top">
+    <td colspan="2" valign="top">
       <img src="docs/screenshots/update-center.png" alt="NodeGuard Update Center showing machine update totals, operating systems, package counts, security updates, reboot status, and Agent freshness">
       <br>
       <strong>Read-only Update Center</strong><br>
       Scan Agent-managed Linux machines by update count, security-origin packages, reboot requirement, check state, and freshness; then inspect bounded package details without installing anything.
-    </td>
-    <td width="50%" valign="top">
-      <img src="docs/screenshots/settings-demo-isolation.png" alt="NodeGuard Settings page showing the isolated demo session, refresh controls, enforced demo environment, and hidden production diagnostics">
-      <br>
-      <strong>Backend-enforced demo isolation</strong><br>
-      The public demo account is permanently restricted to fictional data. Session identity determines the data boundary, while live configuration and production diagnostics stay unavailable.
     </td>
   </tr>
 </table>
@@ -245,6 +239,10 @@ NodeGuard focuses on visibility rather than remote administration. It does not e
 
 The Go agent does not open an inbound listener. It collects a fixed set of Linux, Docker, and APT update data and sends reports to NodeGuard over outbound HTTPS. This avoids requiring inbound firewall rules or remote-shell access on monitored hosts. Update discovery uses only hard-coded package-manager operations and cannot accept commands from the server.
 
+### Generated Agent protocol constants
+
+`contracts/agent-contract.json` is the language-neutral source for Agent ingestion paths and the drift-sensitive APT update protocol vocabulary. `npm run contracts:generate` deterministically refreshes the tracked TypeScript and Go outputs; `npm run contracts:check` is read-only and fails when an output is missing or stale. Payload structures remain owned and validated in their existing Go and TypeScript modules rather than being broadly generated.
+
 ### Separate human and machine authentication
 
 Human sessions, optional legacy machine API keys, enrollment tokens, stable machine identities, and per-Agent credentials have distinct purposes. The stable identity is a non-secret UUID stored separately under `/var/lib/nodeguard-agent`; it never authenticates a request. Agent credentials are stored in root-owned mode-`0600` configuration on the host and only as hashes by NodeGuard. Re-enrollment requires a valid one-time token, matches the exact stable identity, and rotates the credential transactionally without using hostname or display name as identity.
@@ -252,6 +250,8 @@ Human sessions, optional legacy machine API keys, enrollment tokens, stable mach
 ### Persistent but bounded monitoring history
 
 SQLite stores resource trends, endpoint history, alerts, and configuration for a simple single-instance deployment. Sampling, retention, result limits, and agent retry buffers are bounded to prevent a fast UI refresh interval from creating unbounded storage or memory growth.
+
+When an older `data/server-monitors.json` file is imported, NodeGuard encrypts any remote API keys in SQLite and removes the plaintext legacy file only after the transaction commits. An unreadable legacy file is preserved and reported in the API log for manual recovery.
 
 ### Server-enforced demo isolation
 
@@ -275,10 +275,16 @@ nodeguard/
 │   ├── web/                 # React + Vite dashboard
 │   └── api/                 # Express + TypeScript API
 ├── agent/                   # Go monitoring agent and installer
-├── agent-releases/          # Versioned agent binaries and checksums
+├── agent-releases/          # Generated, untracked versioned Agent binaries and checksums
+├── contracts/               # Canonical cross-language Agent protocol constants
 ├── docs/
-│   ├── UI_AUDIT.md          # Current button, typography, responsive, and browser audit
-│   └── screenshots/         # README product screenshots
+│   ├── BACKUP_RESTORE.md     # Verified SQLite-volume backup and recovery procedure
+│   ├── MACHINE_UPDATES.md    # Agent-reported package update architecture and operations
+│   ├── PROXMOX.md            # Read-only Proxmox integration setup and security
+│   ├── UI_AUDIT.md           # Current focused browser and interface audit
+│   ├── UI_UX_AUDIT.md        # Historical broad UI/UX audit
+│   └── screenshots/          # Tracked README product screenshots
+├── scripts/                 # Dependency-free contract generation and drift checks
 ├── docker-compose.yml       # Production deployment
 ├── Dockerfile               # Combined web/API image
 ├── .env.example             # Configuration template
@@ -365,6 +371,8 @@ docker compose down
 
 The Compose deployment persists SQLite data under `/data` and mounts `/var/run/docker.sock` read-only for Docker metadata. The Docker socket remains highly privileged despite the read-only mount and fixed application behavior; review the deployment and restrict access to the NodeGuard host.
 
+Use the consistency-checked, recovery-safe workflow in **[`docs/BACKUP_RESTORE.md`](docs/BACKUP_RESTORE.md)** to back up or restore the SQLite volume. Live backups use SQLite's online backup API; restores require a graceful API stop, an explicit confirmation, source verification, and a preserved pre-restore copy.
+
 For internet exposure, place NodeGuard behind HTTPS and an additional access layer such as Cloudflare Access or a VPN.
 
 ## NodeGuard Agent
@@ -434,17 +442,18 @@ The Agent has no inbound listener, remote shell, generic command execution, upda
 
 | Variable | Purpose |
 |---|---|
+| `NODEGUARD_HOST` | API bind address; defaults to `0.0.0.0` for container deployments (the E2E suite binds only to `127.0.0.1`) |
 | `NODEGUARD_ADMIN_USERNAME` | Live owner/admin username |
 | `NODEGUARD_ADMIN_PASSWORD` | Live owner/admin password |
 | `NODEGUARD_DEMO_USERNAME` | Isolated demo username |
 | `NODEGUARD_DEMO_PASSWORD` | Isolated demo password |
-| `NODEGUARD_INTEGRATION_SECRET` | Encrypts saved integration credentials at rest |
+| `NODEGUARD_INTEGRATION_SECRET` | Encrypts saved Proxmox credentials and remote server-monitor API keys at rest |
 | `DATABASE_URL` | SQLite database location |
 | `ALLOWED_ORIGINS` | Allowed separate frontend origins |
-| `TRUST_PROXY` | Enables trusted reverse-proxy handling |
+| `TRUST_PROXY` | Numeric count of trusted reverse-proxy hops (`0` when none) |
 | `SESSION_COOKIE_SECURE` | `auto`, `true`, or `false` cookie behavior |
 | `VITE_NODEGUARD_SUPPORT_URL` | Optional public HTTPS support link embedded in the frontend build |
-| `METRIC_HISTORY_RETENTION_DAYS` | Resource-history retention period |
+| `METRIC_HISTORY_RETENTION_DAYS` | Minute history and raw Agent-metric retention period (minimum 30 days) |
 | `AGENT_UPDATE_INTERVAL_SECONDS` | Agent package-update check interval; defaults to 6 hours and is clamped to the safe minimum |
 | `AGENT_STALE_AFTER_SECONDS` | Time before an agent is marked stale |
 | `AGENT_OFFLINE_AFTER_SECONDS` | Time before an agent is marked offline |
@@ -470,7 +479,7 @@ SESSION_COOKIE_SECURE=auto
 NODEGUARD_API_KEY=optional_legacy_machine_key
 ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 DATABASE_URL=file:data/nodeguard.sqlite
-TRUST_PROXY=false
+TRUST_PROXY=0
 REQUEST_JSON_LIMIT=512kb
 RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX=1200
@@ -502,6 +511,13 @@ MEMORY_WARNING_PERCENT=80
 MEMORY_CRITICAL_PERCENT=90
 DISK_WARNING_PERCENT=80
 DISK_CRITICAL_PERCENT=90
+
+# Proxmox VE read-only integration
+NODEGUARD_PROXMOX_SYNC_INTERVAL_SECONDS=30
+NODEGUARD_PROXMOX_FAILURE_THRESHOLD=3
+NODEGUARD_PROXMOX_STORAGE_WARNING_PERCENT=80
+NODEGUARD_PROXMOX_STORAGE_CRITICAL_PERCENT=90
+NODEGUARD_PROXMOX_REQUEST_TIMEOUT_MS=10000
 ```
 
 Never commit `.env` files, API keys, access tokens, passwords, private IP addresses, database files, or generated diagnostics.
@@ -615,11 +631,18 @@ Protected application routes require a signed-in session. Optional `Authorizatio
 npm run dev          # Start API and web development servers
 npm run dev:api      # Start only the API
 npm run dev:web      # Start only the web client
+npm run contracts:generate # Regenerate tracked Agent contract outputs
+npm run contracts:check # Verify generated Agent contracts without writing files
+npm run contracts:test # Test manifest validation and drift detection
 npm run build        # Build the project
 npm run typecheck    # Run TypeScript checks
 npm run lint         # Run linting
 npm test             # Run tests
+npm run test:e2e     # Run Chromium browser end-to-end tests
+npm run test:e2e:install # Install the Chromium browser used by Playwright
 ```
+
+The browser suite starts an isolated loopback-only API and a production-built Vite preview, uses an in-memory SQLite database, and verifies login, navigation, live configuration mutations, responsive layouts, and browser/network diagnostics. GitHub Actions runs the API/web checks and this suite on every pull request and push to `main`.
 
 ## Security notes
 
@@ -672,6 +695,10 @@ npm test             # Run tests
 NodeGuard is an independent project. Support helps cover hosting costs and continued development of new integrations, performance improvements, and features.
 
 [![Support NodeGuard on Ko-fi](https://img.shields.io/badge/Support-NodeGuard-29ABE0?logo=ko-fi&logoColor=white)](https://ko-fi.com/hackintoshmatrix)
+
+## License
+
+NodeGuard is available under the [MIT License](LICENSE).
 
 ---
 

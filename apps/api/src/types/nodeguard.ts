@@ -1,3 +1,10 @@
+import type {
+  AgentUpdateErrorCode as GeneratedAgentUpdateErrorCode,
+  AgentUpdateProvider,
+  AgentUpdateSchemaVersion,
+  AgentUpdateStatus
+} from "../generated/agentContract.js";
+
 export type HealthStatus = "healthy" | "warning" | "critical" | "offline" | "unknown";
 export type ContainerStatus = "running" | "stopped" | "restarting" | "exited";
 export type ContainerHealth = "healthy" | "unhealthy" | "starting" | "none";
@@ -62,10 +69,6 @@ export type AgentEnrollmentToken = {
   revokedAt: string | null;
 };
 
-export type CreatedAgentEnrollmentToken = AgentEnrollmentToken & {
-  token: string;
-};
-
 export type AgentEnrollmentProgress = {
   id: string;
   purpose: "enroll" | "rotate";
@@ -78,10 +81,6 @@ export type AgentEnrollmentProgress = {
     status: AgentStatus;
     lastSeenAt: string | null;
   } | null;
-};
-
-export type CreateAgentEnrollmentInput = {
-  displayName?: string;
 };
 
 export type AgentRegistrationInput = {
@@ -187,27 +186,9 @@ export type AgentDockerInput = {
   containers: AgentContainerInput[];
 };
 
-export type AgentUpdateCheckStatus =
-  | "ok"
-  | "unsupported"
-  | "package_manager_busy"
-  | "metadata_refresh_failed"
-  | "check_failed";
+export type AgentUpdateCheckStatus = AgentUpdateStatus;
 
-export type AgentUpdateErrorCode =
-  | "unsupported_os"
-  | "os_detection_failed"
-  | "apt_unavailable"
-  | "package_lock_check_failed"
-  | "package_manager_busy"
-  | "metadata_refresh_timeout"
-  | "metadata_output_too_large"
-  | "check_output_too_large"
-  | "metadata_refresh_failed"
-  | "check_timeout"
-  | "check_failed"
-  | "malformed_apt_output"
-  | "reboot_state_unavailable";
+export type AgentUpdateErrorCode = GeneratedAgentUpdateErrorCode;
 
 export type AgentPackageUpdateInput = {
   name: string;
@@ -218,8 +199,8 @@ export type AgentPackageUpdateInput = {
 };
 
 export type AgentUpdateInventoryInput = {
-  schemaVersion: 1;
-  provider: "apt";
+  schemaVersion: AgentUpdateSchemaVersion;
+  provider: AgentUpdateProvider;
   supported: boolean;
   status: AgentUpdateCheckStatus;
   os: {
@@ -246,7 +227,7 @@ export type MachineUpdateSummary = {
   displayName: string;
   hostname: string;
   agentStatus: AgentStatus;
-  provider: "apt" | null;
+  provider: AgentUpdateProvider | null;
   supported: boolean | null;
   status: MachineUpdateCheckStatus;
   freshness: "waiting" | "current" | "retained" | "stale" | "unsupported";

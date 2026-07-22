@@ -1,4 +1,11 @@
 import { env } from "../config/env.js";
+import {
+  AGENT_UPDATE_ALLOWED_ERROR_CODES_BY_STATUS,
+  AGENT_UPDATE_ERROR_CODES,
+  AGENT_UPDATE_PROVIDER,
+  AGENT_UPDATE_SCHEMA_VERSION,
+  AGENT_UPDATE_STATUSES
+} from "../generated/agentContract.js";
 import type { AgentUpdateErrorCode } from "../types/nodeguard.js";
 import type { AgentContainerInput, AgentDockerInput, AgentFilesystem, AgentHeartbeatInput, AgentInventoryInput, AgentMetricSampleInput, AgentMetricsInput, AgentPackageUpdateInput, AgentRegistrationInput, AgentUpdateCheckStatus, AgentUpdateInventoryInput, ContainerHealth } from "../types/nodeguard.js";
 
@@ -251,13 +258,7 @@ export function parseAgentDocker(value: unknown): AgentDockerInput {
   };
 }
 
-const updateStatuses = new Set<AgentUpdateCheckStatus>([
-  "ok",
-  "unsupported",
-  "package_manager_busy",
-  "metadata_refresh_failed",
-  "check_failed"
-]);
+const updateStatuses = new Set<AgentUpdateCheckStatus>(AGENT_UPDATE_STATUSES);
 
 function parseUpdateStatus(value: unknown): AgentUpdateCheckStatus {
   if (typeof value !== "string" || !updateStatuses.has(value as AgentUpdateCheckStatus)) {
@@ -266,37 +267,7 @@ function parseUpdateStatus(value: unknown): AgentUpdateCheckStatus {
   return value as AgentUpdateCheckStatus;
 }
 
-const updateErrorCodes = new Set<AgentUpdateErrorCode>([
-  "unsupported_os",
-  "os_detection_failed",
-  "apt_unavailable",
-  "package_lock_check_failed",
-  "package_manager_busy",
-  "metadata_refresh_timeout",
-  "metadata_refresh_failed",
-  "metadata_output_too_large",
-  "check_output_too_large",
-  "check_timeout",
-  "check_failed",
-  "malformed_apt_output",
-  "reboot_state_unavailable"
-]);
-
-const updateErrorCodesByStatus: Record<Exclude<AgentUpdateCheckStatus, "ok">, ReadonlySet<AgentUpdateErrorCode>> = {
-  unsupported: new Set(["unsupported_os"]),
-  package_manager_busy: new Set(["package_manager_busy"]),
-  metadata_refresh_failed: new Set(["metadata_refresh_timeout", "metadata_refresh_failed", "metadata_output_too_large"]),
-  check_failed: new Set([
-    "os_detection_failed",
-    "apt_unavailable",
-    "package_lock_check_failed",
-    "check_timeout",
-    "check_failed",
-    "malformed_apt_output",
-    "check_output_too_large",
-    "reboot_state_unavailable"
-  ])
-};
+const updateErrorCodes = new Set<AgentUpdateErrorCode>(AGENT_UPDATE_ERROR_CODES);
 
 function parseUpdateErrorCode(value: unknown) {
   if (value === undefined || value === null || value === "") return null;
@@ -331,8 +302,12 @@ function parseUpdatePackage(value: unknown): AgentPackageUpdateInput {
 
 export function parseAgentUpdates(value: unknown): AgentUpdateInventoryInput {
   const input = record(value);
-  if (input.schemaVersion !== 1) throw new AgentPayloadError("schemaVersion must be 1.");
-  if (input.provider !== "apt") throw new AgentPayloadError("provider must be apt.");
+  if (input.schemaVersion !== AGENT_UPDATE_SCHEMA_VERSION) {
+    throw new AgentPayloadError(`schemaVersion must be ${AGENT_UPDATE_SCHEMA_VERSION}.`);
+  }
+  if (input.provider !== AGENT_UPDATE_PROVIDER) {
+    throw new AgentPayloadError(`provider must be ${AGENT_UPDATE_PROVIDER}.`);
+  }
 
   const supported = requiredBoolean(input.supported, "supported");
   const status = parseUpdateStatus(input.status);
@@ -341,7 +316,7 @@ export function parseAgentUpdates(value: unknown): AgentUpdateInventoryInput {
   if (status === "ok" && (errorCode || errorMessage)) {
     throw new AgentPayloadError("successful inventories must not contain an update error.");
   }
-  if (status !== "ok" && errorCode && !updateErrorCodesByStatus[status].has(errorCode)) {
+  if (status !== "ok" && errorCode && !AGENT_UPDATE_ALLOWED_ERROR_CODES_BY_STATUS[status].some((allowed) => allowed === errorCode)) {
     throw new AgentPayloadError("errorCode is inconsistent with status.");
   }
   if ((status === "unsupported") !== !supported) {
@@ -391,8 +366,8 @@ export function parseAgentUpdates(value: unknown): AgentUpdateInventoryInput {
   }
 
   return {
-    schemaVersion: 1,
-    provider: "apt",
+    schemaVersion: AGENT_UPDATE_SCHEMA_VERSION,
+    provider: AGENT_UPDATE_PROVIDER,
     supported,
     status,
     os: {

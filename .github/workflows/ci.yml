@@ -1,0 +1,79 @@
+name: NodeGuard API and Web CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nodeguard-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Typecheck, test, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify generated Agent contracts
+        run: npm run contracts:check
+
+      - name: Typecheck API and web
+        run: npm run typecheck
+
+      - name: Lint web
+        run: npm run lint
+
+      - name: Test API and web
+        run: npm test
+
+      - name: Build API and web
+        run: npm run build
+
+  browser-e2e:
+    name: Chromium end-to-end tests
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npm run test:e2e:install
+
+      - name: Run browser end-to-end tests
+        run: npm run test:e2e
+
+      - name: Upload browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7

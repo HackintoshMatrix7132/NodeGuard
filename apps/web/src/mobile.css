@@ -41,8 +41,6 @@ body,
   :root {
     --ng-mobile-page-padding: 6px;
     --ng-mobile-section-gap: 5px;
-    --ng-mobile-card-padding: 7px;
-    --ng-mobile-control-height: 36px;
     --ng-mobile-icon-control: 36px;
     --ng-mobile-header-height: 42px;
   }

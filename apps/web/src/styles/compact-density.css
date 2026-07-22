@@ -1,0 +1,576 @@
+/* Shared compact density system */
+:root {
+  --ng-density-page-x: 10px;
+  --ng-density-page-y: 8px;
+  --ng-density-section-gap: 8px;
+  --ng-density-panel-x: 8px;
+  --ng-density-panel-y: 8px;
+  --ng-density-header-height: 40px;
+  --ng-density-control-height: 34px;
+  --ng-density-row-height: 42px;
+  --ng-action-bg: #24549b;
+  --ng-action-bg-hover: #2b62b0;
+  --ng-action-bg-active: #1c447f;
+  --ng-action-border: #376db8;
+  --ng-control-radius: 6px;
+}
+
+.app-shell {
+  grid-template-columns: 238px minmax(0, 1fr);
+}
+
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+
+.sidebar {
+  height: calc(100vh - 20px);
+  margin: 10px 0 10px 10px;
+  padding: 10px;
+}
+
+.sidebar-top {
+  min-height: 44px;
+}
+
+.brand {
+  gap: 8px;
+  padding: 2px 2px 8px;
+  font-size: 16px;
+}
+
+.brand-logo {
+  width: 30px;
+  height: 30px;
+}
+
+.sidebar nav {
+  gap: 4px;
+}
+
+.sidebar button {
+  min-height: 38px;
+  gap: 8px;
+  padding-inline: 8px;
+}
+
+.workspace {
+  padding: var(--ng-density-page-y) var(--ng-density-page-x) 16px;
+}
+
+.workspace-topbar {
+  min-height: 42px;
+  margin-bottom: var(--ng-density-section-gap);
+  padding-inline: 12px;
+}
+
+.topbar-title span {
+  width: 28px;
+  height: 28px;
+}
+
+.page-stack,
+.settings-page {
+  gap: var(--ng-density-section-gap);
+}
+
+.page-stack.compact {
+  gap: 8px;
+}
+
+.panel-header {
+  min-height: var(--ng-density-header-height);
+  padding-inline: 12px;
+}
+
+.panel > :not(.panel-header) {
+  margin: var(--ng-density-panel-y) var(--ng-density-panel-x);
+}
+
+.panel h2 {
+  font-size: 15px;
+}
+
+.hero-panel {
+  min-height: 104px;
+  gap: 8px;
+  padding: 11px 14px;
+}
+
+.hero-panel h1 {
+  margin: 3px 0;
+  font-size: 42px;
+}
+
+.hero-main-issue {
+  margin-top: 7px !important;
+}
+
+.hero-panel small {
+  margin-top: 5px;
+}
+
+.metric-grid {
+  gap: 8px;
+}
+
+.metric-card {
+  padding: 9px;
+}
+
+.metric-value {
+  margin: 3px 0 5px;
+  font-size: 40px;
+}
+
+.subdued-value {
+  font-size: 32px;
+}
+
+.metric-indicator {
+  min-height: 56px;
+  gap: 6px;
+  padding: 6px;
+}
+
+.metric-detail {
+  margin-top: 5px;
+  font-size: 13px;
+}
+
+.metric-breakdown {
+  gap: 4px;
+}
+
+.meter-track {
+  height: 8px;
+}
+
+.two-col {
+  gap: 8px;
+}
+
+.diagnostic-panel {
+  padding: 10px;
+}
+
+.issue-list {
+  gap: 5px;
+}
+
+.issue-row {
+  min-height: 36px;
+}
+
+.state-block {
+  min-height: 64px;
+  gap: 4px;
+  padding: 8px;
+}
+
+.info-grid {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.info {
+  min-height: 46px;
+  gap: 3px;
+  padding: 7px 8px;
+}
+
+.server-info-groups {
+  gap: 8px;
+}
+
+.server-info-group h3,
+.settings-subheading {
+  margin-bottom: 6px;
+}
+
+.server-info-group .info-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.panel button,
+.icon-button,
+.segmented button,
+.inline-form button {
+  min-height: var(--ng-density-control-height);
+}
+
+.data-row,
+.table-row {
+  min-height: var(--ng-density-row-height);
+  gap: 10px;
+  padding: 7px 10px;
+}
+
+.pill {
+  min-height: 25px;
+  padding-inline: 8px;
+}
+
+.inline-form {
+  gap: 8px;
+}
+
+.inline-form label {
+  gap: 4px;
+  font-size: 13px;
+}
+
+.inline-form input,
+.login-card input,
+.search input {
+  min-height: 38px;
+  font-size: 14px;
+}
+
+.settings-page .panel > .settings-content {
+  gap: 8px;
+  padding: 10px;
+}
+
+.settings-page .settings-description {
+  line-height: 1.45;
+  width: 100%;
+  max-width: none;
+}
+
+.settings-control,
+.settings-list {
+  gap: 8px;
+}
+
+.settings-inline-action {
+  gap: 12px;
+}
+
+.update-toolbar {
+  gap: 8px;
+}
+
+.search-field {
+  min-height: 38px;
+}
+
+.update-summary-strip > div {
+  gap: 3px;
+  padding: 9px 12px;
+}
+
+.update-summary-strip dd {
+  font-size: 19px;
+}
+
+.updates-table th,
+.updates-table td {
+  padding: 7px 9px;
+}
+
+.container-table-header,
+.container-table-row {
+  gap: 10px;
+}
+
+.container-table-header {
+  min-height: 34px;
+  padding-inline: 10px;
+}
+
+.container-table-row {
+  min-height: var(--ng-density-row-height);
+  padding: 5px 9px;
+}
+
+.container-table-tools,
+.host-selector-actions,
+.agent-toolbar,
+.alert-table-tools {
+  gap: 7px;
+}
+
+.container-filter,
+.host-selector,
+.agent-toolbar > label {
+  min-height: var(--ng-density-control-height);
+}
+
+.agents-table th,
+.agents-table td {
+  padding: 6px 8px;
+}
+
+.agent-detail {
+  gap: 9px;
+}
+
+.agent-command-block {
+  gap: 8px;
+  padding: 10px;
+}
+
+.agent-command-block code {
+  padding: 10px;
+  line-height: 1.45;
+}
+
+.domain-action-row {
+  padding: 5px 8px;
+}
+
+.domain-compact-metrics {
+  gap: 11px;
+  font-size: 13px;
+}
+
+.domain-row-actions {
+  gap: 5px;
+}
+
+.domain-expanded-details {
+  padding: 8px;
+}
+
+.alert-view-tabs {
+  min-height: 36px;
+}
+
+.alert-view-tabs button {
+  min-height: 34px;
+  padding-inline: 9px;
+}
+
+.alert-table-header,
+.alert-table-row {
+  gap: 11px;
+}
+
+.alert-table-header {
+  min-height: 34px;
+  padding-inline: 11px;
+}
+
+.panel .alert-table-row {
+  min-height: 46px;
+  padding: 6px 10px;
+}
+
+.alert-table-footer {
+  min-height: 38px;
+  gap: 12px;
+}
+
+.alert-detail section {
+  padding: 10px;
+}
+
+.history-chart-grid {
+  gap: 10px;
+  padding: 11px;
+}
+
+.history-chart-heading {
+  gap: 14px;
+  padding: 10px 12px 6px;
+}
+
+.history-chart-wrap {
+  padding: 0 7px 6px;
+}
+
+.history-chart {
+  height: 230px;
+}
+
+.logs {
+  max-height: 220px;
+  padding: 11px;
+}
+
+.modal-header {
+  min-height: 42px;
+  padding-inline: 12px;
+}
+
+.modal > :not(.modal-header) {
+  margin: 10px;
+}
+
+.modal-form,
+.confirmation-dialog {
+  gap: 10px;
+}
+
+.container-mobile-card,
+.agent-mobile-card,
+.update-mobile-card {
+  gap: 7px;
+  padding: 9px;
+}
+
+@media (max-width: 1100px) {
+  .hero-panel h1 {
+    font-size: 46px;
+  }
+
+  .metric-value {
+    font-size: 44px;
+  }
+}
+
+@media (max-width: 980px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: 54px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    height: auto;
+    margin: 7px;
+    padding: 8px;
+  }
+
+  .workspace {
+    padding: 6px 8px 10px;
+  }
+
+  .workspace-topbar {
+    min-height: 44px;
+    margin-bottom: 8px;
+  }
+
+  .page-stack,
+  .settings-page {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 760px) {
+  :root {
+    --ng-density-section-gap: 8px;
+    --ng-density-control-height: 44px;
+  }
+
+  .sidebar button,
+  .panel button,
+  .icon-button,
+  .segmented button,
+  .inline-form button,
+  .search-field,
+  .container-filter,
+  .host-selector,
+  .agent-toolbar > label {
+    min-height: 44px;
+  }
+
+  .icon-only {
+    width: 40px;
+    min-height: 40px !important;
+  }
+
+  .panel-header {
+    min-height: auto;
+    gap: 7px;
+    padding: 8px 10px;
+  }
+
+  .panel > :not(.panel-header) {
+    margin: 8px;
+  }
+
+  .hero-panel {
+    min-height: auto;
+    padding: 12px;
+  }
+
+  .hero-panel h1 {
+    font-size: 40px;
+  }
+
+  .metric-card {
+    padding: 10px;
+  }
+
+  .metric-value {
+    font-size: 40px;
+  }
+
+  .state-block {
+    min-height: 68px;
+    padding: 9px;
+  }
+
+  .info {
+    min-height: 56px;
+  }
+
+  .inline-form input,
+  .login-card input,
+  .search input {
+    min-height: 44px;
+  }
+
+  .settings-page .panel > .settings-content {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .settings-page .info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .history-chart {
+    height: 205px;
+  }
+
+  .updates-mobile-list,
+  .agents-mobile-list,
+  .container-mobile-list {
+    gap: 7px;
+  }
+}
+
+@media (max-width: 460px) {
+  .workspace {
+    padding-inline: 8px;
+  }
+
+  .hero-panel h1 {
+    font-size: 36px;
+  }
+
+  .metric-value {
+    font-size: 38px;
+  }
+}
+
+@media (max-width: 760px) {
+  .sidebar nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .workspace-topbar {
+    min-height: 48px;
+    align-items: center;
+    flex-direction: row;
+    padding-inline: 12px;
+  }
+
+  .panel-header {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 980px) {
+  .sidebar {
+    align-self: start;
+  }
+}
+

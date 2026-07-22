@@ -22,6 +22,9 @@ node_modules/
 *.crt
 *.p12
 *.pfx
+*.jks
+*.keystore
+*.mobileprovision
 *.local
 
 ###############################################################################
@@ -41,12 +44,15 @@ data/*.db
 data/*.db-journal
 data/*.sqlite-wal
 data/*.sqlite-shm
+/backups/
 
 ###############################################################################
 # Build output and generated files
 ###############################################################################
 dist/
 **/dist/
+dist-test/
+**/dist-test/
 build/
 **/build/
 agent/bin/
@@ -57,18 +63,6 @@ web-build/
 coverage/
 *.tsbuildinfo
 vite.config.*.timestamp-*
-expo-env.d.ts
-
-###############################################################################
-# Expo / React Native legacy generated state
-###############################################################################
-.expo/
-.expo-shared/
-android/
-ios/
-*.jks
-*.keystore
-*.mobileprovision
 *.orig.*
 
 ###############################################################################
@@ -81,7 +75,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 nodeguard-diagnostics.json
-screenshots/
+/screenshots/
 
 ###############################################################################
 # Test, cache, and tool output

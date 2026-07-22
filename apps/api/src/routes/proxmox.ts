@@ -1,4 +1,5 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
+import { requireOwner } from "../middleware/auth.js";
 import {
   createProxmoxConnection,
   deleteProxmoxConnection,
@@ -57,6 +58,11 @@ function requireLive(req: Request, res: Response): boolean {
       : "Proxmox integration settings require an authenticated Live Mode session."
   });
   return false;
+}
+
+function requireLiveOwner(req: Request, res: Response, next: NextFunction): void {
+  if (!requireLive(req, res)) return;
+  requireOwner(req, res, next);
 }
 
 function inputFromBody(body: unknown): ProxmoxConnectionInput {
@@ -140,8 +146,7 @@ router.get("/connections/:id/nodes/:node/history", async (req, res) => {
   }
 });
 
-router.post("/connections/test", async (req, res) => {
-  if (!requireLive(req, res)) return;
+router.post("/connections/test", requireLiveOwner, async (req, res) => {
   try {
     const body = req.body && typeof req.body === "object" ? req.body as Record<string, unknown> : {};
     res.json(await testProxmoxConnection(inputFromBody(body), typeof body.id === "string" ? body.id : undefined));
@@ -150,8 +155,7 @@ router.post("/connections/test", async (req, res) => {
   }
 });
 
-router.post("/connections", async (req, res) => {
-  if (!requireLive(req, res)) return;
+router.post("/connections", requireLiveOwner, async (req, res) => {
   try {
     res.status(201).json(await createProxmoxConnection(inputFromBody(req.body)));
   } catch (error) {
@@ -159,8 +163,7 @@ router.post("/connections", async (req, res) => {
   }
 });
 
-router.put("/connections/:id", async (req, res) => {
-  if (!requireLive(req, res)) return;
+router.put("/connections/:id", requireLiveOwner, async (req, res) => {
   try {
     res.json(await updateProxmoxConnection(req.params.id, inputFromBody(req.body)));
   } catch (error) {
@@ -168,8 +171,7 @@ router.put("/connections/:id", async (req, res) => {
   }
 });
 
-router.patch("/connections/:id/enabled", (req, res) => {
-  if (!requireLive(req, res)) return;
+router.patch("/connections/:id/enabled", requireLiveOwner, (req, res) => {
   try {
     if (typeof req.body?.enabled !== "boolean") {
       res.status(400).json({ error: "enabled must be a boolean." });
@@ -181,8 +183,7 @@ router.patch("/connections/:id/enabled", (req, res) => {
   }
 });
 
-router.post("/connections/:id/sync", async (req, res) => {
-  if (!requireLive(req, res)) return;
+router.post("/connections/:id/sync", requireLiveOwner, async (req, res) => {
   try {
     await syncProxmoxConnection(req.params.id);
     res.json(getProxmoxSnapshot());
@@ -191,14 +192,12 @@ router.post("/connections/:id/sync", async (req, res) => {
   }
 });
 
-router.post("/sync", async (req, res) => {
-  if (!requireLive(req, res)) return;
+router.post("/sync", requireLiveOwner, async (_req, res) => {
   await syncAllProxmoxConnections();
   res.json(getProxmoxSnapshot());
 });
 
-router.delete("/connections/:id", (req, res) => {
-  if (!requireLive(req, res)) return;
+router.delete("/connections/:id", requireLiveOwner, (req, res) => {
   if (!deleteProxmoxConnection(req.params.id)) {
     res.status(404).json({ error: "Proxmox connection was not found." });
     return;

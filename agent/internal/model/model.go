@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"time"
+
+	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/contract"
+)
 
 type Filesystem struct {
 	Device     *string `json:"device"`
@@ -115,11 +119,11 @@ type DockerPayload struct {
 type UpdateStatus string
 
 const (
-	UpdateStatusOK                    UpdateStatus = "ok"
-	UpdateStatusUnsupported           UpdateStatus = "unsupported"
-	UpdateStatusPackageManagerBusy    UpdateStatus = "package_manager_busy"
-	UpdateStatusMetadataRefreshFailed UpdateStatus = "metadata_refresh_failed"
-	UpdateStatusCheckFailed           UpdateStatus = "check_failed"
+	UpdateStatusOK                    UpdateStatus = contract.AgentUpdateStatusOK
+	UpdateStatusUnsupported           UpdateStatus = contract.AgentUpdateStatusUnsupported
+	UpdateStatusPackageManagerBusy    UpdateStatus = contract.AgentUpdateStatusPackageManagerBusy
+	UpdateStatusMetadataRefreshFailed UpdateStatus = contract.AgentUpdateStatusMetadataRefreshFailed
+	UpdateStatusCheckFailed           UpdateStatus = contract.AgentUpdateStatusCheckFailed
 )
 
 type UpdateOS struct {

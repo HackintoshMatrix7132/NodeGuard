@@ -14,6 +14,15 @@ test("Proxmox keeps Demo Mode read-only while serving its fictional snapshot", a
   app.use((request, response, next) => {
     const mode = request.header("x-test-mode");
     if (mode === "live" || mode === "demo") response.locals.dataMode = mode;
+    const role = request.header("x-test-role");
+    if (role) {
+      response.locals.authUser = {
+        id: `test-${role}`,
+        username: role,
+        role,
+        dataMode: mode === "demo" ? "demo" : "live"
+      };
+    }
     next();
   });
   app.use("/api/proxmox", proxmoxRouter);
@@ -42,6 +51,47 @@ test("Proxmox keeps Demo Mode read-only while serving its fictional snapshot", a
       const response = await fetch(`${baseUrl}/api/proxmox/sync`, { method: "POST", headers: { "x-test-mode": "demo" } });
       assert.equal(response.status, 403);
       assert.deepEqual(await response.json(), { error: "Proxmox integration settings are unavailable in Demo Mode." });
+    });
+
+    await context.test("legacy machine authentication retains reads but cannot mutate or synchronize Proxmox", async () => {
+      const inventory = await fetch(`${baseUrl}/api/proxmox`, { headers: { "x-test-mode": "live" } });
+      assert.equal(inventory.status, 200);
+      const connections = await fetch(`${baseUrl}/api/proxmox/connections`, { headers: { "x-test-mode": "live" } });
+      assert.equal(connections.status, 200);
+
+      const mutations = [
+        { method: "POST", path: "/sync", body: {} },
+        { method: "POST", path: "/connections/missing/sync", body: {} },
+        { method: "POST", path: "/connections/test", body: {} },
+        { method: "POST", path: "/connections", body: {} },
+        { method: "PUT", path: "/connections/missing", body: {} },
+        { method: "PATCH", path: "/connections/missing/enabled", body: { enabled: true } },
+        { method: "DELETE", path: "/connections/missing", body: undefined }
+      ];
+      for (const mutation of mutations) {
+        const response = await fetch(`${baseUrl}/api/proxmox${mutation.path}`, {
+          method: mutation.method,
+          headers: { "content-type": "application/json", "x-test-mode": "live" },
+          ...(mutation.body ? { body: JSON.stringify(mutation.body) } : {})
+        });
+        assert.equal(response.status, 401, `${mutation.method} ${mutation.path} must reject machine-only authentication`);
+        assert.deepEqual(await response.json(), { error: "not_authenticated", message: "Sign in to NodeGuard." });
+      }
+    });
+
+    await context.test("live viewers cannot mutate Proxmox while owners can synchronize", async () => {
+      const viewer = await fetch(`${baseUrl}/api/proxmox/sync`, {
+        method: "POST",
+        headers: { "x-test-mode": "live", "x-test-role": "viewer" }
+      });
+      assert.equal(viewer.status, 403);
+      assert.deepEqual(await viewer.json(), { error: "owner_required", message: "Owner or admin access is required." });
+
+      const owner = await fetch(`${baseUrl}/api/proxmox/sync`, {
+        method: "POST",
+        headers: { "x-test-mode": "live", "x-test-role": "owner" }
+      });
+      assert.equal(owner.status, 200);
     });
 
     await context.test("Demo Mode serves isolated node detail and all allowlisted RRD ranges", async () => {

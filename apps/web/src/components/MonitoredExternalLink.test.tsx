@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { readStylesheetSource } from "../test/sourceInspection";
 import { MonitoredExternalLink, normalizeMonitoredHref } from "./MonitoredExternalLink";
 
 test("renders secure external-link semantics and an accessible name", () => {
@@ -31,7 +30,7 @@ test("normalizes scheme-less monitored URLs without changing HTTPS URLs", () => 
 });
 
 test("keeps the monitored link animation contract for hover, focus, truncation, and reduced motion", () => {
-  const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const styles = readStylesheetSource();
 
   assert.match(
     styles,

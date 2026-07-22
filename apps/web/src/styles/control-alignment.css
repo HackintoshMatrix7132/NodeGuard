@@ -1,0 +1,224 @@
+/* Shared control alignment and compact typography: one optical baseline. */
+:root {
+  --ng-action-font-size: var(--ng-type-button, 13px);
+  --ng-action-font-weight: 700;
+  --ng-action-line-height: 1;
+  --ng-action-icon-size: 14px;
+  --ng-action-gap: 6px;
+  --ng-action-height: 32px;
+  --ng-action-compact-height: 30px;
+  --ng-action-radius: var(--ng-button-radius, 6px);
+  --ng-icon-control-size: 32px;
+}
+
+body .primary-button,
+body .secondary-button,
+body .danger-button,
+body .modal-submit,
+body .dashboard-panel-action,
+body .icon-button,
+body .small-action-button,
+body .domain-details-toggle,
+body .nodeguard-select-trigger,
+body .settings-inline-action button,
+body .agent-command-actions button,
+body .agent-detail-actions > button,
+body .agent-lifecycle-actions button,
+body .machine-update-card > button,
+body .agent-update-summary-footer button,
+body .agent-update-empty button {
+  box-sizing: border-box;
+  min-height: var(--ng-action-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ng-action-gap);
+  padding: 4px 10px;
+  border-radius: var(--ng-action-radius);
+  font-size: var(--ng-action-font-size);
+  font-weight: var(--ng-action-font-weight);
+  line-height: var(--ng-action-line-height);
+  letter-spacing: 0;
+  text-decoration: none;
+  vertical-align: middle;
+}
+
+body .compact-action {
+  min-height: var(--ng-action-compact-height);
+  gap: 5px;
+  padding: 3px 9px;
+}
+
+body .panel-header > .primary-button,
+body .panel-header > .secondary-button,
+body .dashboard-panel-action,
+body .small-action-button {
+  min-height: var(--ng-action-compact-height);
+}
+
+body .domain-details-toggle {
+  min-height: var(--ng-action-height);
+  padding-inline: 9px;
+}
+
+body .primary-button > svg,
+body .secondary-button > svg,
+body .danger-button > svg,
+body .modal-submit > svg,
+body .dashboard-panel-action > svg,
+body .icon-button > svg,
+body .small-action-button > svg,
+body .domain-details-toggle > svg,
+body .nodeguard-select-trigger > svg,
+body .settings-inline-action button > svg,
+body .agent-command-actions button > svg,
+body .agent-detail-actions > button > svg,
+body .agent-lifecycle-actions button > svg,
+body .machine-update-card > button > svg,
+body .agent-update-summary-footer button > svg,
+body .agent-update-empty button > svg,
+body .copy-state-icon {
+  width: var(--ng-action-icon-size);
+  height: var(--ng-action-icon-size);
+  min-width: var(--ng-action-icon-size);
+  flex: 0 0 var(--ng-action-icon-size);
+  align-self: center;
+  margin: 0;
+  line-height: 0;
+  vertical-align: middle;
+}
+
+body .primary-button > svg,
+body .secondary-button > svg,
+body .danger-button > svg,
+body .modal-submit > svg,
+body .dashboard-panel-action > svg,
+body .icon-button > svg,
+body .small-action-button > svg,
+body .domain-details-toggle > svg,
+body .nodeguard-select-trigger > svg,
+body .settings-inline-action button > svg,
+body .agent-command-actions button > svg,
+body .agent-detail-actions > button > svg,
+body .agent-lifecycle-actions button > svg,
+body .machine-update-card > button > svg,
+body .agent-update-summary-footer button > svg,
+body .agent-update-empty button > svg {
+  display: block;
+}
+
+body .copy-state-icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+body .copy-state-icon > svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  margin: 0;
+}
+
+body .icon-only,
+body .panel .icon-only,
+body .alert-pagination .icon-only {
+  box-sizing: border-box;
+  width: var(--ng-icon-control-size);
+  min-width: var(--ng-icon-control-size);
+  max-width: var(--ng-icon-control-size);
+  height: var(--ng-icon-control-size);
+  min-height: var(--ng-icon-control-size) !important;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 !important;
+  border-radius: var(--ng-action-radius);
+  line-height: 0;
+  vertical-align: middle;
+}
+
+body .icon-only > svg,
+body .panel .icon-only > svg,
+body .alert-pagination .icon-only > svg {
+  width: var(--ng-action-icon-size);
+  height: var(--ng-action-icon-size);
+  display: block;
+  margin: 0;
+  transform-origin: center;
+}
+
+body .panel .primary-button:hover > svg,
+body .panel .secondary-button:hover > svg,
+body .panel .danger-button:hover > svg,
+body .panel .icon-only:hover > svg,
+body .inline-form button:hover > svg,
+body .domain-details-toggle:not([aria-expanded="true"]):hover > svg {
+  transform: none;
+}
+
+body .domain-row-actions {
+  gap: 5px;
+}
+
+body .pill {
+  box-sizing: border-box;
+  min-height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border-width: 1px;
+  border-radius: 999px;
+  font-size: var(--ng-type-badge, 11px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  vertical-align: middle;
+}
+
+body .settings-list label {
+  align-items: center;
+  gap: 8px;
+  font-size: var(--ng-type-body, 13px);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+body .data-row,
+body .table-row,
+body .container-table-row,
+body .alert-table-row,
+body .agents-table,
+body .updates-table,
+body .package-updates-table {
+  font-size: var(--ng-type-body, 13px);
+  line-height: 1.3;
+}
+
+@media (max-width: 760px) {
+  body .primary-button,
+  body .secondary-button,
+  body .danger-button,
+  body .modal-submit,
+  body .icon-button,
+  body .domain-details-toggle,
+  body .nodeguard-select-trigger {
+    min-height: 38px;
+  }
+
+  body .compact-action {
+    min-height: 34px;
+    gap: 5px;
+    padding-inline: 9px;
+  }
+
+  body .icon-only,
+  body .panel .icon-only,
+  body .alert-pagination .icon-only {
+    width: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    height: 36px;
+    min-height: 36px !important;
+  }
+}

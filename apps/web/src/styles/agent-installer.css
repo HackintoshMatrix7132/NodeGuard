@@ -1,0 +1,383 @@
+/* Agent installer and login control refinement */
+.login-card label.remember-option {
+  min-height: 28px;
+  margin: 11px 0 1px;
+  padding: 2px 0;
+  align-items: center;
+  line-height: 1.2;
+}
+
+.remember-option:hover input[type="checkbox"] {
+  border-color: rgba(56, 217, 255, 0.62);
+  background-color: rgba(56, 217, 255, 0.08);
+}
+
+.remember-option:active input[type="checkbox"] {
+  transform: scale(0.94);
+}
+
+.remember-option input[type="checkbox"]:disabled,
+.remember-option:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.login-card .remember-option + button[type="submit"] {
+  margin-top: 14px;
+}
+
+.agent-install-description {
+  color: var(--ng-muted);
+  line-height: 1.5;
+}
+
+.agent-install-form {
+  display: grid;
+  gap: 12px;
+}
+
+.agent-enrollment-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: end;
+  gap: 12px;
+}
+
+.agent-enrollment-form-row label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--ng-muted);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.agent-enrollment-form-row input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--ng-border);
+  border-radius: 6px;
+  outline: none;
+  color: var(--ng-text);
+  background: rgba(2, 6, 23, 0.72);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.agent-enrollment-form-row input:hover {
+  border-color: rgba(148, 163, 184, 0.42);
+}
+
+.agent-enrollment-form-row input:focus-visible {
+  border-color: rgba(56, 217, 255, 0.74);
+  box-shadow: 0 0 0 3px rgba(56, 217, 255, 0.12);
+}
+
+button.agent-generate-button,
+button.agent-view-button {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  appearance: none;
+  color: #fff;
+  background: #2563eb;
+  font-weight: 800;
+}
+
+button.agent-generate-button:hover:not(:disabled),
+button.agent-view-button:hover:not(:disabled) {
+  border-color: #60a5fa;
+  background: #1d4ed8;
+}
+
+button.agent-generate-button:active:not(:disabled),
+button.agent-view-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.985);
+}
+
+button.agent-generate-button:focus-visible,
+button.agent-view-button:focus-visible,
+.agent-command-actions .secondary-button:focus-visible,
+.agent-manual-install a:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(56, 217, 255, 0.16);
+}
+
+button.agent-generate-button:disabled,
+button.agent-view-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+  transform: none;
+}
+
+.agent-command-block {
+  gap: 12px;
+  padding: 14px;
+}
+
+.agent-command-heading {
+  display: flex !important;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.agent-command-heading > span:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.agent-command-heading small {
+  color: var(--ng-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.agent-command-heading > span:last-child {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid rgba(56, 217, 255, 0.26);
+  border-radius: 999px;
+  color: #a5e9ff;
+  background: rgba(56, 217, 255, 0.07);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.agent-command-heading > span:last-child.expired {
+  border-color: rgba(248, 113, 113, 0.36);
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.18);
+}
+
+.agent-command-block code {
+  max-width: 100%;
+  border-radius: 6px;
+  user-select: all;
+}
+
+.agent-enrollment-token {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px 10px !important;
+  border: 1px solid rgba(56, 217, 255, 0.18);
+  border-radius: 6px;
+  padding: 10px;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.agent-enrollment-token > span {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 2px;
+}
+
+.agent-enrollment-token strong {
+  color: var(--ng-text);
+  font-size: 12px;
+}
+
+.agent-enrollment-token small {
+  color: var(--ng-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.agent-enrollment-token code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.agent-enrollment-token > button {
+  min-height: 36px;
+  justify-self: end;
+}
+
+.agent-installer-checklist {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 16px !important;
+}
+
+.agent-installer-checklist span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.agent-installer-checklist svg {
+  flex: 0 0 auto;
+  color: #4ade80;
+}
+
+.agent-command-actions {
+  display: flex !important;
+  justify-content: flex-end;
+  gap: 8px !important;
+}
+
+.agent-command-actions .secondary-button,
+.agent-manual-install a {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--ng-border-strong);
+  border-radius: 6px;
+  appearance: none;
+  color: var(--ng-text);
+  background: rgba(30, 41, 59, 0.78);
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.agent-command-actions .secondary-button:hover:not(:disabled),
+.agent-manual-install a:hover {
+  border-color: rgba(56, 217, 255, 0.52);
+  color: #fff;
+  background: rgba(56, 217, 255, 0.10);
+}
+
+.agent-command-actions .secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  transform: none;
+}
+
+.copy-state-icon {
+  display: inline-grid;
+  place-items: center;
+  animation: passwordToggleIn 170ms ease both;
+}
+
+.agent-manual-install {
+  border-top: 1px solid var(--ng-border);
+  padding-top: 10px;
+  color: var(--ng-muted);
+}
+
+.agent-manual-install summary {
+  width: fit-content;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #dbe7f7;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.agent-manual-install p {
+  margin: 9px 0;
+  color: var(--ng-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.agent-manual-install p code {
+  display: inline;
+  padding: 1px 4px;
+  border: 0;
+  background: rgba(2, 6, 23, 0.65);
+  white-space: normal;
+}
+
+.agent-manual-install a {
+  width: fit-content;
+  min-height: 32px;
+}
+
+.agent-enrollment-progress {
+  display: grid !important;
+  gap: 9px !important;
+  border-top: 1px solid var(--ng-border);
+  padding-top: 11px;
+}
+
+.agent-enrollment-progress > strong {
+  font-size: 13px;
+}
+
+.agent-enrollment-progress > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 16px;
+}
+
+.agent-enrollment-progress span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.agent-enrollment-progress span.complete {
+  color: #86efac;
+}
+
+.agent-enrollment-progress span.current {
+  color: #a5e9ff;
+}
+
+.agent-enrollment-progress.has-error > strong {
+  color: #fca5a5;
+}
+
+.progress-dot {
+  width: 7px;
+  height: 7px;
+  border: 1px solid #64748b;
+  border-radius: 50%;
+}
+
+.agent-view-button {
+  justify-self: end;
+}
+
+@media (max-width: 680px) {
+  .agent-enrollment-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-generate-button,
+  .agent-view-button,
+  .agent-command-actions .secondary-button,
+  .agent-command-actions a {
+    width: 100%;
+  }
+
+  .agent-command-heading,
+  .agent-command-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .agent-command-heading > span:last-child {
+    width: fit-content;
+  }
+
+  .agent-installer-checklist {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-enrollment-token {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-enrollment-token > button {
+    width: 100%;
+  }
+}
+

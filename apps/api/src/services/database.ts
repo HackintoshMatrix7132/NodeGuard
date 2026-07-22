@@ -4,6 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { env } from "../config/env.js";
+import { AGENT_UPDATE_PROVIDER, AGENT_UPDATE_SCHEMA_VERSION, AGENT_UPDATE_STATUSES } from "../generated/agentContract.js";
+import { encryptIntegrationValue } from "./integrationCrypto.js";
 
 function resolveDatabasePath(value: string) {
   if (value === ":memory:") {
@@ -29,6 +31,7 @@ if (databasePath !== ":memory:") {
 }
 
 const database = new Database(databasePath);
+const agentUpdateStatusesSql = AGENT_UPDATE_STATUSES.map((status) => `'${status}'`).join(", ");
 
 database.pragma("journal_mode = WAL");
 database.pragma("foreign_keys = ON");
@@ -39,6 +42,9 @@ database.exec(`
     name TEXT NOT NULL,
     backend_url TEXT NOT NULL,
     api_key TEXT,
+    encrypted_api_key TEXT,
+    api_key_iv TEXT,
+    api_key_tag TEXT,
     allow_insecure_tls INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   );
@@ -232,10 +238,10 @@ database.exec(`
 
   CREATE TABLE IF NOT EXISTS agent_update_inventories (
     agent_id TEXT PRIMARY KEY,
-    schema_version INTEGER NOT NULL CHECK(schema_version = 1),
-    provider TEXT NOT NULL CHECK(provider = 'apt'),
+    schema_version INTEGER NOT NULL CHECK(schema_version = ${AGENT_UPDATE_SCHEMA_VERSION}),
+    provider TEXT NOT NULL CHECK(provider = '${AGENT_UPDATE_PROVIDER}'),
     supported INTEGER NOT NULL CHECK(supported IN (0, 1)),
-    status TEXT NOT NULL CHECK(status IN ('ok', 'unsupported', 'package_manager_busy', 'metadata_refresh_failed', 'check_failed')),
+    status TEXT NOT NULL CHECK(status IN (${agentUpdateStatusesSql})),
     checked_at TEXT NOT NULL,
     last_successful_at TEXT,
     update_count INTEGER NOT NULL DEFAULT 0 CHECK(update_count >= 0),
@@ -274,6 +280,7 @@ database.exec(`
   CREATE INDEX IF NOT EXISTS idx_agent_enrollment_token_hash ON agent_enrollment_tokens(token_hash);
   CREATE INDEX IF NOT EXISTS idx_agent_enrollment_expires ON agent_enrollment_tokens(expires_at);
   CREATE INDEX IF NOT EXISTS idx_agent_metrics_agent_time ON agent_metrics(agent_id, sampled_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_agent_metrics_sampled_at ON agent_metrics(sampled_at);
   CREATE INDEX IF NOT EXISTS idx_agent_containers_agent ON agent_containers(agent_id);
   CREATE INDEX IF NOT EXISTS idx_agent_update_inventories_status ON agent_update_inventories(status);
   CREATE INDEX IF NOT EXISTS idx_agent_update_inventories_success ON agent_update_inventories(last_successful_at DESC);
@@ -282,6 +289,12 @@ database.exec(`
 
 export function getDatabase() {
   return database;
+}
+
+export function closeDatabase() {
+  if (database.open) {
+    database.close();
+  }
 }
 
 const removeHomeAssistantUpdatesMigration = "2026-07-14-remove-home-assistant-updates";
@@ -314,6 +327,68 @@ function hasColumn(tableName: string, columnName: string, target: typeof databas
   const columns = target.prepare(`PRAGMA table_info(${tableName})`).all() as { name: string }[];
   return columns.some((column) => column.name === columnName);
 }
+
+const serverMonitorApiKeyEncryptionMigration = "2026-07-22-encrypt-server-monitor-api-keys";
+
+export function ensureServerMonitorApiKeyEncryptionSchema(target: typeof database = database) {
+  target.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      name TEXT PRIMARY KEY,
+      applied_at TEXT NOT NULL
+    )
+  `);
+
+  target.pragma("secure_delete = ON");
+  const markerAlreadyApplied = Boolean(
+    target.prepare("SELECT 1 FROM schema_migrations WHERE name = ?")
+      .get(serverMonitorApiKeyEncryptionMigration)
+  );
+  const migrate = target.transaction(() => {
+    if (!hasColumn("server_monitors", "encrypted_api_key", target)) {
+      target.prepare("ALTER TABLE server_monitors ADD COLUMN encrypted_api_key TEXT").run();
+    }
+    if (!hasColumn("server_monitors", "api_key_iv", target)) {
+      target.prepare("ALTER TABLE server_monitors ADD COLUMN api_key_iv TEXT").run();
+    }
+    if (!hasColumn("server_monitors", "api_key_tag", target)) {
+      target.prepare("ALTER TABLE server_monitors ADD COLUMN api_key_tag TEXT").run();
+    }
+
+    const legacyRows = target.prepare(`
+      SELECT id, api_key
+      FROM server_monitors
+      WHERE api_key IS NOT NULL
+    `).all() as Array<{ id: string; api_key: string }>;
+    const storeEncrypted = target.prepare(`
+      UPDATE server_monitors
+      SET api_key = NULL, encrypted_api_key = ?, api_key_iv = ?, api_key_tag = ?
+      WHERE id = ?
+    `);
+
+    for (const row of legacyRows) {
+      if (!row.api_key) {
+        storeEncrypted.run(null, null, null, row.id);
+        continue;
+      }
+      const encrypted = encryptIntegrationValue(row.api_key);
+      storeEncrypted.run(encrypted.encrypted, encrypted.iv, encrypted.tag, row.id);
+    }
+    return legacyRows.length;
+  });
+
+  const migratedRows = migrate.immediate();
+  if (migratedRows > 0 || !markerAlreadyApplied) {
+    const checkpoint = target.pragma("wal_checkpoint(TRUNCATE)") as Array<{ busy?: number }>;
+    if ((checkpoint[0]?.busy ?? 0) !== 0) {
+      throw new Error("Unable to checkpoint the encrypted server-monitor credential migration.");
+    }
+  }
+  const marker = target.prepare("INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?, ?)")
+    .run(serverMonitorApiKeyEncryptionMigration, new Date().toISOString());
+  return marker.changes === 1;
+}
+
+ensureServerMonitorApiKeyEncryptionSchema();
 
 const agentMachineIdentityMigration = "2026-07-15-agent-machine-identity";
 

@@ -7,12 +7,20 @@
     "apps/api"
   ],
   "scripts": {
+    "contracts:generate": "node scripts/generate-agent-contracts.mjs",
+    "contracts:check": "node scripts/generate-agent-contracts.mjs --check",
+    "contracts:test": "node --test scripts/generate-agent-contracts.test.mjs",
     "dev": "npm run dev --workspace apps/api & npm run dev --workspace apps/web",
     "dev:api": "npm run dev --workspace apps/api",
     "dev:web": "npm run dev --workspace apps/web",
-    "build": "npm run build --workspace apps/api && npm run build --workspace apps/web",
+    "build": "npm run contracts:check && npm run build --workspace apps/api && npm run build --workspace apps/web",
     "typecheck": "npm run typecheck --workspace apps/api && npm run typecheck --workspace apps/web",
     "lint": "npm run lint --workspace apps/web",
-    "test": "npm run test --workspace apps/api && npm run test --workspace apps/web"
+    "test": "npm run contracts:test && npm run test --workspace apps/api && npm run test --workspace apps/web",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
   }
 }

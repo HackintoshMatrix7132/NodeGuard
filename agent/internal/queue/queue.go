@@ -3,6 +3,8 @@ package queue
 import (
 	"sync"
 	"time"
+
+	"github.com/HackintoshMatrix7132/NodeGuard/agent/internal/contract"
 )
 
 type Item struct {
@@ -28,7 +30,7 @@ func (queue *Queue) Add(item Item) {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
 	queue.pruneLocked(time.Now())
-	if item.CoalesceKey != "" || item.Path == "/api/agent/heartbeat" || item.Path == "/api/agent/inventory" || item.Path == "/api/agent/docker" || item.Path == "/api/agent/updates" {
+	if item.CoalesceKey != "" || item.Path == contract.AgentEndpointHeartbeat || item.Path == contract.AgentEndpointInventory || item.Path == contract.AgentEndpointDocker || item.Path == contract.AgentEndpointUpdates {
 		coalesceKey := item.CoalesceKey
 		if coalesceKey == "" {
 			coalesceKey = item.Path

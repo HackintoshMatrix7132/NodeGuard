@@ -1,0 +1,422 @@
+/* Shared select, action hierarchy, and dense dashboard refinements */
+.nodeguard-select {
+  position: relative;
+  min-width: 0;
+  color: var(--ng-text, #f8fafc);
+}
+
+.nodeguard-select--above {
+  display: grid;
+  gap: 4px;
+}
+
+.nodeguard-select.container-filter,
+.nodeguard-select.host-selector {
+  min-height: 0;
+  display: block;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: inherit;
+}
+
+.nodeguard-select.container-filter:focus-within {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.nodeguard-select-label {
+  color: var(--ng-muted, #94a3b8);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.nodeguard-select-trigger {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--ng-density-control-height, 34px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  border: 1px solid var(--ng-border, rgba(148, 163, 184, 0.18));
+  border-radius: var(--ng-control-radius, 6px);
+  appearance: none;
+  outline: none;
+  color: var(--ng-text, #f8fafc);
+  background: rgba(8, 15, 30, 0.92);
+  box-shadow: none;
+  font-size: 13px;
+  text-align: left;
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.nodeguard-select--inline .nodeguard-select-trigger {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding-left: 0;
+}
+
+.nodeguard-select-prefix {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  border-right: 1px solid var(--ng-border, rgba(148, 163, 184, 0.18));
+  color: var(--ng-muted, #94a3b8);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.nodeguard-select-value {
+  min-width: 0;
+  overflow: hidden;
+  color: #e7edf8;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nodeguard-select-trigger:hover:not(:disabled) {
+  border-color: rgba(56, 217, 255, 0.46);
+  background: rgba(14, 25, 45, 0.96);
+  transform: none;
+}
+
+.nodeguard-select-trigger:focus-visible,
+.nodeguard-select.is-open .nodeguard-select-trigger {
+  border-color: rgba(56, 217, 255, 0.74);
+  box-shadow: 0 0 0 3px rgba(56, 217, 255, 0.11);
+}
+
+.nodeguard-select-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.nodeguard-select-chevron {
+  color: #9fb0c8;
+  transition: transform 140ms ease;
+}
+
+.nodeguard-select.is-open .nodeguard-select-chevron {
+  transform: rotate(180deg);
+}
+
+.nodeguard-select-menu {
+  position: fixed;
+  z-index: 4000;
+  top: var(--select-menu-top);
+  left: var(--select-menu-left);
+  width: var(--select-menu-width);
+  max-height: var(--select-menu-max-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  border: 1px solid rgba(96, 125, 166, 0.38);
+  border-radius: 7px;
+  outline: none;
+  color: #e7edf8;
+  background: #0e182b;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.32);
+  animation: ngSelectMenuIn 110ms ease-out both;
+}
+
+.nodeguard-select-option {
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 5px;
+  color: #cbd5e1;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.nodeguard-select-option.is-active {
+  color: #f8fbff;
+  background: rgba(56, 189, 248, 0.11);
+  box-shadow: inset 2px 0 0 rgba(56, 217, 255, 0.52);
+}
+
+.nodeguard-select-option.is-selected {
+  color: #bfeeff;
+  background: rgba(36, 84, 155, 0.34);
+  font-weight: 750;
+}
+
+.nodeguard-select-option[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.nodeguard-select-option svg {
+  color: var(--ng-cyan, #38d9ff);
+}
+
+@keyframes ngSelectMenuIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+button.primary-button,
+button.modal-submit,
+.inline-form button.primary-button,
+.login-card button[type="submit"],
+button.agent-generate-button,
+button.agent-view-button,
+.panel-header button.primary-button,
+.button-row button.primary-button {
+  border-color: var(--ng-action-border);
+  color: #f8fbff;
+  background: var(--ng-action-bg);
+  box-shadow: none;
+}
+
+button.primary-button:hover:not(:disabled),
+button.modal-submit:hover:not(:disabled),
+.inline-form button.primary-button:hover:not(:disabled),
+.login-card button[type="submit"]:hover:not(:disabled),
+button.agent-generate-button:hover:not(:disabled),
+button.agent-view-button:hover:not(:disabled),
+.panel-header button.primary-button:hover:not(:disabled),
+.button-row button.primary-button:hover:not(:disabled) {
+  border-color: #4a7cca;
+  background: var(--ng-action-bg-hover);
+  box-shadow: none;
+  transform: none;
+}
+
+button.primary-button:active:not(:disabled),
+button.modal-submit:active:not(:disabled),
+.inline-form button.primary-button:active:not(:disabled),
+.login-card button[type="submit"]:active:not(:disabled),
+button.agent-generate-button:active:not(:disabled),
+button.agent-view-button:active:not(:disabled) {
+  border-color: #2e5c9d;
+  background: var(--ng-action-bg-active);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
+  transform: none;
+}
+
+button.secondary-button,
+.panel-header > button:not(.primary-button),
+.dashboard-panel-action,
+.button-row button.secondary-button {
+  border-color: var(--ng-border-strong, rgba(148, 163, 184, 0.28));
+  color: #e7edf8;
+  background: rgba(30, 41, 59, 0.72);
+  box-shadow: none;
+}
+
+button.secondary-button:hover:not(:disabled),
+.panel-header > button:not(.primary-button):hover:not(:disabled),
+.dashboard-panel-action:hover:not(:disabled),
+.button-row button.secondary-button:hover:not(:disabled) {
+  border-color: rgba(56, 217, 255, 0.46);
+  color: #f8fbff;
+  background: rgba(39, 55, 82, 0.9);
+  box-shadow: none;
+  transform: none;
+}
+
+button.primary-button:focus-visible,
+button.secondary-button:focus-visible,
+button.modal-submit:focus-visible,
+.login-card button[type="submit"]:focus-visible {
+  outline: 2px solid rgba(56, 217, 255, 0.82);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+button.primary-button:disabled,
+button.secondary-button:disabled,
+button.modal-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+.settings-page .settings-description {
+  width: 100%;
+  max-width: none;
+  overflow-wrap: anywhere;
+}
+
+.settings-page .about-content .settings-description {
+  max-width: min(100%, 1120px);
+}
+
+.agent-lifecycle-actions {
+  display: grid;
+  border-top: 1px solid var(--ng-border);
+}
+
+.agent-lifecycle-actions > div {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 0;
+}
+
+.agent-lifecycle-actions > div + div {
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.agent-lifecycle-actions span {
+  display: grid;
+  gap: 2px;
+}
+
+.agent-lifecycle-actions small {
+  color: var(--ng-muted);
+  line-height: 1.35;
+}
+
+.agent-lifecycle-actions button {
+  flex: 0 0 auto;
+}
+
+.danger-button.secondary-danger {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.12);
+}
+
+.agent-delete-confirmation {
+  gap: 9px;
+}
+
+.agent-delete-confirmation > p {
+  display: grid;
+  gap: 4px;
+}
+
+.agent-delete-name {
+  color: #f8fafc;
+  font-size: 15px;
+}
+
+.agent-delete-confirmation ul {
+  margin: -2px 0 2px;
+  padding-left: 22px;
+  color: #cbd5e1;
+  line-height: 1.55;
+}
+
+.agent-delete-warning {
+  display: flex !important;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px !important;
+  padding: 8px 10px;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: 6px;
+  color: #fecaca !important;
+  background: rgba(127, 29, 29, 0.12);
+}
+
+.agent-delete-field {
+  display: grid;
+  gap: 5px;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.agent-delete-field code {
+  width: fit-content;
+  display: inline-flex;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.18);
+}
+
+.agent-delete-field input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--ng-border-strong);
+  border-radius: 6px;
+  outline: none;
+  color: var(--ng-text);
+  background: rgba(2, 6, 23, 0.72);
+}
+
+.agent-delete-field input:focus-visible {
+  border-color: rgba(248, 113, 113, 0.72);
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.1);
+}
+
+.agents-table tbody tr,
+.container-table-row,
+.alert-table-row,
+.domain-action-row {
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+@media (max-width: 760px) {
+  .nodeguard-select-trigger,
+  .nodeguard-select-option {
+    min-height: 44px;
+  }
+
+  .nodeguard-select-menu {
+    max-width: calc(100vw - 16px);
+  }
+
+  .nodeguard-select,
+  .agent-status-filter,
+  .container-filter,
+  .host-selector {
+    width: 100%;
+  }
+
+  .agent-lifecycle-actions > div {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .agent-lifecycle-actions button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .agent-delete-confirmation > div {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .agent-delete-confirmation button,
+  .agent-delete-field input {
+    min-height: 44px;
+  }
+
+  .update-toolbar {
+    gap: 7px;
+  }
+
+  .domain-compact-metrics {
+    gap: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nodeguard-select-menu {
+    animation: none;
+  }
+
+  .nodeguard-select-chevron {
+    transition: none;
+  }
+}
+

@@ -1,6 +1,12 @@
 import https from "node:https";
+import type { ClientRequest } from "node:http";
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const MIN_REQUEST_TIMEOUT_MS = 2_000;
+const MAX_REQUEST_TIMEOUT_MS = 60_000;
+const activeRequests = new Set<ClientRequest>();
+let rejectNewRequestsForShutdown = false;
 
 export type ProxmoxRrdTimeframe = "hour" | "day" | "week" | "month" | "year";
 
@@ -11,6 +17,20 @@ export class ProxmoxApiRequestError extends Error {
   ) {
     super(message);
     this.name = "ProxmoxApiRequestError";
+  }
+}
+
+export class ProxmoxRequestAbortedError extends Error {
+  constructor() {
+    super("Proxmox request was cancelled during NodeGuard shutdown.");
+    this.name = "ProxmoxRequestAbortedError";
+  }
+}
+
+export function abortActiveProxmoxRequests(): void {
+  rejectNewRequestsForShutdown = true;
+  for (const request of [...activeRequests]) {
+    request.destroy(new ProxmoxRequestAbortedError());
   }
 }
 
@@ -124,6 +144,7 @@ export function normalizeProxmoxBaseUrl(value: string): string {
 }
 
 export function normalizeProxmoxTransportError(error: Error & { code?: string }): Error {
+  if (error instanceof ProxmoxRequestAbortedError) return error;
   if (
     error.message === "Proxmox response exceeded the allowed size."
     || error.message === "Proxmox API request timed out."
@@ -145,13 +166,20 @@ export function normalizeProxmoxTransportError(error: Error & { code?: string })
   return new Error("Unable to reach the Proxmox API. Check the URL, network access, and TLS configuration.");
 }
 
-function requestJson(credentials: ProxmoxCredentials, path: string): Promise<unknown> {
+export function parseProxmoxRequestTimeoutMs(raw: string | undefined): number {
+  if (!raw) return DEFAULT_REQUEST_TIMEOUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return DEFAULT_REQUEST_TIMEOUT_MS;
+  return Math.min(MAX_REQUEST_TIMEOUT_MS, Math.max(MIN_REQUEST_TIMEOUT_MS, Math.floor(parsed)));
+}
+
+function requestJson(credentials: ProxmoxCredentials, path: string, signal?: AbortSignal): Promise<unknown> {
+  if (rejectNewRequestsForShutdown) {
+    return Promise.reject(new ProxmoxRequestAbortedError());
+  }
   const baseUrl = normalizeProxmoxBaseUrl(credentials.baseUrl);
   const endpoint = new URL(`${baseUrl}/api2/json${path}`);
-  const timeoutMs = Math.max(
-    2_000,
-    Number(process.env.NODEGUARD_PROXMOX_REQUEST_TIMEOUT_MS ?? 10_000)
-  );
+  const timeoutMs = parseProxmoxRequestTimeoutMs(process.env.NODEGUARD_PROXMOX_REQUEST_TIMEOUT_MS);
 
   return new Promise((resolve, reject) => {
     const request = https.request(
@@ -163,6 +191,7 @@ function requestJson(credentials: ProxmoxCredentials, path: string): Promise<unk
           Authorization: `PVEAPIToken=${credentials.tokenUser}!${credentials.tokenId}=${credentials.tokenSecret}`,
           "User-Agent": "NodeGuard-Proxmox/0.1"
         },
+        signal,
         ...(credentials.customCa?.trim() ? { ca: credentials.customCa.trim() } : {})
       },
       (response) => {
@@ -199,9 +228,23 @@ function requestJson(credentials: ProxmoxCredentials, path: string): Promise<unk
         });
       }
     );
+    activeRequests.add(request);
 
-    request.setTimeout(timeoutMs, () => request.destroy(new Error("Proxmox API request timed out.")));
-    request.on("error", (error) => reject(normalizeProxmoxTransportError(error)));
+    // ClientRequest#setTimeout measures socket inactivity, so a peer that
+    // trickles bytes could otherwise keep synchronization alive indefinitely.
+    const timeout = setTimeout(
+      () => request.destroy(new Error("Proxmox API request timed out.")),
+      timeoutMs
+    );
+    timeout.unref();
+    request.once("close", () => {
+      activeRequests.delete(request);
+      clearTimeout(timeout);
+    });
+    request.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(normalizeProxmoxTransportError(error));
+    });
     request.end();
   });
 }
@@ -312,11 +355,12 @@ export async function collectProxmoxClusterName(
 }
 
 export async function collectProxmoxSnapshot(
-  credentials: ProxmoxCredentials
+  credentials: ProxmoxCredentials,
+  signal?: AbortSignal
 ): Promise<ProxmoxCollectedSnapshot> {
   const [versionPayload, resourcesPayload] = await Promise.all([
-    requestJson(credentials, "/version"),
-    requestJson(credentials, "/cluster/resources")
+    requestJson(credentials, "/version", signal),
+    requestJson(credentials, "/cluster/resources", signal)
   ]);
   const versionData = extractData(versionPayload);
   const resourceData = extractData(resourcesPayload);

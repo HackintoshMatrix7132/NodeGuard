@@ -1,0 +1,65 @@
+{
+  "manifestVersion": 1,
+  "agentApi": {
+    "basePath": "/api/agent",
+    "routes": {
+      "register": "/register",
+      "status": "/status",
+      "heartbeat": "/heartbeat",
+      "inventory": "/inventory",
+      "metrics": "/metrics",
+      "docker": "/docker",
+      "updates": "/updates"
+    }
+  },
+  "updates": {
+    "schemaVersion": 1,
+    "provider": "apt",
+    "statuses": [
+      "ok",
+      "unsupported",
+      "package_manager_busy",
+      "metadata_refresh_failed",
+      "check_failed"
+    ],
+    "errorCodes": [
+      "unsupported_os",
+      "os_detection_failed",
+      "apt_unavailable",
+      "package_lock_check_failed",
+      "package_manager_busy",
+      "metadata_refresh_timeout",
+      "metadata_refresh_failed",
+      "metadata_output_too_large",
+      "check_output_too_large",
+      "check_timeout",
+      "check_failed",
+      "malformed_apt_output",
+      "reboot_state_unavailable"
+    ],
+    "allowedErrorCodesByStatus": {
+      "ok": [],
+      "unsupported": [
+        "unsupported_os"
+      ],
+      "package_manager_busy": [
+        "package_manager_busy"
+      ],
+      "metadata_refresh_failed": [
+        "metadata_refresh_timeout",
+        "metadata_refresh_failed",
+        "metadata_output_too_large"
+      ],
+      "check_failed": [
+        "os_detection_failed",
+        "apt_unavailable",
+        "package_lock_check_failed",
+        "check_timeout",
+        "check_failed",
+        "malformed_apt_output",
+        "check_output_too_large",
+        "reboot_state_unavailable"
+      ]
+    }
+  }
+}

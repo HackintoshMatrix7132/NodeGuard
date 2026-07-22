@@ -1,3 +1,9 @@
+import type {
+  AgentUpdateErrorCode,
+  AgentUpdateProvider,
+  AgentUpdateStatus
+} from "../generated/agentContract";
+
 export type HealthStatus = "healthy" | "warning" | "critical" | "offline" | "unknown";
 export type ContainerStatus = "running" | "stopped" | "restarting" | "exited";
 export type ContainerHealth = "healthy" | "unhealthy" | "starting" | "none";
@@ -84,22 +90,9 @@ export type CreateAgentEnrollmentInput = {
   displayName?: string;
 };
 
-export type UpdateCheckStatus = "waiting" | "ok" | "unsupported" | "package_manager_busy" | "metadata_refresh_failed" | "check_failed";
+export type UpdateCheckStatus = "waiting" | AgentUpdateStatus;
 export type UpdateInventoryFreshness = "waiting" | "current" | "retained" | "stale" | "unsupported";
-export type UpdateErrorCode =
-  | "unsupported_os"
-  | "os_detection_failed"
-  | "apt_unavailable"
-  | "package_lock_check_failed"
-  | "package_manager_busy"
-  | "metadata_refresh_timeout"
-  | "metadata_refresh_failed"
-  | "metadata_output_too_large"
-  | "check_timeout"
-  | "check_failed"
-  | "check_output_too_large"
-  | "malformed_apt_output"
-  | "reboot_state_unavailable";
+export type UpdateErrorCode = AgentUpdateErrorCode;
 
 export type MachinePackageUpdate = {
   name: string;
@@ -114,7 +107,7 @@ export type MachineUpdateSummary = {
   displayName: string;
   hostname: string;
   agentStatus: AgentStatus;
-  provider: "apt" | null;
+  provider: AgentUpdateProvider | null;
   supported: boolean | null;
   status: UpdateCheckStatus;
   freshness: UpdateInventoryFreshness;

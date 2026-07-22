@@ -12,15 +12,6 @@ function numberEnv(name: string, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function booleanEnv(name: string, fallback: boolean) {
-  const raw = process.env[name];
-  if (!raw) {
-    return fallback;
-  }
-
-  return ["1", "true", "yes", "on"].includes(raw.trim().toLowerCase());
-}
-
 function listEnv(name: string) {
   return (process.env[name] ?? "")
     .split(",")
@@ -56,6 +47,7 @@ export function parseAgentUpdateIntervalSeconds(raw: string | undefined): number
 export const env = {
   nodeEnv,
   isProduction: nodeEnv === "production",
+  host: process.env.NODEGUARD_HOST ?? "0.0.0.0",
   port: numberEnv("PORT", 3000),
   apiKey: process.env.NODEGUARD_API_KEY ?? "",
   adminUsername: process.env.NODEGUARD_ADMIN_USERNAME ?? "admin",

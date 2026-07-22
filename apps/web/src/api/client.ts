@@ -5,8 +5,6 @@ export type ApiConfig = {
   apiKey?: string;
 };
 
-const defaultLocalApiUrl = "http://localhost:3000";
-
 export function getDefaultBackendUrl() {
   const configuredUrl = import.meta.env.VITE_NODEGUARD_API_URL as string | undefined;
   if (configuredUrl) {

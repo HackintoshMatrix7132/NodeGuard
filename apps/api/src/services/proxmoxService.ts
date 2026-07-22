@@ -4,8 +4,10 @@ import type { Alert } from "../types/nodeguard.js";
 import { createAlert } from "./alertService.js";
 import { getDatabase } from "./database.js";
 import {
+  abortActiveProxmoxRequests,
   collectProxmoxSnapshot,
   normalizeProxmoxBaseUrl,
+  ProxmoxRequestAbortedError,
   type ProxmoxCollectedSnapshot,
   type ProxmoxCredentials,
 } from "./proxmoxClient.js";
@@ -17,6 +19,7 @@ import {
 const db = getDatabase();
 const activeSyncs = new Set<string>();
 let scheduler: NodeJS.Timeout | null = null;
+let scheduledSync: Promise<void> | null = null;
 
 export async function runWithProxmoxSyncLock(
   id: string,
@@ -583,6 +586,7 @@ export async function syncProxmoxConnection(id: string): Promise<void> {
     try {
       storeSnapshot(id, await collectProxmoxSnapshot(credentials(row)));
     } catch (error) {
+      if (error instanceof ProxmoxRequestAbortedError) return;
       recordFailure(id, error);
       throw error;
     }
@@ -1068,10 +1072,32 @@ export function startProxmoxSyncScheduler(): void {
       env.proxmoxSyncIntervalSeconds +
       "s interval.",
   );
-  void syncAllProxmoxConnections();
+  void runScheduledProxmoxSync();
   scheduler = setInterval(
-    () => void syncAllProxmoxConnections(),
+    () => void runScheduledProxmoxSync(),
     syncIntervalMs(),
   );
   scheduler.unref();
+}
+
+function runScheduledProxmoxSync() {
+  if (scheduledSync) return scheduledSync;
+
+  scheduledSync = syncAllProxmoxConnections()
+    .catch((error) => {
+      console.error("NodeGuard Proxmox sync failed.", error);
+    })
+    .finally(() => {
+      scheduledSync = null;
+    });
+  return scheduledSync;
+}
+
+export async function stopProxmoxSyncScheduler(): Promise<void> {
+  if (scheduler) {
+    clearInterval(scheduler);
+    scheduler = null;
+  }
+  abortActiveProxmoxRequests();
+  await scheduledSync;
 }

@@ -68,6 +68,10 @@ export const queryKeys = {
   proxmoxNodeHistory: (connectionId: string, node: string, range: ProxmoxNodeHistoryRange) => ["proxmox", "nodes", connectionId, node, "history", range] as const
 };
 
+export function overviewQueryKey(demoMode: boolean) {
+  return [...queryKeys.overview, demoMode] as const;
+}
+
 function useConfig() {
   const config = useSettingsStore((state) => state.backendConfig);
   const demoMode = useSettingsStore((state) => state.demoMode);
@@ -102,7 +106,7 @@ export function useOverview() {
   const demoMode = useSettingsStore((state) => state.demoMode);
   const liveOptions = useLiveQueryOptions();
   return useQuery({
-    queryKey: [...queryKeys.overview, demoMode],
+    queryKey: overviewQueryKey(demoMode),
     queryFn: () => demoMode
       ? Promise.resolve(getDemoOverview(demoAlerts.filter((alert) => !dismissedDemoAlertIds.has(alert.id))))
       : getOverview(config),
@@ -532,7 +536,7 @@ export function useRunChecks() {
       ? Promise.resolve(getDemoOverview(demoAlerts.filter((alert) => !dismissedDemoAlertIds.has(alert.id))))
       : runChecks(config),
     onSuccess: (overview) => {
-      queryClient.setQueryData(queryKeys.overview, overview);
+      queryClient.setQueryData(overviewQueryKey(demoMode), overview);
       void queryClient.invalidateQueries();
     }
   });

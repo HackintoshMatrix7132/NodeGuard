@@ -23,22 +23,6 @@ function apiKeysMatch(providedKey: string, expectedKey: string) {
   return crypto.timingSafeEqual(provided, expected);
 }
 
-export function requireApiKey(request: Request, response: Response, next: NextFunction) {
-  const providedKey = readApiKey(request);
-
-  if (!providedKey) {
-    response.status(401).json({ error: "missing_api_key", message: "Missing API key." });
-    return;
-  }
-
-  if (!env.apiKey || !apiKeysMatch(providedKey, env.apiKey)) {
-    response.status(403).json({ error: "invalid_api_key", message: "Invalid API key." });
-    return;
-  }
-
-  next();
-}
-
 export function hasValidApiKey(request: Request) {
   const providedKey = readApiKey(request);
   return Boolean(providedKey && env.apiKey && apiKeysMatch(providedKey, env.apiKey));

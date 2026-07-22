@@ -5,6 +5,7 @@ import test from "node:test";
 process.env.DATABASE_URL = ":memory:";
 process.env.AGENT_STALE_AFTER_SECONDS = "60";
 process.env.AGENT_OFFLINE_AFTER_SECONDS = "180";
+process.env.METRIC_HISTORY_RETENTION_DAYS = "30";
 
 const agentService = await import("./agentService.js");
 const { getDatabase } = await import("./database.js");
@@ -615,4 +616,40 @@ test("credential rotation remains offline through replay until the new Agent hea
   assert.ok(connected.last_seen_at);
 
   assert.deepEqual(agentService.deleteAgent(first.agentId), { deleted: true });
+});
+
+test("raw Agent metrics are pruned to the configured history retention window", () => {
+  const enrollment = agentService.createAgentEnrollmentToken("Retention agent");
+  const registered = registration(enrollment.token, "retention-host");
+  const staleTimestamp = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+  const currentTimestamp = new Date().toISOString();
+  const database = getDatabase();
+
+  database.prepare(`
+    INSERT INTO agent_metrics (agent_id, sample_epoch, sampled_at)
+    VALUES (?, ?, ?)
+  `).run(registered.agentId, Math.floor(Date.parse(staleTimestamp) / 1000), staleTimestamp);
+  agentService.recordAgentMetrics(registered.agentId, { samples: [{
+    timestamp: currentTimestamp,
+    cpuUsagePercent: 12,
+    memoryUsedBytes: null,
+    memoryTotalBytes: null,
+    memoryUsagePercent: null,
+    diskUsedBytes: null,
+    diskTotalBytes: null,
+    diskUsagePercent: null,
+    swapUsedBytes: null,
+    swapTotalBytes: null,
+    swapUsagePercent: null,
+    loadAverage1: null,
+    loadAverage5: null,
+    loadAverage15: null,
+    systemUptimeSeconds: 60
+  }] });
+
+  const rows = database.prepare(`
+    SELECT sampled_at FROM agent_metrics WHERE agent_id = ? ORDER BY sampled_at
+  `).all(registered.agentId) as Array<{ sampled_at: string }>;
+  assert.deepEqual(rows, [{ sampled_at: currentTimestamp }]);
+  assert.deepEqual(agentService.deleteAgent(registered.agentId), { deleted: true });
 });
