@@ -378,9 +378,9 @@ export function DeleteConfirmationDialog({ title, resource, description, confirm
         <p className="confirmation-resource"><strong>{resource}</strong></p>
         <p>This action cannot be undone.</p>
         {error ? <div className="form-error" role="alert">{error}</div> : null}
-        <div>
-          <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
-          <button className="danger-button" type="button" onClick={onConfirm} disabled={busy} aria-busy={busy}>
+        <div className="confirmation-actions">
+          <button className="secondary-button confirmation-action" type="button" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="danger-button confirmation-action confirmation-action--danger" type="button" onClick={onConfirm} disabled={busy} aria-busy={busy}>
             {busy ? <LoaderCircle className="is-spinning" size={15} /> : <Trash2 size={15} />}
             {busy ? "Deleting…" : confirmLabel}
           </button>

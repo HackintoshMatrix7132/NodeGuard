@@ -243,6 +243,69 @@ button.modal-submit:disabled {
   transform: none;
 }
 
+.confirmation-dialog > .confirmation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ng-action-gap, 6px);
+}
+
+button.confirmation-action {
+  min-height: var(--ng-action-height, 32px);
+  padding: 4px var(--ng-button-padding-x, 10px);
+  border: 1px solid var(--ng-border-strong, rgba(148, 163, 184, 0.28));
+  border-radius: var(--ng-action-radius, 6px);
+  font-size: var(--ng-action-font-size, 13px);
+  font-weight: var(--ng-action-font-weight, 700);
+  line-height: var(--ng-action-line-height, 1);
+  white-space: nowrap;
+}
+
+button.confirmation-action--danger {
+  border-color: rgba(248, 113, 113, 0.52);
+  color: #fee2e2;
+  background: rgba(127, 29, 29, 0.56);
+  box-shadow: none;
+}
+
+button.confirmation-action--danger:hover:not(:disabled) {
+  border-color: rgba(252, 165, 165, 0.82);
+  color: #fff7f7;
+  background: rgba(153, 27, 27, 0.78);
+  box-shadow: none;
+  transform: none;
+}
+
+button.confirmation-action--danger:active:not(:disabled) {
+  border-color: rgba(254, 202, 202, 0.76);
+  background: rgba(127, 29, 29, 0.92);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.24);
+  transform: none;
+}
+
+button.confirmation-action:focus-visible {
+  outline: 2px solid rgba(56, 217, 255, 0.82);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+button.confirmation-action--danger:focus-visible {
+  outline-color: rgba(254, 202, 202, 0.94);
+}
+
+button.confirmation-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+@media (max-width: 760px) {
+  button.confirmation-action {
+    min-height: 38px;
+  }
+}
+
 .settings-page .settings-description {
   width: 100%;
   max-width: none;
@@ -419,4 +482,3 @@ button.modal-submit:disabled {
     transition: none;
   }
 }
-

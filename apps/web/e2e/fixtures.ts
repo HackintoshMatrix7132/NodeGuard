@@ -73,7 +73,7 @@ export async function signIn(page: Page, username: string, password: string) {
   await page.getByPlaceholder("Enter password").fill(password);
   await page.getByRole("button", { name: "Sign in to NodeGuard" }).click();
   await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Active issues", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Active incidents", exact: true })).toBeVisible();
 }
 
 export async function expectNoHorizontalOverflow(page: Page) {

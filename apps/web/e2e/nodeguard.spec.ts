@@ -284,15 +284,36 @@ test("domain row actions stay compact, accessible, and non-destructive", async (
   await remove.click();
   const deleteDialog = page.getByRole("dialog", { name: "Delete domain monitor" });
   await expect(deleteDialog).toBeVisible();
-  await deleteDialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(deleteDialog).toBeHidden();
-
-  await details.focus();
-  await expect(details).toBeFocused();
-  for (const button of [check, duplicate, edit, remove]) {
-    await page.keyboard.press("Tab");
-    await expect(button).toBeFocused();
+  const confirmationActions = deleteDialog.locator(".confirmation-actions");
+  const cancel = deleteDialog.getByRole("button", { name: "Cancel" });
+  const confirm = deleteDialog.getByRole("button", { name: "Delete monitor" });
+  await expect(confirmationActions).toHaveCSS("gap", "6px");
+  await expect(confirmationActions).toHaveCSS("justify-content", "flex-end");
+  for (const button of [cancel, confirm]) {
+    await expect(button).toHaveCSS("height", "32px");
+    await expect(button).toHaveCSS("font-size", "13px");
+    await expect(button).toHaveCSS("font-weight", "700");
+    await expect(button).toHaveCSS("border-radius", "6px");
+    await expect(button).toHaveCSS("display", "flex");
+    await expect(button).toHaveCSS("align-items", "center");
+    await expect(button).toHaveCSS("justify-content", "center");
   }
+  await expect(cancel).toHaveClass(/secondary-button/);
+  await expect(confirm).toHaveClass(/confirmation-action--danger/);
+  await expect(confirm.locator("svg")).toHaveCSS("width", "14px");
+  await expect(confirm.locator("svg")).toHaveCSS("height", "14px");
+  await expect(cancel).not.toBeDisabled();
+  await expect(confirm).not.toBeDisabled();
+  await deleteDialog.getByRole("button", { name: "Close dialog" }).focus();
+  await page.keyboard.press("Tab");
+  await expect(cancel).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(confirm).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(deleteDialog.getByRole("button", { name: "Close dialog" })).toBeFocused();
+  await cancel.click();
+  await expect(deleteDialog).toBeHidden();
+  await expect(remove).toBeFocused();
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expectNoHorizontalOverflow(page);
@@ -301,6 +322,16 @@ test("domain row actions stay compact, accessible, and non-destructive", async (
     await expect(button).toHaveCSS("width", "36px");
     await expect(button).toHaveCSS("height", "36px");
   }
+
+  await remove.click();
+  await expect(deleteDialog).toBeVisible();
+  for (const button of [cancel, confirm]) {
+    await expect(button).toHaveCSS("height", "38px");
+    await expect(button).toHaveCSS("white-space", "nowrap");
+  }
+  await expectNoHorizontalOverflow(page);
+  await page.keyboard.press("Escape");
+  await expect(deleteDialog).toBeHidden();
 });
 
 test("live domain monitor create, update, and delete mutations persist through the API", async ({ page }, testInfo) => {
