@@ -18,7 +18,7 @@ import { getStatusLabel,getStatusTone } from "../utils/status";
 import { currentUpdateCoverage,formatUpdateCount,updateSummaryHasCurrentData,updateSummaryUsesRetainedData } from "../utils/updatePresentation";
 
 import type { MetricTone,View } from "../app/types";
-import { MetricCard,MetricDiagnostic,MetricMeter,Panel,StaleNotice,StateBlock,StatusPill,countLabel,mainIssue,percentage,statusTrend,summarizeIssues } from "../app/ui";
+import { MetricCard,MetricDiagnostic,MetricMeter,Panel,StaleNotice,StateBlock,StatusPill,countLabel,percentage,statusTrend } from "../app/ui";
 import { AlertRow } from "./AlertsPage";
 import { DomainRow } from "./DomainsPage";
 
@@ -32,6 +32,7 @@ export function Dashboard({ setView }: { setView: (view: View) => void }) {
   const alerts = useAlerts();
   const runChecks = useRunChecks();
   const refreshIntervalSeconds = useSettingsStore((state) => state.refreshIntervalSeconds);
+  const healthSummary = overview.data?.healthSummary;
   const activeAlerts = alerts.data?.slice(0, 4) ?? [];
   const allAlerts = alerts.data ?? [];
   const healthAlerts = allAlerts.filter((alert) => alert.affectedResource !== "Update Center");
@@ -59,13 +60,10 @@ export function Dashboard({ setView }: { setView: (view: View) => void }) {
     : server.isError
       ? "Machine details unavailable"
       : "Checking machine details";
-  const activeCriticalAlerts = allAlerts.filter((alert) => alert.status === "active" && alert.severity === "critical").length;
-  const activeWarningAlerts = allAlerts.filter((alert) => alert.status === "active" && alert.severity === "warning").length;
   const domainTone: MetricTone = domains.data
     ? offlineDomains > 0 ? "red" : warningDomains > 0 ? "orange" : "green"
     : overview.data && overview.data.domainsOnline < overview.data.domainsTotal ? "orange" : "blue";
-  const alertTone: MetricTone = overview.data?.criticalAlerts ? "red" : overview.data?.warnings ? "orange" : "green";
-  const alertDataUnavailable = !alerts.data;
+  const alertTone: MetricTone = healthSummary?.status === "critical" ? "red" : healthSummary?.status === "warning" ? "orange" : "green";
   const domainDataUnavailable = !domains.data;
   const updateDataUnavailable = !updates.data;
   const updateHasCurrentData = updateSummaryHasCurrentData(updates.data);
@@ -109,6 +107,12 @@ export function Dashboard({ setView }: { setView: (view: View) => void }) {
   if (overview.isLoading) return <StateBlock tone="loading" title="Loading dashboard" message="Reading live backend checks." />;
   if (!overview.data) return <StateBlock tone="error" title="Dashboard unavailable" message={normalizeApiError(overview.error).message} />;
 
+  const currentHealth = overview.data.healthSummary;
+  const primaryIncident = currentHealth.primaryIncident;
+  const incidentSummary = currentHealth.activeIncidents.total === 0
+    ? "No active incidents detected."
+    : `${countLabel(currentHealth.activeIncidents.total, "active incident")} · ${currentHealth.activeIncidents.critical} critical · ${currentHealth.activeIncidents.warning} warning`;
+
   return (
     <div className="page-stack dashboard-page">
       <StaleNotice isError={overview.isError} dataUpdatedAt={overview.dataUpdatedAt} />
@@ -117,21 +121,26 @@ export function Dashboard({ setView }: { setView: (view: View) => void }) {
           {staleSupplementalSections.join(", ")} could not refresh. Showing the last available data.
         </div>
       ) : null}
-      <section className={`hero-panel ${getStatusTone(overview.data.status)}`}>
+      <section className={`hero-panel ${getStatusTone(currentHealth.status)}`}>
         <div>
           <span className="eyebrow">NodeGuard</span>
-          <div className="hero-status" role="status" aria-live="polite">{getStatusLabel(overview.data.status)}</div>
-          <p className="hero-summary">{alerts.data ? summarizeIssues(healthAlerts) : overview.data.criticalAlerts || overview.data.warnings ? `${countLabel(overview.data.criticalAlerts + overview.data.warnings, "issue")} need attention.` : "No active issues detected."}</p>
-          {alerts.data && healthAlerts.length > 0 ? <p className="hero-main-issue"><span>Main issue</span>{mainIssue(healthAlerts)}</p> : null}
+          <div className="hero-status" role="status" aria-live="polite">{getStatusLabel(currentHealth.status)}</div>
+          <p className="hero-summary">{incidentSummary}</p>
+          {primaryIncident ? (
+            <p className="hero-main-issue">
+              <span>Primary incident</span>
+              {primaryIncident.title} · {primaryIncident.affectedResource} · since {formatRelativeTime(primaryIncident.since)}
+            </p>
+          ) : null}
           <small>Last checked {formatDateTime(overview.data.lastCheckedAt)} · Live refresh every {refreshIntervalSeconds}s</small>
         </div>
         <button className="icon-button" onClick={refresh} disabled={runChecks.isPending}><RefreshCcw size={17} /> {runChecks.isPending ? "Refreshing..." : "Refresh"}</button>
       </section>
       {refreshMessage ? <div className={`stale-notice ${refreshMessage.tone === "success" ? "success" : ""}`} role={refreshMessage.tone === "error" ? "alert" : "status"}>{refreshMessage.text}</div> : null}
-      <Panel title="Active issues" action={<button className="dashboard-panel-action" onClick={() => setView("alerts")}>View details</button>}>
-        {alerts.isLoading && !alerts.data ? <StateBlock tone="loading" title="Loading active issues" message="Reading the latest alert state." /> : alerts.isError && !alerts.data ? <StateBlock tone="error" title="Active issues unavailable" message={normalizeApiError(alerts.error).message} /> : healthAlerts.length === 0 ? <StateBlock icon={<ShieldCheck size={18} aria-hidden="true" />} title="No active issues" message="All monitored checks are currently healthy." /> : (
+      <Panel title="Active incidents" action={<button className="dashboard-panel-action" onClick={() => setView("alerts")}>View details</button>}>
+        {currentHealth.activeIncidents.total === 0 ? <StateBlock icon={<ShieldCheck size={18} aria-hidden="true" />} title="No active incidents" message="All monitored operational checks are currently healthy." /> : alerts.isLoading && !alerts.data ? <StateBlock tone="loading" title="Loading incident details" message={incidentSummary} /> : alerts.isError && !alerts.data ? <StateBlock tone="error" title={primaryIncident?.title ?? "Incident details unavailable"} message={primaryIncident ? `${primaryIncident.affectedResource} · since ${formatRelativeTime(primaryIncident.since)}` : normalizeApiError(alerts.error).message} /> : (
           <div className="issue-list">
-            {healthAlerts.slice(0, 3).map((alert) => <button className="issue-row" key={alert.id} onClick={() => setView("alerts")}><StatusPill status={alert.severity} /><span>{alert.title}</span></button>)}
+            {healthAlerts.slice(0, 3).map((alert) => <button className="issue-row" key={alert.id} onClick={() => setView("alerts")}><StatusPill status={alert.severity} /><span>{alert.title} · {alert.affectedResource} · since {formatRelativeTime(alert.firstSeenAt)}</span></button>)}
           </div>
         )}
       </Panel>
@@ -194,15 +203,15 @@ export function Dashboard({ setView }: { setView: (view: View) => void }) {
           ]} />}
         />
         <MetricCard
-          label="Critical alerts"
-          value={`${overview.data.criticalAlerts}`}
-          detail={`${overview.data.warnings} warnings · ${statusTrend(overview.data.status)}`}
+          label="Active incidents"
+          value={`${currentHealth.activeIncidents.total}`}
+          detail={`${currentHealth.activeIncidents.critical} critical · ${currentHealth.activeIncidents.warning} warning`}
           tone={alertTone}
           onClick={() => setView("alerts")}
           indicator={<MetricDiagnostic rows={[
-            { label: "Critical", value: String(alertDataUnavailable ? overview.data.criticalAlerts : activeCriticalAlerts), tone: (alertDataUnavailable ? overview.data.criticalAlerts : activeCriticalAlerts) > 0 ? "red" : "green" },
-            { label: "Warning", value: String(alertDataUnavailable ? overview.data.warnings : activeWarningAlerts), tone: (alertDataUnavailable ? overview.data.warnings : activeWarningAlerts) > 0 ? "orange" : "green" },
-            { label: "Active total", value: alertDataUnavailable ? "Unavailable" : String(allAlerts.length), tone: alertDataUnavailable ? "orange" : allAlerts.length > 0 ? "red" : "green" }
+            { label: "Critical now", value: String(currentHealth.activeIncidents.critical), tone: currentHealth.activeIncidents.critical > 0 ? "red" : "green" },
+            { label: "Warning now", value: String(currentHealth.activeIncidents.warning), tone: currentHealth.activeIncidents.warning > 0 ? "orange" : "green" },
+            { label: "Resolved history", value: String(currentHealth.resolvedHistory.total), tone: "blue" }
           ]} />}
         />
         <MetricCard
@@ -221,7 +230,7 @@ export function Dashboard({ setView }: { setView: (view: View) => void }) {
         <ProxmoxDashboardCard onOpen={() => setView("proxmox")} />
       </div>
       <div className="two-col">
-        <Panel title="Recent alerts" action={<button className="dashboard-panel-action" onClick={() => setView("alerts")}>View all</button>} className={activeAlerts.length === 0 ? "recent-alerts-card" : undefined}>
+        <Panel title="Active alert details" action={<button className="dashboard-panel-action" onClick={() => setView("alerts")}>View alert history</button>} className={activeAlerts.length === 0 ? "recent-alerts-card" : undefined}>
           {alerts.isLoading && !alerts.data ? <div className="recent-alerts-body"><StateBlock tone="loading" title="Loading alerts" message="Reading recent alerts." /></div> : alerts.isError && !alerts.data ? <div className="recent-alerts-body"><StateBlock tone="error" title="Recent alerts unavailable" message={normalizeApiError(alerts.error).message} /></div> : activeAlerts.length === 0 ? <div className="recent-alerts-body"><StateBlock icon={<Bell size={18} aria-hidden="true" />} title="No alerts" message="No active alerts were generated." /></div> : activeAlerts.map((alert) => <AlertRow key={alert.id} alert={alert} />)}
         </Panel>
         <Panel title="Domain reachability" action={<button className="dashboard-panel-action" onClick={() => setView("domains")}>Open</button>}>

@@ -146,7 +146,29 @@ export type UpdateCenterSnapshot = {
   machines: MachineUpdateSummary[];
 };
 
+export type HealthSummaryIncident = {
+  id: string;
+  severity: "critical" | "warning";
+  title: string;
+  affectedResource: string;
+  since: string;
+};
+
+export type HealthSummaryCounts = {
+  total: number;
+  critical: number;
+  warning: number;
+};
+
+export type HealthSummary = {
+  status: "healthy" | "warning" | "critical";
+  activeIncidents: HealthSummaryCounts;
+  resolvedHistory: HealthSummaryCounts;
+  primaryIncident: HealthSummaryIncident | null;
+};
+
 export type Overview = {
+  healthSummary: HealthSummary;
   status: HealthStatus;
   lastCheckedAt: string;
   serversOnline: number;

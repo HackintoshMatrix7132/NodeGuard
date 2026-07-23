@@ -81,7 +81,7 @@ The automated geometry sweep compared `documentElement.scrollWidth` with `client
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | NG-AUD-005 | Shared data layer | 1440 × 900 | Query polling | Populated | High | Performance | Found for later amendment |
 | NG-AUD-006 | Proxmox | 360–430px | Guest/storage inventory | Populated | High | Responsive | Found for later amendment |
-| NG-AUD-007 | Dashboard | 1440 × 900 | Health/alert summaries | Populated | High | Consistency | Found for later amendment |
+| NG-AUD-007 | Dashboard | 1440 × 900 | Health/alert summaries | Populated | High | Consistency | Fixed |
 | NG-AUD-008 | Login/Settings | Local/live | Form controls | Initial/populated | Medium | Accessibility | Found for later amendment |
 | NG-AUD-009 | Shared CSS | All | Historical override layers | All | Medium | Consistency | Found for later amendment |
 | NG-AUD-010 | Local development | 1440 × 900 | Vite/API authentication | Login | Medium | Console/Network | Found for later amendment |
@@ -175,7 +175,7 @@ The automated geometry sweep compared `documentElement.scrollWidth` with `client
 - **What is wrong:** The audited live state displayed Critical overall health while Active Issues reported none and the Critical Alerts summary showed a non-zero historical count.
 - **Why it matters:** Operators cannot tell whether the dashboard is describing active incidents, retained history, or infrastructure health.
 - **Likely source:** dashboard presentation/aggregation in `apps/web/src/pages/Dashboard.tsx` and returned overview semantics
-- **Suggested fix:** Label historical counts explicitly and make the overall-health explanation identify the active condition that drives it. Any aggregation-contract change needs separate backend/API scope.
+- **Fix:** Added a backend-owned `healthSummary` contract that derives overall health exclusively from current operational incidents, excludes update notices from infrastructure health, identifies the primary incident with affected resource and first-seen time, and separately reports active severity counts and resolved-history counts. The dashboard now uses this contract for its hero, Active Incidents panel, and incident metric instead of recomputing health from a second request.
 - **Evidence:** Direct visual comparison of the three simultaneously visible dashboard surfaces.
 
 ### NG-AUD-008 — Some form controls lack `id` or `name`

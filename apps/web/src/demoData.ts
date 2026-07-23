@@ -461,12 +461,35 @@ export const demoServerMonitors: MonitoredServerStatus[] = [
 
 export function getDemoOverview(alerts: Alert[] = demoAlerts): Overview {
   const activeAlerts = alerts.filter((alert) => alert.status === "active");
-  const criticalAlerts = activeAlerts.filter((alert) => alert.severity === "critical").length;
-  const warnings = activeAlerts.filter((alert) => alert.severity === "warning").length;
+  const activeIncidents = activeAlerts.filter((alert) => alert.affectedResource !== "Update Center" && (alert.severity === "critical" || alert.severity === "warning"));
+  const resolvedIncidents = alerts.filter((alert) => alert.status === "resolved" && alert.affectedResource !== "Update Center" && (alert.severity === "critical" || alert.severity === "warning"));
+  const criticalAlerts = activeIncidents.filter((alert) => alert.severity === "critical").length;
+  const warnings = activeIncidents.filter((alert) => alert.severity === "warning").length;
+  const primaryIncident = [...activeIncidents].sort((left, right) => {
+    const severityDifference = (left.severity === "critical" ? 0 : 1) - (right.severity === "critical" ? 0 : 1);
+    return severityDifference || Date.parse(left.firstSeenAt) - Date.parse(right.firstSeenAt);
+  })[0] ?? null;
   const activeDemoAgents = demoAgents.filter((agent) => agent.status !== "revoked");
+  const status = criticalAlerts > 0 ? "critical" : warnings > 0 ? "warning" : "healthy";
 
   return {
-    status: criticalAlerts > 0 ? "critical" : warnings > 0 ? "warning" : "healthy",
+    healthSummary: {
+      status,
+      activeIncidents: { total: activeIncidents.length, critical: criticalAlerts, warning: warnings },
+      resolvedHistory: {
+        total: resolvedIncidents.length,
+        critical: resolvedIncidents.filter((alert) => alert.severity === "critical").length,
+        warning: resolvedIncidents.filter((alert) => alert.severity === "warning").length
+      },
+      primaryIncident: primaryIncident ? {
+        id: primaryIncident.id,
+        severity: primaryIncident.severity as "critical" | "warning",
+        title: primaryIncident.title,
+        affectedResource: primaryIncident.affectedResource,
+        since: primaryIncident.firstSeenAt
+      } : null
+    },
+    status,
     lastCheckedAt: now(),
     serversOnline: demoServers.filter((server) => server.status === "healthy").length,
     serversTotal: demoServers.length,

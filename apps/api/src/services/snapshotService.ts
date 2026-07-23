@@ -1,7 +1,7 @@
 import type { HealthStatus, MonitoringSnapshot } from "../types/nodeguard.js";
 import { getAgentMetricSnapshot, listAgentContainers, listAgents } from "./agentService.js";
 import { createAlert, generateAlerts } from "./alertService.js";
-import { recordAlertSnapshot } from "./alertHistoryService.js";
+import { listAlertHistory, recordAlertSnapshot } from "./alertHistoryService.js";
 import { listContainerMonitorStatuses } from "./containerMonitorService.js";
 import { getDockerSnapshot } from "./dockerService.js";
 import { getDomainChecks } from "./domainCheckService.js";
@@ -9,6 +9,7 @@ import { listMonitoredServerStatuses } from "./serverMonitorService.js";
 import { getSystemSnapshot } from "./systemMetrics.js";
 import { getUpdateAlerts } from "./updateService.js";
 import { getProxmoxAlerts } from "./proxmoxService.js";
+import { buildHealthSummary } from "./healthSummaryService.js";
 
 function worstStatus(statuses: HealthStatus[]): HealthStatus {
   if (statuses.includes("critical") || statuses.includes("offline")) {
@@ -142,8 +143,8 @@ export async function getMonitoringSnapshot(): Promise<MonitoringSnapshot> {
       updateAlert.checkedAt
     ));
   }
-  const recordedAlerts = [...alerts, ...getProxmoxAlerts()];
-  recordAlertSnapshot(recordedAlerts);
+  const recordedAlerts = recordAlertSnapshot([...alerts, ...getProxmoxAlerts()]);
+  const healthSummary = buildHealthSummary(recordedAlerts, listAlertHistory("all"));
   const runningContainers = docker.containers.filter((container) => container.status === "running").length;
   const localRunningContainers = localDocker.containers.filter((container) => container.status === "running").length;
   const criticalAlerts = recordedAlerts.filter((item) => item.severity === "critical").length;
@@ -152,19 +153,10 @@ export async function getMonitoringSnapshot(): Promise<MonitoringSnapshot> {
     system.metricsAvailable ? "healthy" : "warning",
     localDocker.dockerAvailable ? "healthy" : "warning"
   ]);
-  const overallStatus = worstStatus([
-    localServerStatus,
-    ...serverMonitors.map((server) => server.status),
-    ...agents.map((agent) => agent.status === "online" ? "healthy" : agent.status === "stale" ? "warning" : "offline"),
-    ...domains.map((domain) => domain.status),
-    ...recordedAlerts
-      .filter((item) => !["updates-available", "security-updates-available"].includes(item.id))
-      .map((item) => item.severity === "critical" ? "critical" : item.severity === "warning" ? "warning" : "healthy")
-  ]);
-
   return {
     overview: {
-      status: overallStatus,
+      healthSummary,
+      status: healthSummary.status,
       lastCheckedAt: system.metrics.createdAt,
       serversOnline: (system.metricsAvailable ? 1 : 0) + agents.filter((agent) => agent.status === "online").length,
       serversTotal: 1 + agents.length,
