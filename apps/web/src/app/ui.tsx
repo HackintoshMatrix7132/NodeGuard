@@ -151,13 +151,15 @@ export function MetricDiagnostic({ rows }: { rows: BreakdownItem[] }) {
 
 export type StateBlockTone = "empty" | "loading" | "error";
 
-export function StateBlock({ title, message, tone = "empty", icon }: { title: string; message: string; tone?: StateBlockTone; icon?: React.ReactNode }) {
+export function StateBlock({ title, message, tone = "empty", icon, className = "" }: { title: string; message: string; tone?: StateBlockTone; icon?: React.ReactNode; className?: string }) {
   const Icon = tone === "loading" ? LoaderCircle : tone === "error" ? AlertTriangle : PackageOpen;
   return (
-    <div className={`state-block state-block--${tone}`} role={tone === "error" ? "alert" : "status"} aria-live={tone === "loading" ? "polite" : undefined}>
-      {icon ?? <Icon className={tone === "loading" ? "is-spinning" : undefined} size={18} aria-hidden="true" />}
-      <strong>{title}</strong>
-      <span>{message}</span>
+    <div className={`state-block state-block--${tone} ${className}`.trim()} role={tone === "error" ? "alert" : "status"} aria-live={tone === "loading" ? "polite" : undefined}>
+      <span className="state-block__icon" aria-hidden="true">
+        {icon ?? <Icon className={tone === "loading" ? "is-spinning" : undefined} size={16} />}
+      </span>
+      <strong className="state-block__title">{title}</strong>
+      <span className="state-block__description">{message}</span>
     </div>
   );
 }

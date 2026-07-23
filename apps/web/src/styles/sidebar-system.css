@@ -1,0 +1,319 @@
+/* Authoritative responsive navigation system. Loaded after legacy responsive layers. */
+:root {
+  --ng-sidebar-expanded-width: 238px;
+  --ng-sidebar-collapsed-width: 64px;
+  --ng-sidebar-motion-duration: 200ms;
+  --ng-sidebar-motion-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.app-shell {
+  grid-template-columns: var(--ng-sidebar-expanded-width) minmax(0, 1fr);
+  transition: grid-template-columns var(--ng-sidebar-motion-duration) var(--ng-sidebar-motion-easing);
+}
+
+.app-shell.sidebar-rail {
+  grid-template-columns: var(--ng-sidebar-collapsed-width) minmax(0, 1fr);
+}
+
+.sidebar {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.sidebar-top {
+  align-items: center;
+}
+
+.sidebar-toggle {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  flex: 0 0 38px;
+  transform: none;
+}
+
+.sidebar-brand-label,
+.sidebar-nav-label,
+.sidebar-action-label {
+  max-width: 168px;
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+  transition:
+    max-width 160ms var(--ng-sidebar-motion-easing) 40ms,
+    opacity 100ms ease 80ms,
+    transform 160ms var(--ng-sidebar-motion-easing) 40ms,
+    visibility 0s linear 0s;
+}
+
+.sidebar-nav-item,
+.sidebar-logout {
+  position: relative;
+}
+
+.sidebar-rail .sidebar {
+  padding-inline: 6px;
+  overflow: visible;
+}
+
+.sidebar-rail .sidebar-top {
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 38px 36px;
+  justify-items: center;
+  gap: 4px;
+}
+
+.sidebar-rail .sidebar-toggle {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: center;
+}
+
+.sidebar-rail .brand {
+  width: 42px;
+  min-width: 42px;
+  grid-column: 1;
+  grid-row: 2;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+}
+
+.sidebar-rail .brand-logo {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+}
+
+.sidebar-rail .sidebar-brand-label,
+.sidebar-rail .sidebar-nav-label,
+.sidebar-rail .sidebar-action-label {
+  width: 0;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-4px);
+  pointer-events: none;
+  transition-delay: 0s, 0s, 0s, var(--ng-sidebar-motion-duration);
+}
+
+.sidebar-rail .sidebar nav {
+  justify-items: center;
+  overflow: visible;
+}
+
+.sidebar-rail .sidebar-nav-item,
+.sidebar-rail .sidebar-logout {
+  width: 42px;
+  min-width: 42px;
+  height: var(--ng-sidebar-item-height);
+  min-height: var(--ng-sidebar-item-height);
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+  overflow: visible;
+  text-align: center;
+}
+
+.sidebar-rail .sidebar nav button.active {
+  box-shadow: inset 0 0 0 1px rgba(56, 217, 255, 0.18);
+}
+
+.sidebar-rail .sidebar button:hover svg,
+.sidebar-rail .sidebar button:focus-visible svg {
+  transform: none;
+}
+
+.sidebar-rail .workspace-topbar > .sidebar-reveal {
+  display: none;
+}
+
+@media (max-width: 980px) {
+  .app-shell,
+  .app-shell.sidebar-rail,
+  .app-shell.has-navigation-drawer {
+    min-height: 100vh;
+    min-height: 100svh;
+    display: block;
+    grid-template: none;
+  }
+
+  .app-shell.has-navigation-drawer .workspace {
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100svh;
+    grid-area: auto;
+  }
+
+  .app-shell.has-navigation-drawer .workspace-topbar {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .app-shell.has-navigation-drawer .workspace-topbar > .sidebar-reveal {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    position: static;
+    inset: auto;
+    display: inline-grid;
+    place-items: center;
+    margin: 0;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .app-shell.has-navigation-drawer.navigation-drawer-open .workspace-topbar > .sidebar-reveal {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .app-shell.has-navigation-drawer .sidebar-slot {
+    width: 100%;
+    height: 100vh;
+    height: 100svh;
+    min-height: 0;
+    position: fixed;
+    inset: 0;
+    z-index: 1300;
+    display: block;
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
+    transition: visibility 0s linear var(--ng-sidebar-motion-duration);
+  }
+
+  .app-shell.has-navigation-drawer.navigation-drawer-open .sidebar-slot {
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
+  }
+
+  .app-shell.has-navigation-drawer .sidebar-backdrop {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    inset: 0;
+    display: block;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    background: rgba(2, 6, 18, 0.72);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ng-sidebar-motion-duration) ease;
+  }
+
+  .app-shell.has-navigation-drawer.navigation-drawer-open .sidebar-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .app-shell.has-navigation-drawer .sidebar-slot > .sidebar {
+    width: min(82vw, 280px);
+    max-width: calc(100vw - 48px);
+    height: 100%;
+    min-height: 0;
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 1;
+    display: flex;
+    margin: 0;
+    padding:
+      calc(8px + env(safe-area-inset-top, 0px))
+      8px
+      calc(8px + env(safe-area-inset-bottom, 0px));
+    border-width: 0 1px 0 0;
+    border-radius: 0 8px 8px 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(-102%);
+    transition: transform var(--ng-sidebar-motion-duration) var(--ng-sidebar-motion-easing);
+  }
+
+  .app-shell.has-navigation-drawer.navigation-drawer-open .sidebar-slot > .sidebar {
+    transform: translateX(0);
+  }
+
+  .app-shell.has-navigation-drawer .sidebar-top {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  .app-shell.has-navigation-drawer .brand {
+    width: auto;
+    min-width: 0;
+    display: flex;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 2px 2px 8px;
+  }
+
+  .app-shell.has-navigation-drawer .sidebar nav {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+  }
+
+  .app-shell.has-navigation-drawer .sidebar nav button,
+  .app-shell.has-navigation-drawer .sidebar .sidebar-logout {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    justify-content: flex-start;
+    gap: var(--ng-sidebar-item-gap);
+    padding-inline: 8px;
+    overflow: hidden;
+    text-align: left;
+  }
+
+  .app-shell.has-navigation-drawer .sidebar-logout {
+    margin-top: auto;
+  }
+
+  @supports (height: 100dvh) {
+    .app-shell,
+    .app-shell.sidebar-rail,
+    .app-shell.has-navigation-drawer,
+    .app-shell.has-navigation-drawer .workspace,
+    .app-shell.has-navigation-drawer .sidebar-slot {
+      min-height: 100dvh;
+    }
+
+    .app-shell.has-navigation-drawer .sidebar-slot {
+      height: 100dvh;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell,
+  .sidebar,
+  .sidebar-brand-label,
+  .sidebar-nav-label,
+  .sidebar-action-label,
+  .sidebar-backdrop,
+  .sidebar-slot {
+    transition-duration: 0.001ms !important;
+    transition-delay: 0s !important;
+  }
+}

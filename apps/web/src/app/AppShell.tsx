@@ -25,8 +25,8 @@ export function App() {
   const [proxmoxNodeRoute, setProxmoxNodeRoute] = useState<ProxmoxNodeRoute | null>(initialProxmoxNodeRoute);
   const [containerHostFilter, setContainerHostFilter] = useState<string | null>(null);
   const [pendingUpdateMachineId, setPendingUpdateMachineId] = useState<string | null>(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 980px)").matches);
-  const [isMobileNavigation, setIsMobileNavigation] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
+  const [isNavigationDrawer, setIsNavigationDrawer] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 980px)").matches);
+  const [isNavigationDrawerOpen, setIsNavigationDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const logoutTimer = useRef<number | null>(null);
   const sidebarRevealRef = useRef<HTMLButtonElement>(null);
@@ -36,6 +36,8 @@ export function App() {
   const demoMode = useSettingsStore((state) => state.demoMode);
   const load = useSettingsStore((state) => state.load);
   const disconnect = useSettingsStore((state) => state.disconnect);
+  const sidebarDesktopCollapsed = useSettingsStore((state) => state.sidebarDesktopCollapsed);
+  const setSidebarDesktopCollapsed = useSettingsStore((state) => state.setSidebarDesktopCollapsed);
 
   useEffect(() => {
     load();
@@ -64,11 +66,21 @@ export function App() {
   }, [load]);
 
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 640px)");
-    const updateMobileNavigation = () => setIsMobileNavigation(media.matches);
-    updateMobileNavigation();
-    media.addEventListener("change", updateMobileNavigation);
-    return () => media.removeEventListener("change", updateMobileNavigation);
+    const media = window.matchMedia("(max-width: 980px)");
+    const updateNavigationMode = () => {
+      if (media.matches) {
+        const sidebar = document.getElementById("primary-sidebar");
+        if (document.activeElement instanceof HTMLElement && sidebar?.contains(document.activeElement)) {
+          document.activeElement.blur();
+        }
+      }
+      setIsNavigationDrawer(media.matches);
+      setIsNavigationDrawerOpen(false);
+      focusRevealAfterClose.current = false;
+    };
+    updateNavigationMode();
+    media.addEventListener("change", updateNavigationMode);
+    return () => media.removeEventListener("change", updateNavigationMode);
   }, []);
 
   const nav = [
@@ -104,10 +116,10 @@ export function App() {
     const path = nextView === "proxmox" ? "/proxmox" : "/";
     if (window.location.pathname !== path || window.location.search) window.history.pushState({}, "", path);
     window.scrollTo({ top: 0, behavior: "auto" });
-    if (window.matchMedia("(max-width: 980px)").matches) {
+    if (isNavigationDrawer) {
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       focusRevealAfterClose.current = true;
-      setSidebarCollapsed(true);
+      setIsNavigationDrawerOpen(false);
     }
   };
 
@@ -133,30 +145,32 @@ export function App() {
     window.history.pushState({}, "", "/proxmox");
   };
 
-  const openSidebar = () => {
+  const openNavigationDrawer = () => {
     const revealButton = sidebarRevealRef.current;
     if (document.activeElement === revealButton) revealButton?.blur();
     focusRevealAfterClose.current = false;
-    setSidebarCollapsed(false);
+    setIsNavigationDrawerOpen(true);
     window.requestAnimationFrame(() => sidebarToggleRef.current?.focus({ preventScroll: true }));
   };
 
-  const closeSidebar = () => {
+  const closeNavigationDrawer = () => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     focusRevealAfterClose.current = true;
-    setSidebarCollapsed(true);
+    setIsNavigationDrawerOpen(false);
   };
 
+  const toggleDesktopSidebar = () => setSidebarDesktopCollapsed(!sidebarDesktopCollapsed);
+
   const handleSidebarTransitionEnd = (event: TransitionEvent<HTMLElement>) => {
-    if (event.target !== event.currentTarget || event.propertyName !== "opacity") return;
-    if (!sidebarCollapsed || !focusRevealAfterClose.current) return;
+    if (event.target !== event.currentTarget || event.propertyName !== "transform") return;
+    if (!isNavigationDrawer || isNavigationDrawerOpen || !focusRevealAfterClose.current) return;
 
     focusRevealAfterClose.current = false;
     sidebarRevealRef.current?.focus({ preventScroll: true });
   };
 
   useEffect(() => {
-    if (!isMobileNavigation || sidebarCollapsed) return;
+    if (!isNavigationDrawer || !isNavigationDrawerOpen) return;
 
     const previousOverflow = document.body.style.overflow;
     const sidebar = document.getElementById("primary-sidebar");
@@ -164,7 +178,7 @@ export function App() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        closeSidebar();
+        closeNavigationDrawer();
         return;
       }
       if (event.key !== "Tab" || !sidebar) return;
@@ -188,61 +202,64 @@ export function App() {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isMobileNavigation, sidebarCollapsed]);
+  }, [isNavigationDrawer, isNavigationDrawerOpen]);
 
   useEffect(() => {
-    if (!isMobileNavigation || !sidebarCollapsed || !focusRevealAfterClose.current) return;
-    focusRevealAfterClose.current = false;
-    window.requestAnimationFrame(() => sidebarRevealRef.current?.focus({ preventScroll: true }));
-  }, [isMobileNavigation, sidebarCollapsed]);
+    if (!isNavigationDrawer || isNavigationDrawerOpen || !focusRevealAfterClose.current) return;
+    const timeout = window.setTimeout(() => {
+      if (!focusRevealAfterClose.current) return;
+      focusRevealAfterClose.current = false;
+      sidebarRevealRef.current?.focus({ preventScroll: true });
+    }, 220);
+    return () => window.clearTimeout(timeout);
+  }, [isNavigationDrawer, isNavigationDrawerOpen]);
 
   if (!backendConfig && !demoMode) return <ConnectScreen />;
 
   return (
-    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${isLoggingOut ? "logging-out" : ""}`}>
+    <div className={`app-shell ${!isNavigationDrawer && sidebarDesktopCollapsed ? "sidebar-rail" : ""} ${isNavigationDrawer ? "has-navigation-drawer" : ""} ${isNavigationDrawerOpen ? "navigation-drawer-open" : ""} ${isLoggingOut ? "logging-out" : ""}`}>
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <div className="sidebar-slot">
-        <button className="sidebar-backdrop" onClick={closeSidebar} aria-label="Close navigation" tabIndex={-1} />
+        <button className="sidebar-backdrop" onClick={closeNavigationDrawer} aria-label="Close navigation" tabIndex={-1} />
         <aside
           id="primary-sidebar"
           className="sidebar"
-          aria-hidden={sidebarCollapsed}
+          aria-hidden={isNavigationDrawer && !isNavigationDrawerOpen ? true : undefined}
           aria-label="NodeGuard navigation"
-          aria-modal={isMobileNavigation && !sidebarCollapsed ? true : undefined}
-          inert={sidebarCollapsed}
+          aria-modal={isNavigationDrawer && isNavigationDrawerOpen ? true : undefined}
+          inert={isNavigationDrawer && !isNavigationDrawerOpen ? true : undefined}
           onTransitionEnd={handleSidebarTransitionEnd}
-          role={isMobileNavigation ? "dialog" : undefined}
+          role={isNavigationDrawer ? "dialog" : undefined}
         >
         <div className="sidebar-top">
-          <div className="brand"><LogoMark className="brand-logo" /><span>NodeGuard</span></div>
+          <div className="brand"><LogoMark className="brand-logo" /><span className="sidebar-brand-label">NodeGuard</span></div>
           <button
             ref={sidebarToggleRef}
             className="sidebar-toggle"
-            onClick={closeSidebar}
-            aria-label="Close navigation"
-            title="Close navigation"
+            onClick={isNavigationDrawer ? closeNavigationDrawer : toggleDesktopSidebar}
+            aria-label={isNavigationDrawer ? "Close navigation" : sidebarDesktopCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             aria-controls="primary-sidebar"
-            aria-expanded={!sidebarCollapsed}
+            aria-expanded={isNavigationDrawer ? isNavigationDrawerOpen : !sidebarDesktopCollapsed}
           >
-            <PanelLeftClose size={18} aria-hidden="true" />
+            {isNavigationDrawer || !sidebarDesktopCollapsed ? <PanelLeftClose size={18} aria-hidden="true" /> : <PanelLeftOpen size={18} aria-hidden="true" />}
           </button>
         </div>
-        <nav aria-label="Primary navigation">{nav.map(([key, Icon, label]) => { const active = view === key || (key === "proxmox" && view === "proxmox-node"); return <button key={key} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={() => selectView(key)}><Icon size={18} aria-hidden="true" /><span className="sidebar-nav-label">{key === "updates" ? <UpdatesNavLabel /> : label}</span></button>; })}</nav>
-        <button className="sidebar-logout" onClick={logout} disabled={isLoggingOut}><LogOut size={18} aria-hidden="true" /><span className="sidebar-action-label">{isLoggingOut ? "Logging out" : "Logout"}</span></button>
+        <nav aria-label="Primary navigation">{nav.map(([key, Icon, label]) => { const active = view === key || (key === "proxmox" && view === "proxmox-node"); return <button key={key} className={`sidebar-nav-item ${active ? "active" : ""}`} aria-label={label} aria-current={active ? "page" : undefined} onClick={() => selectView(key)}><Icon size={18} aria-hidden="true" /><span className="sidebar-nav-label">{key === "updates" ? <UpdatesNavLabel /> : label}</span></button>; })}</nav>
+        <button className="sidebar-logout" aria-label="Logout" onClick={logout} disabled={isLoggingOut}><LogOut size={18} aria-hidden="true" /><span className="sidebar-action-label">{isLoggingOut ? "Logging out" : "Logout"}</span></button>
         </aside>
       </div>
-      <main className="workspace" id="main-content" inert={isMobileNavigation && !sidebarCollapsed ? true : undefined} tabIndex={-1}>
+      <main className="workspace" id="main-content" inert={isNavigationDrawer && isNavigationDrawerOpen ? true : undefined} tabIndex={-1}>
         <header className="workspace-topbar">
           <button
             ref={sidebarRevealRef}
             className="sidebar-reveal"
-            onClick={openSidebar}
+            onClick={openNavigationDrawer}
             aria-label="Open navigation"
             title="Open navigation"
             aria-controls="primary-sidebar"
-            aria-expanded={!sidebarCollapsed}
-            aria-hidden={!sidebarCollapsed}
-            tabIndex={sidebarCollapsed ? 0 : -1}
+            aria-expanded={isNavigationDrawerOpen}
+            aria-hidden={!isNavigationDrawer || isNavigationDrawerOpen}
+            tabIndex={isNavigationDrawer && !isNavigationDrawerOpen ? 0 : -1}
           >
             <PanelLeftOpen size={18} aria-hidden="true" />
           </button>

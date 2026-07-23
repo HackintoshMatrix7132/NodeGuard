@@ -37,8 +37,208 @@ test("demo login, refresh, and primary desktop navigation stay healthy", async (
   await expectNoHorizontalOverflow(page);
 });
 
+test("Proxmox node navigation, tabs, and history charts use restrained accessible motion", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signIn(page, "demo", "demo");
+  await page.getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("button", { name: "Proxmox", exact: true })
+    .click();
+
+  const eyeButton = page.getByRole("button", { name: "View details for pve-a" });
+  await expect(eyeButton).toHaveAttribute("title", "View node details");
+  await eyeButton.click();
+  await expect(page).toHaveURL(/\/proxmox\/nodes\/demo-pve-main\/pve-a$/);
+  await expect(page.getByRole("heading", { name: "pve-a", level: 2 })).toBeVisible();
+
+  const heading = page.locator(".proxmox-node-heading");
+  const cards = page.locator(".proxmox-node-detail-card");
+  await expect(heading).toHaveCSS("animation-name", "proxmoxNodeShellIn");
+  await expect(heading).toHaveCSS("animation-duration", "0.21s");
+  await expect(cards).toHaveCount(7);
+  await expect(cards.first()).toHaveCSS("animation-name", "proxmoxNodeCardIn");
+  await expect(cards.nth(6)).toHaveCSS("animation-delay", "0.144s");
+
+  const overviewTab = page.getByRole("tab", { name: "Overview" });
+  const historyTab = page.getByRole("tab", { name: "History" });
+  await expect(overviewTab).toHaveAttribute("aria-selected", "true");
+  await expect(historyTab).toHaveAttribute("aria-controls", "proxmox-node-history");
+  await historyTab.click();
+  await expect(historyTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel", { name: "History" })).toBeVisible();
+  await expect(page.getByRole("tabpanel")).toHaveCount(1);
+
+  const historyPaths = page.locator(".proxmox-chart-line");
+  await expect(historyPaths).toHaveCount(7);
+  for (const path of await historyPaths.all()) {
+    await expect(path).toHaveAttribute("pathLength", "1");
+    await expect(path).toHaveCSS("animation-name", "historyLineReveal");
+    await expect(path).toHaveCSS("animation-duration", "0.68s");
+  }
+  const unavailablePanel = page.locator(".proxmox-history-chart-card--unavailable");
+  await expect(unavailablePanel).toContainText("Temperature history is not exposed by this node.");
+  await expect(unavailablePanel.locator(".proxmox-chart-line")).toHaveCount(0);
+
+  await page.evaluate(() => {
+    document.documentElement.dataset.historyLineStarts = "0";
+    document.addEventListener("animationstart", (event) => {
+      if ((event as AnimationEvent).animationName === "historyLineReveal") {
+        const current = Number(document.documentElement.dataset.historyLineStarts ?? "0");
+        document.documentElement.dataset.historyLineStarts = String(current + 1);
+      }
+    });
+  });
+  const historyRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/api/proxmox/connections/") && request.url().includes("/history?")) {
+      historyRequests.push(request.url());
+    }
+  });
+  await page.getByRole("combobox", { name: "History range" }).click();
+  await page.getByRole("option", { name: "6 hours" }).click();
+  await expect(page).toHaveURL(/[?&]range=6h/);
+  await expect.poll(() => historyRequests.filter((url) => url.includes("range=6h")).length).toBe(1);
+  await expect.poll(() => page.evaluate(() => Number(document.documentElement.dataset.historyLineStarts ?? "0"))).toBe(7);
+
+  await overviewTab.click();
+  await expect(page.getByRole("tabpanel", { name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("tabpanel")).toHaveCount(1);
+  await historyTab.click();
+  await expect(page.getByRole("tabpanel", { name: "History" })).toBeVisible();
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.reload();
+  await expect(page.getByRole("tabpanel", { name: "History" })).toBeVisible();
+  await expect(page.locator(".proxmox-node-heading")).toHaveCSS("animation-name", "none");
+  await expect(page.locator(".proxmox-chart-line").first()).toHaveCSS("animation-name", "none");
+  await expect(page.locator(".proxmox-chart-line").first()).toHaveCSS("stroke-dashoffset", "0px");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "History" })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test("desktop sidebar becomes a persistent accessible rail while narrow screens use a temporary drawer", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript(() => {
+    if (!localStorage.getItem("nodeguard.preferences")) {
+      localStorage.setItem("nodeguard.preferences", JSON.stringify({
+        hideSensitiveValues: true,
+        refreshIntervalSeconds: 60,
+        sidebarDesktopCollapsed: false,
+      }));
+    }
+  });
+  await signIn(page, "demo", "demo");
+
+  const shell = page.locator(".app-shell");
+  const sidebar = page.getByRole("complementary", { name: "NodeGuard navigation" });
+  const workspace = page.locator(".workspace");
+  const expandedWorkspaceWidth = (await workspace.boundingBox())?.width ?? 0;
+  await expect(shell).not.toHaveClass(/sidebar-rail/);
+  await expect(page.getByText("NodeGuard", { exact: true }).first()).toBeVisible();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(shell).toHaveCSS("transition-duration", /^(0\.001ms|1e-06s)$/);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+
+  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await expect(shell).toHaveClass(/sidebar-rail/);
+  await expect(page.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+  await expect(sidebar).not.toHaveAttribute("aria-hidden", "true");
+  await expect(sidebar).not.toHaveAttribute("inert", "");
+  await expect(page.locator(".sidebar-brand-label")).toHaveCSS("visibility", "hidden");
+  await expect(page.locator(".sidebar-brand-label")).toHaveCSS("width", "0px");
+  await expect(page.locator(".sidebar-nav-label").first()).toHaveCSS("visibility", "hidden");
+  await expect(page.locator(".sidebar-nav-label").first()).toHaveCSS("width", "0px");
+  await expect(page.locator(".sidebar-action-label")).toHaveCSS("width", "0px");
+  await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
+  await expect(page.locator(".brand")).not.toHaveAttribute("title");
+  await expect(page.getByRole("button", { name: "Expand sidebar" })).not.toHaveAttribute("title");
+  await expect(page.locator("#primary-sidebar [data-tooltip]")).toHaveCount(0);
+  expect((await workspace.boundingBox())?.width ?? 0).toBeGreaterThan(expandedWorkspaceWidth + 150);
+  await expectNoHorizontalOverflow(page);
+
+  const railControls = sidebar.getByRole("button");
+  await expect(railControls).toHaveCount(11);
+  for (const control of await railControls.all()) {
+    await expect(control).toHaveAttribute("aria-label", /.+/);
+    await expect(control).not.toHaveAttribute("title");
+    await control.hover();
+    await expect.poll(() => control.evaluate((element) => getComputedStyle(element, "::after").content)).toBe("none");
+    await expect(page.locator('[role="tooltip"]')).toHaveCount(0);
+  }
+
+  const dashboardButton = page.getByRole("navigation", { name: "Primary navigation" }).getByRole("button", { name: "Dashboard" });
+  await expect(dashboardButton).toHaveAttribute("aria-current", "page");
+  await page.getByRole("button", { name: "Expand sidebar" }).focus();
+  for (let index = 0; index < await railControls.count(); index += 1) {
+    await expect(railControls.nth(index)).toBeFocused();
+    await expect.poll(() => railControls.nth(index).evaluate((element) => getComputedStyle(element, "::after").content)).toBe("none");
+    await expect(page.locator('[role="tooltip"]')).toHaveCount(0);
+    if (index < await railControls.count() - 1) await page.keyboard.press("Tab");
+  }
+
+  const persistedCollapsed = await page.evaluate(() => JSON.parse(localStorage.getItem("nodeguard.preferences") ?? "{}") as { sidebarDesktopCollapsed?: boolean });
+  expect(persistedCollapsed.sidebarDesktopCollapsed).toBe(true);
+  await page.reload();
+  await expect(shell).toHaveClass(/sidebar-rail/);
+
+  const destinations = [
+    ["Dashboard", "Dashboard"],
+    ["Machines", "Machines"],
+    ["Proxmox", "Proxmox"],
+    ["Agents", "Agents"],
+    ["Containers", "Containers"],
+    ["Domains", "Domains"],
+    ["Updates", "Updates"],
+    ["Alerts", "Alerts"],
+    ["Settings", "Settings"],
+  ] as const;
+  for (const [navigationLabel, heading] of destinations) {
+    await page.getByRole("navigation", { name: "Primary navigation" }).getByRole("button", { name: navigationLabel, exact: true }).click();
+    await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
+    await expect(shell).toHaveClass(/sidebar-rail/);
+  }
+
+  await page.setViewportSize({ width: 900, height: 800 });
+  await expect(shell).toHaveClass(/has-navigation-drawer/);
+  await expect(shell).not.toHaveClass(/sidebar-rail/);
+  await expect(page.getByRole("button", { name: "Open navigation" })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  const drawer = page.getByRole("dialog", { name: "NodeGuard navigation" });
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toHaveAttribute("aria-modal", "true");
+  await expect(page.locator(".workspace")).toHaveAttribute("inert", "");
+  await expect(drawer.getByRole("button", { name: "Close navigation" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(drawer.getByRole("button", { name: "Logout" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await expect(page.getByRole("button", { name: "Open navigation" })).toBeFocused();
+
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await drawer.getByRole("button", { name: "Dashboard" }).click();
+  await expect(drawer).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
+  expect((await page.evaluate(() => JSON.parse(localStorage.getItem("nodeguard.preferences") ?? "{}") as { sidebarDesktopCollapsed?: boolean })).sidebarDesktopCollapsed).toBe(true);
+
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(shell).toHaveClass(/sidebar-rail/);
+  await page.getByRole("button", { name: "Expand sidebar" }).click();
+  await expect(shell).not.toHaveClass(/sidebar-rail/);
+  expect((await page.evaluate(() => JSON.parse(localStorage.getItem("nodeguard.preferences") ?? "{}") as { sidebarDesktopCollapsed?: boolean })).sidebarDesktopCollapsed).toBe(false);
+});
+
 test("domain row actions stay compact, accessible, and non-destructive", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript(() => {
+    localStorage.setItem("nodeguard.preferences", JSON.stringify({
+      hideSensitiveValues: true,
+      refreshIntervalSeconds: 60,
+    }));
+  });
   await signIn(page, "demo", "demo");
   await page.getByRole("navigation", { name: "Primary navigation" })
     .getByRole("button", { name: "Domains", exact: true })
@@ -192,6 +392,48 @@ test("mobile navigation uses responsive cards without horizontal overflow", asyn
     .getByRole("button", { name: "Settings", exact: true })
     .click();
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test("shared empty states keep compact accessible typography on desktop and mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signIn(page, "demo", "demo");
+
+  await page.getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("button", { name: "Alerts", exact: true })
+    .click();
+  await page.getByRole("textbox", { name: "Search alerts" }).fill("zzzz-no-match");
+
+  const alertState = page.getByRole("status").filter({ hasText: "No alerts" });
+  const alertTitle = alertState.locator(".state-block__title");
+  const alertDescription = alertState.locator(".state-block__description");
+  const alertIcon = alertState.locator(".state-block__icon");
+  await expect(alertState).toBeVisible();
+  await expect(alertTitle).toHaveCSS("font-size", "14px");
+  await expect(alertTitle).toHaveCSS("font-weight", "600");
+  await expect(alertDescription).toHaveCSS("font-size", "13px");
+  await expect(alertDescription).toHaveCSS("font-weight", "400");
+  await expect(alertIcon).toHaveCSS("width", "16px");
+  await expect(page.getByRole("heading", { name: "Active alerts", level: 2 })).toHaveCSS("font-size", "14px");
+  await expectNoHorizontalOverflow(page);
+
+  await page.getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("button", { name: "Proxmox", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Virtual machines", exact: true }).click();
+  await page.getByRole("button", { name: "Stopped", exact: true }).click();
+  const proxmoxState = page.getByRole("status").filter({ hasText: "No matching guests" });
+  await expect(proxmoxState).toBeVisible();
+  await expect(proxmoxState.locator(".state-block__title")).toHaveCSS("font-size", "14px");
+  await expect(proxmoxState.locator(".state-block__title")).toHaveCSS("font-weight", "600");
+  await expect(proxmoxState.locator(".state-block__description")).toHaveCSS("font-size", "13px");
+  await expect(proxmoxState.locator(".state-block__icon")).toHaveCSS("width", "16px");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(proxmoxState).toBeVisible();
+  await expect(proxmoxState).toHaveCSS("min-height", "54px");
+  await expect(proxmoxState.locator(".state-block__title")).toHaveCSS("font-size", "14px");
+  await expect(proxmoxState.locator(".state-block__description")).toHaveCSS("font-size", "13px");
   await expectNoHorizontalOverflow(page);
 });
 

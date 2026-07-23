@@ -8,26 +8,51 @@ const appSource = readAppSource();
 const mobileCss = readFileSync(new URL("../mobile.css", import.meta.url), "utf8");
 const proxmoxCss = readFileSync(new URL("../proxmox.css", import.meta.url), "utf8");
 const controlAlignmentCss = readFileSync(new URL("../styles/control-alignment.css", import.meta.url), "utf8");
+const sidebarSystemCss = readFileSync(new URL("../styles/sidebar-system.css", import.meta.url), "utf8");
+const settingsStoreSource = readFileSync(new URL("../store/settingsStore.ts", import.meta.url), "utf8");
 
-test("mobile shell keeps route content in the first flow position", () => {
-  assert.match(mobileCss, /\.app-shell\.sidebar-collapsed\s*\{[^}]*display:\s*block/s);
-  assert.match(mobileCss, /\.workspace,[\s\S]*?\.app-shell\.sidebar-collapsed \.workspace\s*\{[^}]*grid-area:\s*auto/s);
-  assert.match(mobileCss, /min-height:\s*100svh/);
-  assert.match(mobileCss, /min-height:\s*100dvh/);
-  assert.match(mobileCss, /env\(safe-area-inset-top/);
-  assert.match(mobileCss, /env\(safe-area-inset-bottom/);
+test("desktop shell uses a tooltip-free accessible icon rail with shared width and motion tokens", () => {
+  const sidebarToggleMarkup = appSource.match(/<button[\s\S]*?className="sidebar-toggle"[\s\S]*?>/)?.[0] ?? "";
+
+  assert.match(appSource, /sidebar-rail/);
+  assert.match(appSource, /aria-label=\{label\}/);
+  assert.match(appSource, /className="sidebar-logout" aria-label="Logout"/);
+  assert.match(appSource, /sidebarDesktopCollapsed \? "Expand sidebar" : "Collapse sidebar"/);
+  assert.doesNotMatch(appSource, /data-tooltip/);
+  assert.doesNotMatch(sidebarToggleMarkup, /title=/);
+  assert.match(sidebarSystemCss, /--ng-sidebar-expanded-width:\s*238px/);
+  assert.match(sidebarSystemCss, /--ng-sidebar-collapsed-width:\s*64px/);
+  assert.match(sidebarSystemCss, /--ng-sidebar-motion-duration:\s*200ms/);
+  assert.match(sidebarSystemCss, /\.app-shell\.sidebar-rail\s*\{[^}]*grid-template-columns:\s*var\(--ng-sidebar-collapsed-width\)/s);
+  assert.match(sidebarSystemCss, /\.sidebar-rail \.sidebar-nav-label,[\s\S]*?width:\s*0[^}]*max-width:\s*0[^}]*visibility:\s*hidden/s);
+  assert.doesNotMatch(sidebarSystemCss, /data-tooltip|sidebar-nav-item::after|sidebar-logout::after/);
+  assert.match(sidebarSystemCss, /@media \(prefers-reduced-motion:\s*reduce\)/);
 });
 
-test("mobile navigation is an integrated accessible drawer", () => {
+test("narrow navigation is an integrated non-persisted drawer", () => {
+  assert.match(appSource, /matchMedia\("\(max-width: 980px\)"\)/);
+  assert.match(appSource, /has-navigation-drawer/);
+  assert.match(appSource, /navigation-drawer-open/);
+  assert.match(appSource, /sidebar\?\.contains\(document\.activeElement\)[\s\S]*?document\.activeElement\.blur\(\)/);
   assert.match(appSource, /workspace-topbar[\s\S]*?className="sidebar-reveal"/);
   assert.match(appSource, /className="sidebar-backdrop"/);
-  assert.match(appSource, /aria-modal=\{isMobileNavigation/);
-  assert.match(appSource, /inert=\{isMobileNavigation && !sidebarCollapsed/);
+  assert.match(appSource, /aria-modal=\{isNavigationDrawer && isNavigationDrawerOpen/);
+  assert.match(appSource, /inert=\{isNavigationDrawer && !isNavigationDrawerOpen/);
   assert.match(appSource, /document\.body\.style\.overflow = "hidden"/);
   assert.match(appSource, /event\.key === "Escape"/);
   assert.match(appSource, /event\.key !== "Tab"/);
-  assert.match(mobileCss, /\.sidebar-slot,[\s\S]*?position:\s*fixed/s);
-  assert.match(mobileCss, /\.workspace-topbar[\s\S]*?position:\s*sticky/s);
+  assert.match(sidebarSystemCss, /@media \(max-width:\s*980px\)/);
+  assert.match(sidebarSystemCss, /\.app-shell\.has-navigation-drawer \.sidebar-slot\s*\{[^}]*position:\s*fixed/s);
+  assert.match(sidebarSystemCss, /\.app-shell\.has-navigation-drawer \.workspace\s*\{[^}]*width:\s*100%/s);
+  assert.match(sidebarSystemCss, /env\(safe-area-inset-top/);
+  assert.match(sidebarSystemCss, /env\(safe-area-inset-bottom/);
+});
+
+test("desktop sidebar preference uses the existing validated settings storage", () => {
+  assert.match(settingsStoreSource, /sidebarDesktopCollapsed:\s*boolean/);
+  assert.match(settingsStoreSource, /typeof initialPreferences\.sidebarDesktopCollapsed === "boolean"/);
+  assert.match(settingsStoreSource, /writePreference\("sidebarDesktopCollapsed", sidebarDesktopCollapsed\)/);
+  assert.doesNotMatch(settingsStoreSource, /isNavigationDrawerOpen/);
 });
 
 test("major routes and responsive inventories use compact shared variants", () => {

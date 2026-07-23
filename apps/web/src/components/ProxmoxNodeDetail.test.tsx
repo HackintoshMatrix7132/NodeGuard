@@ -9,6 +9,7 @@ import type { ProxmoxNodeDetail, ProxmoxNodeHistory } from "../types/nodeguard";
 import { parseProxmoxNodeLocation, proxmoxNodePath } from "../utils/proxmoxNodeRoute";
 import {
   filterProxmoxGuests,
+  getProxmoxNodePanelDirection,
   getProxmoxStatusPresentation,
   GuestsTable,
   NodesTable,
@@ -185,6 +186,7 @@ test("History exposes all seven ranges, responsive accessible charts, and therma
   }
   assert.match(markup, /tabindex="0"/i);
   assert.match(markup, /Use left and right arrow keys/);
+  assert.equal((markup.match(/pathLength="1"/g) ?? []).length, 7);
   assert.match(markup, /Temperature history is not exposed by this node/);
   assert.match(markup, /Selected sample/);
   assert.match(markup, /proxmox-history-chart-card--unavailable/);
@@ -196,6 +198,8 @@ test("History exposes all seven ranges, responsive accessible charts, and therma
   assert.match(css, /overflow: hidden/);
   assert.match(css, /grid-template-columns: repeat\(12/);
   assert.match(css, /height: 226px/);
+  assert.match(css, /\.proxmox-chart-line\s*\{[^}]*stroke-dasharray:\s*1[^}]*stroke-dashoffset:\s*1[^}]*animation:\s*historyLineReveal 680ms cubic-bezier\(0\.22,\s*0\.8,\s*0\.2,\s*1\)/s);
+  assert.match(css, /prefers-reduced-motion:\s*reduce[\s\S]*?\.proxmox-chart-line\s*\{[^}]*stroke-dashoffset:\s*0/s);
   assert.doesNotMatch(css, /var\(--proxmox-(?:border|panel|text|muted)\)/);
 });
 
@@ -205,10 +209,26 @@ test("node tabs use roving keyboard navigation", () => {
   assert.equal(nextProxmoxNodeTab("history", "Home"), "overview");
   assert.equal(nextProxmoxNodeTab("overview", "End"), "history");
   assert.equal(nextProxmoxNodeTab("overview", "Enter"), null);
+  assert.equal(getProxmoxNodePanelDirection("overview", "history"), "forward");
+  assert.equal(getProxmoxNodePanelDirection("history", "overview"), "backward");
 
   const source = readFileSync(new URL("./ProxmoxIntegration.tsx", import.meta.url), "utf8");
   assert.match(source, /tabIndex=\{tab === value \? 0 : -1\}/);
-  assert.match(source, /ProxmoxNodeSkeleton view=\{tab\}/);
+  assert.match(source, /ProxmoxNodeSkeleton view=\{panelTransition\.renderedTab\}/);
   assert.match(source, /History unavailable/);
   assert.match(source, /Showing the last available history/);
+  assert.match(source, /aria-hidden=\{panelTransition\.phase === "exiting" \? true : undefined\}/);
+  assert.match(source, /inert=\{panelTransition\.phase === "exiting" \? true : undefined\}/);
+  assert.match(source, /key=\{`\$\{history\.data\.connectionId\}-\$\{history\.data\.node\}-\$\{history\.data\.range\}`\}/);
+});
+
+test("node detail motion keeps the shell stable and respects reduced motion", () => {
+  const css = readFileSync(new URL("../proxmox.css", import.meta.url), "utf8");
+
+  assert.match(css, /\.proxmox-node-page--enter\s*>\s*\.proxmox-node-heading,[\s\S]*?animation:\s*proxmoxNodeShellIn 210ms cubic-bezier\(0\.22,\s*1,\s*0\.36,\s*1\)/);
+  assert.match(css, /\.proxmox-node-page--enter\s+\.proxmox-node-overview-grid\s*>\s*\.proxmox-node-detail-card\s*\{[^}]*animation:\s*proxmoxNodeCardIn 200ms/s);
+  assert.match(css, /nth-child\(7\)\s*\{[^}]*animation-delay:\s*144ms/s);
+  assert.match(css, /\.proxmox-node-panel-transition\.is-exiting\.is-forward\s*\{[^}]*120ms/s);
+  assert.match(css, /\.proxmox-node-panel-transition\.is-entering\.is-backward\s*\{[^}]*190ms/s);
+  assert.match(css, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.proxmox-node-panel-transition,[\s\S]*?animation:\s*none !important/s);
 });

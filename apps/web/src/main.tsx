@@ -6,6 +6,8 @@ import { App } from "./App";
 import "./styles.css";
 import "./proxmox.css";
 import "./mobile.css";
+import "./styles/empty-state-system.css";
+import "./styles/sidebar-system.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {

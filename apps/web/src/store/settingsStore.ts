@@ -6,6 +6,7 @@ const storageKey = "nodeguard.backend";
 const preferencesKey = "nodeguard.preferences";
 
 function readPreferences() {
+  if (typeof localStorage === "undefined") return {};
   try {
     const raw = localStorage.getItem(preferencesKey);
     return raw ? JSON.parse(raw) as Record<string, unknown> : {};
@@ -38,18 +39,23 @@ type SettingsState = {
   refreshIntervalSeconds: number;
   demoMode: boolean;
   hideSensitiveValues: boolean;
+  sidebarDesktopCollapsed: boolean;
   load: () => void;
   saveSession: (backendUrl: string, user: AuthUser) => void;
   disconnect: () => void;
   setRefreshIntervalSeconds: (value: number) => void;
   setHideSensitiveValues: (value: boolean) => void;
+  setSidebarDesktopCollapsed: (value: boolean) => void;
 };
+
+const initialPreferences = readPreferences();
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   backendConfig: null,
   refreshIntervalSeconds: 1,
   demoMode: false,
   hideSensitiveValues: true,
+  sidebarDesktopCollapsed: typeof initialPreferences.sidebarDesktopCollapsed === "boolean" ? initialPreferences.sidebarDesktopCollapsed : false,
   load: () => {
     const raw = localStorage.getItem(storageKey);
     const preferencesRaw = localStorage.getItem(preferencesKey);
@@ -75,9 +81,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
     if (preferencesRaw) {
       try {
-        const parsed = JSON.parse(preferencesRaw) as Partial<Pick<SettingsState, "hideSensitiveValues" | "refreshIntervalSeconds">>;
+        const parsed = JSON.parse(preferencesRaw) as Partial<Pick<SettingsState, "hideSensitiveValues" | "refreshIntervalSeconds" | "sidebarDesktopCollapsed">>;
         nextState.hideSensitiveValues = parsed.hideSensitiveValues ?? true;
         nextState.refreshIntervalSeconds = parsed.refreshIntervalSeconds ?? 1;
+        nextState.sidebarDesktopCollapsed = typeof parsed.sidebarDesktopCollapsed === "boolean" ? parsed.sidebarDesktopCollapsed : false;
       } catch {
         localStorage.removeItem(preferencesKey);
       }
@@ -105,5 +112,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setHideSensitiveValues: (hideSensitiveValues) => {
     writePreference("hideSensitiveValues", hideSensitiveValues);
     set({ hideSensitiveValues });
+  },
+  setSidebarDesktopCollapsed: (sidebarDesktopCollapsed) => {
+    writePreference("sidebarDesktopCollapsed", sidebarDesktopCollapsed);
+    set({ sidebarDesktopCollapsed });
   }
 }));

@@ -39,6 +39,7 @@ import { createPortal } from "react-dom";
 
 import { apiFetch, getDefaultBackendUrl } from "../api/client";
 import { ApiError } from "../api/errors";
+import { StateBlock } from "../app/ui";
 import { useSettingsStore } from "../store/settingsStore";
 import { useProxmoxNodeDetail, useProxmoxNodeHistory } from "../hooks/useNodeGuardQueries";
 import type { ProxmoxNodeDetail, ProxmoxNodeHistory, ProxmoxNodeHistoryPoint, ProxmoxNodeHistoryRange, ProxmoxNodeTab } from "../types/nodeguard";
@@ -635,21 +636,13 @@ function Panel({
 function EmptyState({
   title,
   description,
-  icon = <CloudCog size={20} />,
+  icon = <CloudCog size={16} />,
 }: {
   title: string;
   description: string;
   icon?: ReactNode;
 }) {
-  return (
-    <div className="proxmox-empty">
-      <span className="proxmox-empty__icon" aria-hidden="true">
-        {icon}
-      </span>
-      <strong>{title}</strong>
-      <span>{description}</span>
-    </div>
-  );
+  return <StateBlock className="proxmox-empty" title={title} message={description} icon={icon} />;
 }
 
 function ErrorBanner({ message }: { message: string }) {
@@ -1176,6 +1169,51 @@ export function nextProxmoxNodeTab(
   return current === "overview" ? "history" : "overview";
 }
 
+type ProxmoxNodePanelDirection = "forward" | "backward";
+type ProxmoxNodePanelPhase = "idle" | "exiting" | "entering";
+
+export function getProxmoxNodePanelDirection(
+  current: ProxmoxNodeTab,
+  next: ProxmoxNodeTab,
+): ProxmoxNodePanelDirection {
+  return current === "overview" && next === "history" ? "forward" : "backward";
+}
+
+function useProxmoxNodePanelTransition(tab: ProxmoxNodeTab) {
+  const [renderedTab, setRenderedTab] = useState(tab);
+  const [direction, setDirection] = useState<ProxmoxNodePanelDirection>("forward");
+  const [phase, setPhase] = useState<ProxmoxNodePanelPhase>("idle");
+
+  useEffect(() => {
+    if (tab === renderedTab) {
+      if (phase === "exiting") setPhase("idle");
+      return;
+    }
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setDirection(getProxmoxNodePanelDirection(renderedTab, tab));
+      setRenderedTab(tab);
+      setPhase("idle");
+      return;
+    }
+
+    setDirection(getProxmoxNodePanelDirection(renderedTab, tab));
+    setPhase("exiting");
+  }, [phase, renderedTab, tab]);
+
+  const onAnimationEnd = useCallback((event: React.AnimationEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
+    if (phase === "exiting") {
+      setRenderedTab(tab);
+      setPhase("entering");
+    } else if (phase === "entering") {
+      setPhase("idle");
+    }
+  }, [phase, tab]);
+
+  return { direction, onAnimationEnd, phase, renderedTab };
+}
+
 function availableText(value: string | number | null | undefined): string {
   return value === null || value === undefined || value === "" ? "Not available" : String(value);
 }
@@ -1443,7 +1481,7 @@ function ProxmoxHistoryChart({
             const value = max * (1 - ratio);
             return <g key={ratio}><line className="proxmox-chart-grid-line" x1={PROXMOX_CHART_PLOT.left} x2={width - PROXMOX_CHART_PLOT.right} y1={y} y2={y} /><text className="proxmox-chart-axis" x={PROXMOX_CHART_PLOT.left - 7} y={y + 4} textAnchor="end">{percent ? `${Math.round(value)}%` : formatRate(value)}</text></g>;
           })}
-          {series.map((item) => <path className="proxmox-chart-line" d={chartPath(usable, item.key, width, height, max)} key={item.key} style={{ stroke: item.color }} />)}
+          {series.map((item) => <path className="proxmox-chart-line" d={chartPath(usable, item.key, width, height, max)} key={item.key} pathLength={1} style={{ stroke: item.color }} />)}
           {active ? (() => {
             const x = PROXMOX_CHART_PLOT.left + (activeIndex / Math.max(1, usable.length - 1)) * (width - PROXMOX_CHART_PLOT.left - PROXMOX_CHART_PLOT.right);
             return <line className="proxmox-chart-cursor" x1={x} x2={x} y1={PROXMOX_CHART_PLOT.top} y2={height - PROXMOX_CHART_PLOT.bottom} />;
@@ -1566,6 +1604,7 @@ export function ProxmoxNodeDetailPage({
   const detail = useProxmoxNodeDetail(connectionId, node);
   const history = useProxmoxNodeHistory(connectionId, node, range, tab === "history");
   const tabs: ProxmoxNodeTab[] = ["overview", "history"];
+  const panelTransition = useProxmoxNodePanelTransition(tab);
 
   const handleTabKey = (event: React.KeyboardEvent<HTMLButtonElement>, current: ProxmoxNodeTab) => {
     const next = nextProxmoxNodeTab(current, event.key);
@@ -1576,7 +1615,7 @@ export function ProxmoxNodeDetailPage({
   };
 
   return (
-    <div className="proxmox-page proxmox-node-page">
+    <div className="proxmox-page proxmox-node-page proxmox-node-page--enter">
       <header className="proxmox-node-heading">
         <button aria-label="Back to Proxmox" className="proxmox-icon-button" onClick={onBack} title="Back to Proxmox" type="button"><ArrowLeft size={16} /></button>
         <div className="proxmox-node-heading__identity">
@@ -1611,32 +1650,40 @@ export function ProxmoxNodeDetailPage({
         ) : null}
       </div>
 
-      {detail.isPending && !detail.data ? <ProxmoxNodeSkeleton view={tab} /> : null}
-      {detail.error && !detail.data ? (
-        <Panel title="Node unavailable" icon={<AlertTriangle size={18} />} actions={<button className="proxmox-button proxmox-button--secondary" onClick={() => void detail.refetch()} type="button"><RefreshCw size={16} />Retry</button>}>
-          <ErrorBanner message={detail.error instanceof Error ? detail.error.message : "Unable to load the Proxmox node."} />
-        </Panel>
-      ) : null}
-      {detail.error && detail.data ? <div className="proxmox-node-stale-notice">Showing the last available node details. Refresh failed.</div> : null}
-      {detail.data?.stale ? <div className="proxmox-node-stale-notice">This node is showing stale Proxmox telemetry from the last successful synchronization.</div> : null}
+      <div
+        aria-hidden={panelTransition.phase === "exiting" ? true : undefined}
+        aria-labelledby={`proxmox-node-tab-${panelTransition.renderedTab}`}
+        className={`proxmox-node-panel-transition proxmox-node-panel-transition--${panelTransition.renderedTab} is-${panelTransition.phase} is-${panelTransition.direction}`}
+        id={`proxmox-node-${panelTransition.renderedTab}`}
+        inert={panelTransition.phase === "exiting" ? true : undefined}
+        onAnimationEnd={panelTransition.onAnimationEnd}
+        role="tabpanel"
+      >
+        {detail.isPending && !detail.data ? <ProxmoxNodeSkeleton view={panelTransition.renderedTab} /> : null}
+        {detail.error && !detail.data ? (
+          <Panel title="Node unavailable" icon={<AlertTriangle size={18} />} actions={<button className="proxmox-button proxmox-button--secondary" onClick={() => void detail.refetch()} type="button"><RefreshCw size={16} />Retry</button>}>
+            <ErrorBanner message={detail.error instanceof Error ? detail.error.message : "Unable to load the Proxmox node."} />
+          </Panel>
+        ) : null}
+        {detail.error && detail.data ? <div className="proxmox-node-stale-notice">Showing the last available node details. Refresh failed.</div> : null}
+        {detail.data?.stale ? <div className="proxmox-node-stale-notice">This node is showing stale Proxmox telemetry from the last successful synchronization.</div> : null}
 
-      {tab === "overview" && detail.data ? (
-        <div aria-labelledby="proxmox-node-tab-overview" id="proxmox-node-overview" role="tabpanel"><ProxmoxNodeOverview detail={detail.data} /></div>
-      ) : null}
+        {panelTransition.renderedTab === "overview" && detail.data ? <ProxmoxNodeOverview detail={detail.data} /> : null}
 
-      {tab === "history" && !detail.isPending ? (
-        <div aria-labelledby="proxmox-node-tab-history" id="proxmox-node-history" role="tabpanel">
-          {history.isPending && !history.data ? <ProxmoxNodeSkeleton view="history" /> : null}
-          {history.error && !history.data ? (
-            <Panel title="History unavailable" icon={<AlertTriangle size={18} />} actions={<button className="proxmox-button proxmox-button--secondary" onClick={() => void history.refetch()} type="button"><RefreshCw size={16} />Retry</button>}>
-              <ErrorBanner message={history.error instanceof Error ? history.error.message : "Unable to load Proxmox history."} />
-            </Panel>
-          ) : null}
-          {history.error && history.data ? <div className="proxmox-node-stale-notice">Showing the last available history. Refresh failed.</div> : null}
-          {history.data && history.data.points.length === 0 ? <EmptyState title="No history available" description="Proxmox returned no RRD samples for this node and range." icon={<Activity size={20} />} /> : null}
-          {history.data && history.data.points.length > 0 ? <ProxmoxNodeHistoryView history={history.data} /> : null}
-        </div>
-      ) : null}
+        {panelTransition.renderedTab === "history" && !detail.isPending ? (
+          <>
+            {history.isPending && !history.data ? <ProxmoxNodeSkeleton view="history" /> : null}
+            {history.error && !history.data ? (
+              <Panel title="History unavailable" icon={<AlertTriangle size={18} />} actions={<button className="proxmox-button proxmox-button--secondary" onClick={() => void history.refetch()} type="button"><RefreshCw size={16} />Retry</button>}>
+                <ErrorBanner message={history.error instanceof Error ? history.error.message : "Unable to load Proxmox history."} />
+              </Panel>
+            ) : null}
+            {history.error && history.data ? <div className="proxmox-node-stale-notice">Showing the last available history. Refresh failed.</div> : null}
+            {history.data && history.data.points.length === 0 ? <EmptyState title="No history available" description="Proxmox returned no RRD samples for this node and range." icon={<Activity size={20} />} /> : null}
+            {history.data && history.data.points.length > 0 ? <ProxmoxNodeHistoryView history={history.data} key={`${history.data.connectionId}-${history.data.node}-${history.data.range}`} /> : null}
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

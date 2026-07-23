@@ -88,7 +88,12 @@ export function SettingsPage() {
       <Panel title={demoMode ? "Privacy" : "Privacy & Security"}>
         <div className="settings-content">
           <p className="muted settings-description">{demoMode ? "Live backend configuration and production diagnostics are hidden for this account." : "Control what is visible when sharing screenshots of NodeGuard."}</p>
-          {!demoMode ? <div className="settings-list"><label><input type="checkbox" checked={hideSensitiveValues} onChange={(event) => setHideSensitiveValues(event.target.checked)} /> Hide backend URL in screenshots</label></div> : null}
+          {!demoMode ? <div className="settings-list">
+            <label className="privacy-checkbox">
+              <input type="checkbox" checked={hideSensitiveValues} onChange={(event) => setHideSensitiveValues(event.target.checked)} />
+              <span>Hide backend URL in screenshots</span>
+            </label>
+          </div> : null}
         </div>
       </Panel>
       {!demoMode ? <Panel title="Diagnostics">

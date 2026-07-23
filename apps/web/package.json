@@ -9,7 +9,7 @@
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run typecheck && tsx --test src/components/MonitoredExternalLink.test.tsx src/components/ProxmoxDashboardCard.test.ts src/components/ProxmoxNodeDetail.test.tsx src/components/ResponsiveShell.test.ts src/demoData.test.ts src/hooks/useNodeGuardQueries.test.ts src/utils/agentCommand.test.ts src/utils/updatePresentation.test.ts"
+    "test": "npm run typecheck && tsx --test src/components/MonitoredExternalLink.test.tsx src/components/ProxmoxDashboardCard.test.ts src/components/ProxmoxNodeDetail.test.tsx src/components/ResponsiveShell.test.ts src/components/StateBlock.test.tsx src/demoData.test.ts src/hooks/useNodeGuardQueries.test.ts src/utils/agentCommand.test.ts src/utils/updatePresentation.test.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.81.5",
