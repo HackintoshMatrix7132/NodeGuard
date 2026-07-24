@@ -1,4 +1,4 @@
-import { ChevronDown,Copy,Globe2,Pencil,Plus,RefreshCcw,Trash2 } from "lucide-react";
+import { ChevronDown,Copy,Globe2,LoaderCircle,Pencil,Plus,RefreshCcw,Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { normalizeApiError } from "../api/errors";
@@ -31,6 +31,7 @@ export function DomainsPage() {
   const addDomain = useAddDomain();
   const updateDomain = useUpdateDomain();
   const removeDomain = useRemoveDomain();
+  const isSavingDomain = addDomain.isPending || updateDomain.isPending;
 
   const resetDomainForm = () => {
     setDomainValue("");
@@ -166,9 +167,9 @@ export function DomainsPage() {
               Expected HTTP codes
               <input value={expectedStatusCodes} onChange={(event) => setExpectedStatusCodes(event.target.value)} placeholder="200,301,302,401" />
             </label>
-            <button className="modal-submit" type="submit" disabled={addDomain.isPending || updateDomain.isPending}>
-              {editingDomain ? null : duplicatingDomain ? <Copy size={16} /> : <Plus size={16} />}
-              {editingDomain ? "Save edits" : duplicatingDomain ? "Create duplicate" : "Add domain"}
+            <button className="modal-submit" type="submit" disabled={isSavingDomain} aria-busy={isSavingDomain}>
+              {isSavingDomain ? <LoaderCircle className="is-spinning" size={14} /> : editingDomain ? null : duplicatingDomain ? <Copy size={16} /> : <Plus size={16} />}
+              {isSavingDomain ? "Saving…" : editingDomain ? "Save edits" : duplicatingDomain ? "Create duplicate" : "Add domain"}
             </button>
           </form>
           {formError ? <div className="form-error" role="alert">{formError}</div> : null}

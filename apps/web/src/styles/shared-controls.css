@@ -179,6 +179,10 @@ button.agent-view-button,
   box-shadow: none;
 }
 
+button.modal-submit {
+  border: 1px solid var(--ng-action-border);
+}
+
 button.primary-button:hover:not(:disabled),
 button.modal-submit:hover:not(:disabled),
 .inline-form button.primary-button:hover:not(:disabled),

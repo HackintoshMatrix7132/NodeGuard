@@ -49,6 +49,12 @@ body .compact-action {
   padding: 3px 9px;
 }
 
+body .inline-form .modal-submit {
+  justify-self: end;
+  width: fit-content;
+  white-space: nowrap;
+}
+
 body .panel-header > .primary-button,
 body .panel-header > .secondary-button,
 body .dashboard-panel-action,

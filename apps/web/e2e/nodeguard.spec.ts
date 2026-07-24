@@ -279,6 +279,18 @@ test("domain row actions stay compact, accessible, and non-destructive", async (
   await edit.click();
   const editDialog = page.getByRole("dialog", { name: "Edit domain / service" });
   await expect(editDialog).toBeVisible();
+  const saveEdits = editDialog.getByRole("button", { name: "Save edits" });
+  await expect(saveEdits).toHaveClass(/modal-submit/);
+  await expect(saveEdits).toHaveCSS("height", "32px");
+  await expect(saveEdits).toHaveCSS("padding", "4px 10px");
+  await expect(saveEdits).toHaveCSS("font-size", "13px");
+  await expect(saveEdits).toHaveCSS("font-weight", "700");
+  await expect(saveEdits).toHaveCSS("border-radius", "6px");
+  await expect(saveEdits).toHaveCSS("display", "flex");
+  await expect(saveEdits).toHaveCSS("justify-content", "center");
+  await expect(saveEdits).toHaveCSS("white-space", "nowrap");
+  await expect(saveEdits).not.toBeDisabled();
+  await expect(saveEdits).toHaveAttribute("aria-busy", "false");
   await editDialog.getByRole("button", { name: "Close dialog" }).click();
 
   await remove.click();
